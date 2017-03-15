@@ -63,7 +63,7 @@ SRCS=	\
 .PATH:  ${BHYVE_SYSDIR}/sys/amd64/vmm
 SRCS+=	vmm_instruction_emul.c
 
-LIBADD=	vmmapi md pthread z
+LIBADD=	vmmapi md pthread ucl xo z
 
 .if ${MK_OPENSSL} == "no"
 CFLAGS+=-DNO_OPENSSL
@@ -74,6 +74,11 @@ LIBADD+=	crypto
 CFLAGS+= -I${BHYVE_SYSDIR}/sys/dev/e1000
 CFLAGS+= -I${BHYVE_SYSDIR}/sys/dev/mii
 CFLAGS+= -I${BHYVE_SYSDIR}/sys/dev/usb/controller
+
+CFLAGS+= -I${SRCTOP}/contrib/libucl/include
+
+# Temporary disable capsicum, until we integrate checkpoint code with it.
+CFLAGS+= -DWITHOUT_CAPSICUM
 
 WARNS?=	2
 
