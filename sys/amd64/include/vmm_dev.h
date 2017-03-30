@@ -76,7 +76,6 @@ struct vm_seg_desc {			/* data or code segment */
 
 struct vm_run {
 	int		cpuid;
-	int		restored;
 	struct vm_exit	vm_exit;
 };
 
