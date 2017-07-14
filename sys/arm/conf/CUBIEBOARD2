@@ -1,0 +1,43 @@
+#NO_UNIVERSE
+
+cpu             CPU_CORTEXA
+machine         arm armv6
+makeoptions     CONF_CFLAGS="-mcpu=cortex-a7"
+
+include 	"ALLWINNER"
+ident		CUBIEBOARD2
+
+#options         VMM_ARM_VGIC
+nooptions	SMP
+
+#options		SMP_ON_UP
+#options		SMP
+options		PLATFORM
+
+#Debugging for use in -current
+makeoptions     DEBUG=-g                # Build kernel with gdb(1) debug symbols
+options         BREAK_TO_DEBUGGER
+#options         DEBUG
+#options         EARLY_PRINTF
+#options         VERBOSE_SYSINIT         # Enable verbose sysinit messages
+#options         KDB                     # Enable kernel debugger support
+# For minimum debugger support (stable branch) use:
+#options         KDB_TRACE               # Print a stack trace for a panic
+# For full debugger support use this instead:
+#options         DDB                     # Enable the kernel debugger
+#options         INVARIANTS              # Enable calls of extra sanity checking
+#options         INVARIANT_SUPPORT       # Extra sanity checks of internal structures, required by INVARIANTS
+#options        WITNESS                 # Enable checks to detect deadlocks and cycles
+#options        WITNESS_SKIPSPIN        # Don't run witness on spinlocks for speed
+#options        DIAGNOSTIC
+
+#options 	ROOTDEVNAME=\"ufs:/dev/da0\"
+options                MD_ROOT
+#options                MD_ROOT_SIZE=32720
+makeoptions            MFS_IMAGE=/root/clean-bhyve/bhyvearm/ramdisk/ramdisk.img
+options                ROOTDEVNAME=\"ufs:/dev/md0\"
+
+#FDT
+options 	FDT
+options 	FDT_DTB_STATIC
+makeoptions	FDT_DTS_FILE=cubieboard2.dts

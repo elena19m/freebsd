@@ -49,11 +49,13 @@ struct arm_gic_softc {
 	device_t		gic_dev;
 	void *			gic_intrhand;
 	struct gic_irqsrc *	gic_irqs;
-	struct resource *	gic_res[3];
+	struct resource *	gic_res[6];
 	bus_space_tag_t		gic_c_bst;
 	bus_space_tag_t		gic_d_bst;
 	bus_space_handle_t	gic_c_bsh;
 	bus_space_handle_t	gic_d_bsh;
+	bus_space_tag_t		gic_h_bst;
+	bus_space_handle_t	gic_h_bsh;
 	uint8_t			ver;
 	struct mtx		mutex;
 	uint32_t		nirqs;

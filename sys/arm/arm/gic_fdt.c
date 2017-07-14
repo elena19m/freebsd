@@ -164,13 +164,13 @@ gic_fdt_attach(device_t dev)
 			goto cleanup;
 		}
 	} else {
-		if (sc->base.gic_res[2] == NULL) {
+		if (sc->base.gic_res[INTRNG_RES_IDX] == NULL) {
 			device_printf(dev,
 			    "not root PIC must have defined interrupt\n");
 			intr_pic_deregister(dev, xref);
 			goto cleanup;
 		}
-		if (bus_setup_intr(dev, sc->base.gic_res[2], INTR_TYPE_CLK,
+		if (bus_setup_intr(dev, sc->base.gic_res[INTRNG_RES_IDX], INTR_TYPE_CLK,
 		    arm_gic_intr, NULL, sc, &sc->base.gic_intrhand)) {
 			device_printf(dev, "could not setup irq handler\n");
 			intr_pic_deregister(dev, xref);
@@ -199,9 +199,8 @@ gic_fdt_get_resource_list(device_t bus, device_t child)
 	struct arm_gic_devinfo *di;
 
 	di = device_get_ivars(child);
-	KASSERT(di != NULL, ("gic_fdt_get_resource_list: No devinfo"));
 
-	return (&di->rl);
+	return di ? (&di->rl) : (NULL);
 }
 
 static int

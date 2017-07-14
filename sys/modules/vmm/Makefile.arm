@@ -1,0 +1,25 @@
+SRCS+=	hyp_assym.h
+DPSRCS=	hyp_genassym.c
+
+CFLAGS+= -I${.CURDIR}/../../arm/vmm -I${.CURDIR}/../../arm/include
+
+# generic vmm support
+.PATH: ${.CURDIR}/../../arm/vmm
+SRCS+=	vmm.c		\
+	vmm_dev.c	\
+	vmm_instruction_emul.c	\
+	vmm_mem.c	\
+	mmu.c		\
+	vmm_stat.c	\
+	arm.c		\
+	vgic.c		\
+	vtimer.c	\
+	hyp.S
+
+CLEANFILES=	hyp_assym.h hyp_genassym.o
+
+hyp_assym.h:    hyp_genassym.o
+	sh ${SYSDIR}/kern/genassym.sh hyp_genassym.o > ${.TARGET}
+
+hyp_genassym.o:
+	${CC} -c ${CFLAGS:N-fno-common} ${.IMPSRC}

@@ -88,6 +88,13 @@ __FBSDID("$FreeBSD$");
 #define	GT_CNTKCTL_PL0VCTEN	(1 << 1) /* PL0 CNTVCT and CNTFRQ access */
 #define	GT_CNTKCTL_PL0PCTEN	(1 << 0) /* PL0 CNTPCT and CNTFRQ access */
 
+#define GT_PHYS_SECURE		0
+#define GT_PHYS_NONSECURE	1
+#define GT_VIRT			2
+#define GT_HYP			3
+
+extern char hypmode_enabled[];
+
 struct arm_tmr_softc {
 	struct resource		*res[4];
 	void			*ihl[4];
@@ -100,10 +107,10 @@ struct arm_tmr_softc {
 static struct arm_tmr_softc *arm_tmr_sc = NULL;
 
 static struct resource_spec timer_spec[] = {
-	{ SYS_RES_IRQ,		0,	RF_ACTIVE },	/* Secure */
-	{ SYS_RES_IRQ,		1,	RF_ACTIVE },	/* Non-secure */
-	{ SYS_RES_IRQ,		2,	RF_ACTIVE | RF_OPTIONAL }, /* Virt */
-	{ SYS_RES_IRQ,		3,	RF_ACTIVE | RF_OPTIONAL	}, /* Hyp */
+	{ SYS_RES_IRQ,	GT_PHYS_SECURE,		RF_ACTIVE },	/* Secure */
+	{ SYS_RES_IRQ,	GT_PHYS_NONSECURE,	RF_ACTIVE },	/* Non-secure */
+	{ SYS_RES_IRQ,	GT_VIRT,		RF_ACTIVE | RF_OPTIONAL }, /* Virt */
+	{ SYS_RES_IRQ,	GT_HYP,			RF_ACTIVE | RF_OPTIONAL	}, /* Hyp */
 	{ -1, 0 }
 };
 
@@ -111,9 +118,10 @@ static uint32_t arm_tmr_fill_vdso_timehands(struct vdso_timehands *vdso_th,
     struct timecounter *tc);
 static void arm_tmr_do_delay(int usec, void *);
 
+static uint64_t get_cntxct(bool physical);
 static timecounter_get_t arm_tmr_get_timecount;
 
-static struct timecounter arm_tmr_timecount = {
+struct timecounter arm_tmr_timecount = {
 	.tc_name           = "ARM MPCore Timecounter",
 	.tc_get_timecount  = arm_tmr_get_timecount,
 	.tc_poll_pps       = NULL,
@@ -121,6 +129,7 @@ static struct timecounter arm_tmr_timecount = {
 	.tc_frequency      = 0,
 	.tc_quality        = 1000,
 	.tc_fill_vdso_timehands = arm_tmr_fill_vdso_timehands,
+	.tc_priv           = get_cntxct,
 };
 
 #ifdef __arm__
@@ -345,6 +354,7 @@ arm_tmr_acpi_add_irq(device_t parent, device_t dev, int rid, u_int irq)
 static void
 arm_tmr_acpi_identify(driver_t *driver, device_t parent)
 {
+	struct arm_tmr_softc *sc;
 	ACPI_TABLE_GTDT *gtdt;
 	vm_paddr_t physaddr;
 	device_t dev;
@@ -366,9 +376,22 @@ arm_tmr_acpi_identify(driver_t *driver, device_t parent)
 		goto out;
 	}
 
+	/* TODO check if this works when the virtual timer is not present */
 	arm_tmr_acpi_add_irq(parent, dev, 0, gtdt->SecureEl1Interrupt);
 	arm_tmr_acpi_add_irq(parent, dev, 1, gtdt->NonSecureEl1Interrupt);
 	arm_tmr_acpi_add_irq(parent, dev, 2, gtdt->VirtualTimerInterrupt);
+	/*
+	sc = device_get_softc(dev);
+	if (sc->physical) {
+		BUS_SET_RESOURCE(parent, dev, SYS_RES_IRQ, GT_PHYS_SECURE,
+	    	gtdt->SecureEl1Interrupt, 1);
+		BUS_SET_RESOURCE(parent, dev, SYS_RES_IRQ, GT_PHYS_NONSECURE,
+	    	gtdt->NonSecureEl1Interrupt, 1);
+	} else {
+		BUS_SET_RESOURCE(parent, dev, SYS_RES_IRQ, GT_VIRT,
+	    	gtdt->VirtualTimerInterrupt, 1);
+	}
+	*/
 
 out:
 	acpi_unmap_table(gtdt);
@@ -449,13 +472,24 @@ arm_tmr_attach(device_t dev)
 
 	arm_tmr_sc = sc;
 
-	/* Setup secure, non-secure and virtual IRQs handler */
-	for (i = first_timer; i <= last_timer; i++) {
-		/* If we do not have the interrupt, skip it. */
-		if (sc->res[i] == NULL)
-			continue;
-		error = bus_setup_intr(dev, sc->res[i], INTR_TYPE_CLK,
-		    arm_tmr_intr, NULL, sc, &sc->ihl[i]);
+	sc->physical = (sc->res[GT_VIRT] == NULL) || (hypmode_enabled[0] == 0);
+
+	if (sc->physical) {
+		/* Setup secure, non-secure and virtual IRQs handler */
+		for (i = first_timer; i <= last_timer; i++) {
+			/* If we do not have the interrupt, skip it. */
+			if (sc->res[i] == NULL)
+				continue;
+			error = bus_setup_intr(dev, sc->res[i], INTR_TYPE_CLK,
+			    arm_tmr_intr, NULL, sc, &sc->ihl[i]);
+			if (error) {
+				device_printf(dev, "Unable to alloc int resource.\n");
+				return (ENXIO);
+			}
+		}
+	} else {
+		error = bus_setup_intr(dev, sc->res[GT_VIRT], INTR_TYPE_CLK,
+			arm_tmr_intr, NULL, sc, &sc->ihl[GT_VIRT]);
 		if (error) {
 			device_printf(dev, "Unable to alloc int resource.\n");
 			return (ENXIO);

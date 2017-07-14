@@ -40,6 +40,11 @@ __FBSDID("$FreeBSD$");
 #include <sys/reboot.h>
 #include <sys/bus.h>
 
+#if defined(__arm__)
+#include <vm/vm.h>
+#include <vm/pmap.h>
+#endif
+
 #include <sys/kdb.h>
 #include <ddb/ddb.h>
 
@@ -66,7 +71,12 @@ static struct callout		bvm_timer;
 static int			alt_break_state;
 #endif
 
+#if defined(__i386__) || defined(__amd64__)
 #define	BVM_CONS_PORT	0x220
+#elif defined(__arm__)
+#define	BVM_CONS_PORT	0x1c090000
+#endif
+
 static int bvm_cons_port = BVM_CONS_PORT;
 
 #define BVM_CONS_SIG	('b' << 8 | 'v')
@@ -88,7 +98,12 @@ bvm_rcons(u_char *ch)
 {
 	int c;
 
+#if defined(__i386__) || defined(__amd64__)
 	c = inl(bvm_cons_port);
+#elif defined(__arm__)
+	c = (*(int *)bvm_cons_port);
+#endif
+
 	if (c != -1) {
 		*ch = (u_char)c;
 		return (0);
@@ -99,8 +114,11 @@ bvm_rcons(u_char *ch)
 static void
 bvm_wcons(u_char ch)
 {
-
+#if defined(__i386__) || defined(__amd64__)
 	outl(bvm_cons_port, ch);
+#elif defined(__arm__)
+	(*(int *)bvm_cons_port) = ch;
+#endif
 }
 
 static void
@@ -172,7 +190,10 @@ bvm_timeout(void *v)
 static void
 bvm_cnprobe(struct consdev *cp)
 {
-	int disabled, port;
+	int disabled;
+#if defined(__i386__) || defined(__amd64__)
+	int port;
+#endif
 
 	disabled = 0;
 	cp->cn_pri = CN_DEAD;
@@ -180,38 +201,43 @@ bvm_cnprobe(struct consdev *cp)
 
 	resource_int_value("bvmconsole", 0, "disabled", &disabled);
 	if (!disabled) {
+#if defined(__i386__) || defined(__amd64__)
 		if (resource_int_value("bvmconsole", 0, "port", &port) == 0)
 			bvm_cons_port = port;
 
 		if (inw(bvm_cons_port) == BVM_CONS_SIG)
+#elif defined(__arm__)
+		bvm_cons_port = (int) pmap_mapdev(bvm_cons_port, 0x1000);
+		if ((*(short *)bvm_cons_port) == BVM_CONS_SIG)
+#endif
 			cp->cn_pri = CN_REMOTE;
+		}
 	}
-}
 
-static void
-bvm_cninit(struct consdev *cp)
-{
-	int i;
-	const char *bootmsg = "Using bvm console.\n";
+	static void
+	bvm_cninit(struct consdev *cp)
+	{
+		int i;
+		const char *bootmsg = "Using bvm console.\n";
 
-	if (boothowto & RB_VERBOSE) {
-		for (i = 0; i < strlen(bootmsg); i++)
-			bvm_cnputc(cp, bootmsg[i]);
+		if (boothowto & RB_VERBOSE) {
+			for (i = 0; i < strlen(bootmsg); i++)
+				bvm_cnputc(cp, bootmsg[i]);
+		}
 	}
-}
 
-static void
-bvm_cnterm(struct consdev *cp)
-{
+	static void
+	bvm_cnterm(struct consdev *cp)
+	{
 
-}
+	}
 
-static int
-bvm_cngetc(struct consdev *cp)
-{
-	unsigned char ch;
+	static int
+	bvm_cngetc(struct consdev *cp)
+	{
+		unsigned char ch;
 
-	if (bvm_rcons(&ch) == 0) {
+		if (bvm_rcons(&ch) == 0) {
 #if defined(KDB)
 		kdb_alt_break(ch, &alt_break_state);
 #endif

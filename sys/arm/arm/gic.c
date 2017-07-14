@@ -128,9 +128,15 @@ static u_int sgi_first_unused = GIC_FIRST_SGI;
 static struct resource_spec arm_gic_spec[] = {
 	{ SYS_RES_MEMORY,	0,	RF_ACTIVE },	/* Distributor registers */
 	{ SYS_RES_MEMORY,	1,	RF_ACTIVE },	/* CPU Interrupt Intf. registers */
-	{ SYS_RES_IRQ,	  0, RF_ACTIVE | RF_OPTIONAL }, /* Parent interrupt */
+	{ SYS_RES_MEMORY,       2,      RF_ACTIVE | RF_OPTIONAL },    /* Virtual Interface Control */
+	{ SYS_RES_MEMORY,       3,      RF_ACTIVE | RF_OPTIONAL },    /* Virtual CPU interface */
+	{ SYS_RES_IRQ,		0,	RF_ACTIVE | RF_OPTIONAL },	/* vGIC maintenance interrupt */
+	{ SYS_RES_IRQ,	  	0, 	RF_ACTIVE | RF_OPTIONAL }, /* Parent interrupt */
 	{ -1, 0 }
 };
+
+extern char hypmode_enabled[];
+static void *arm_gic_maintenance_intr_ihl[1];
 
 #if defined(__arm__) && defined(INVARIANTS)
 static int gic_debug_spurious = 1;
@@ -153,6 +159,22 @@ static struct arm_gic_softc *gic_sc = NULL;
     bus_space_write_1((_sc)->gic_d_bst, (_sc)->gic_d_bsh, (_reg), (_val))
 #define	gic_d_write_4(_sc, _reg, _val)		\
     bus_space_write_4((_sc)->gic_d_bst, (_sc)->gic_d_bsh, (_reg), (_val))
+
+#define	gic_h_read_4(_sc, _reg)		\
+    bus_space_read_4((_sc)->gic_h_bst, (_sc)->gic_h_bsh, (_reg))
+#define	gic_h_write_4(_sc, _reg, _val)		\
+    bus_space_write_4((_sc)->gic_h_bst, (_sc)->gic_h_bsh, (_reg), (_val))
+
+struct arm_gic_softc *
+arm_gic_get_sc(void)
+{
+	return gic_sc;
+}
+uint32_t
+arm_gic_get_lr_num(void)
+{
+	return (gic_h_read_4(gic_sc, GICH_VTR) & 0x3f) + 1;
+}
 
 static inline void
 gic_irq_unmask(struct arm_gic_softc *sc, u_int irq)
@@ -298,6 +320,22 @@ arm_gic_reserve_msi_range(device_t dev, u_int start, u_int count)
 	}
 }
 
+static int
+arm_gic_maintenance_intr(void *arg)
+{
+
+	static struct arm_gic_softc *sc;
+	int maintenance_intr;
+
+	sc = (struct arm_gic_softc *)arg;
+	
+	maintenance_intr = gic_h_read_4(sc, GICH_MISR);
+
+	printf("%s: %x\n", __func__, maintenance_intr);
+
+	return (FILTER_HANDLED);
+}
+
 int
 arm_gic_attach(device_t dev)
 {
@@ -322,12 +360,36 @@ arm_gic_attach(device_t dev)
 	mtx_init(&sc->mutex, "GIC lock", NULL, MTX_SPIN);
 
 	/* Distributor Interface */
-	sc->gic_d_bst = rman_get_bustag(sc->gic_res[0]);
-	sc->gic_d_bsh = rman_get_bushandle(sc->gic_res[0]);
+	sc->gic_d_bst = rman_get_bustag(sc->gic_res[DISTRIBUTOR_RES_IDX]);
+	sc->gic_d_bsh = rman_get_bushandle(sc->gic_res[DISTRIBUTOR_RES_IDX]);
 
 	/* CPU Interface */
-	sc->gic_c_bst = rman_get_bustag(sc->gic_res[1]);
-	sc->gic_c_bsh = rman_get_bushandle(sc->gic_res[1]);
+	sc->gic_c_bst = rman_get_bustag(sc->gic_res[CPU_INTERFACE_RES_IDX]);
+	sc->gic_c_bsh = rman_get_bushandle(sc->gic_res[CPU_INTERFACE_RES_IDX]);
+
+	/* Virtual Interface Control */
+	if (sc->gic_res[VIRT_INTERFACE_CONTROL_RES_IDX] == NULL) {
+		device_printf(dev, "Cannot find Virtual Interface Control Registers. Disabling Hyp-Mode...\n");
+		hypmode_enabled[0] = -1;
+	} else {
+		sc->gic_h_bst = rman_get_bustag(sc->gic_res[VIRT_INTERFACE_CONTROL_RES_IDX]);
+		sc->gic_h_bsh = rman_get_bushandle(sc->gic_res[VIRT_INTERFACE_CONTROL_RES_IDX]);
+
+		/* Register the vGIC maintenance interrupt */
+	
+		if (sc->gic_res[MAINTENANCE_INTR_RES_IDX] == NULL ||
+		    bus_setup_intr(gic_sc->gic_dev,
+		    sc->gic_res[MAINTENANCE_INTR_RES_IDX],
+		    INTR_TYPE_CLK,
+		    arm_gic_maintenance_intr,
+		    NULL,
+		    sc,
+		    &arm_gic_maintenance_intr_ihl[0])) {
+			device_printf(dev, "Cannot setup Maintenance Interrupt. Disabling Hyp-Mode... %p\n",sc->gic_res[MAINTENANCE_INTR_RES_IDX]);
+			//hypmode_enabled[0] = -1;
+		}
+	}
+
 
 	/* Disable interrupt forwarding to the CPU interface */
 	gic_d_write_4(sc, GICD_CTLR, 0x00);
@@ -506,6 +568,23 @@ arm_gic_read_ivar(device_t dev, device_t child, int which, uintptr_t *result)
 		KASSERT(sc->gic_bus <= GIC_BUS_MAX,
 		    ("arm_gic_read_ivar: Invalid bus type %u", sc->gic_bus));
 		*result = sc->gic_bus;
+		return (0);
+	case GIC_IVAR_VIRTUAL_INT_CTRL_VADDR:
+		*result = (unsigned int)rman_get_virtual(sc->gic_res[VIRT_INTERFACE_CONTROL_RES_IDX]);
+		return (0);
+	case GIC_IVAR_VIRTUAL_INT_CTRL_PADDR:
+		*result = (unsigned int)rman_get_start(sc->gic_res[VIRT_INTERFACE_CONTROL_RES_IDX]);
+		return (0);
+	case GIC_IVAR_VIRTUAL_INT_CTRL_SIZE:
+		*result = rman_get_size(sc->gic_res[VIRT_INTERFACE_CONTROL_RES_IDX]);
+		return (0);
+	case GIC_IVAR_VIRTUAL_CPU_INT_PADDR:
+		*result = rman_get_start(sc->gic_res[VIRT_CPU_INTERFACE_RES_IDX]);
+	case GIC_IVAR_VIRTUAL_CPU_INT_SIZE:
+		*result = rman_get_size(sc->gic_res[VIRT_CPU_INTERFACE_RES_IDX]);
+		return (0);
+	case GIC_IVAR_LR_NUM:
+		*result = (gic_h_read_4(gic_sc, GICH_VTR) & 0x3f) + 1;
 		return (0);
 	}
 
@@ -979,7 +1058,7 @@ arm_gic_ipi_send(device_t dev, struct intr_irqsrc *isrc, cpuset_t cpus,
 		if (CPU_ISSET(i, &cpus))
 			val |= arm_gic_map[i] << GICD_SGI_TARGET_SHIFT;
 
-	gic_d_write_4(sc, GICD_SGIR, val | gi->gi_irq);
+	gic_d_write_4(sc, GICD_SGIR(0), val | gi->gi_irq);
 }
 
 static int
