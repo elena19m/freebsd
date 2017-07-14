@@ -109,6 +109,7 @@ dev/psci/psci.c			optional	psci
 dev/psci/smccc_arm.S		optional	psci
 dev/syscons/scgfbrndr.c		optional	sc
 dev/uart/uart_cpu_fdt.c		optional	uart fdt
+dev/bvm/bvm_console.c		optional	bvmconsole
 
 kern/msi_if.m			optional	intrng
 kern/pic_if.m			optional	intrng

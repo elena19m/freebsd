@@ -1,0 +1,81 @@
+#
+# FVP_VE_CORTEX_A15x1 - custom configuration
+#
+
+ident		FVP_VE_CORTEX_A15x1
+
+cpu		CPU_CORTEXA
+options 	SMP_ON_UP
+machine		arm armv6
+makeoptions	CONF_CFLAGS="-march=armv7a"
+
+include 	"std.armv6"
+
+files		"../fvp_ve-cortex_a15x1/files.fvp_ve-cortex_a15x1"
+
+options 	KERNVIRTADDR=0xc0200000
+makeoptions	KERNVIRTADDR=0xc0200000
+#makeoptions	KERNPHYSADDR=0xc0200000
+#options 	PHYSADDR=0xc0000000
+
+options 	HZ=100
+options 	SCHED_ULE		# ULE scheduler
+
+options 	PLATFORM
+
+options		SMP
+options		SMP_ON_UP
+
+nooptions	FREEBSD_BOOT_LOADER
+
+# Debugging for use in -current
+makeoptions	DEBUG=-g		# Build kernel with gdb(1) debug symbols
+options 	BREAK_TO_DEBUGGER
+options		DEBUG
+options		EARLY_PRINTF
+options 	VERBOSE_SYSINIT		# Enable verbose sysinit messages
+options 	KDB			# Enable kernel debugger support
+# For minimum debugger support (stable branch) use:
+options 	KDB_TRACE		# Print a stack trace for a panic
+# For full debugger support use this instead:
+options 	DDB			# Enable the kernel debugger
+options 	INVARIANTS		# Enable calls of extra sanity checking
+options 	INVARIANT_SUPPORT	# Extra sanity checks of internal structures, required by INVARIANTS
+#options 	WITNESS			# Enable checks to detect deadlocks and cycles
+#options 	WITNESS_SKIPSPIN	# Don't run witness on spinlocks for speed
+#options 	DIAGNOSTIC
+
+options                MD_ROOT
+makeoptions            MFS_IMAGE=/root/bhyvearm/ramdisk/ramdisk.img
+options                ROOTDEVNAME=\"ffs:/dev/md0\"
+
+# Pseudo devices
+
+device		loop
+device		ether
+device		random
+device		pty
+device		md
+device		bpf
+
+# Serial ports
+device		uart
+device		pl011
+
+# I2C
+device		iic
+device		iicbus
+
+
+# GIC
+device		gic
+options		INTRNG
+
+# GPIO
+device		gpio
+
+
+# Flattened Device Tree
+options 	FDT			# Configure using FDT/DTB data
+options 	FDT_DTB_STATIC
+makeoptions	FDT_DTS_FILE=fvp_ve-cortex_a15x1.dts

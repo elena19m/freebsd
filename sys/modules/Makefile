@@ -767,6 +767,11 @@ _sbni=		sbni
 .if ${MACHINE_ARCH} == "armv7"
 _cfi=		cfi
 _cpsw=		cpsw
+
+.if ${MK_BHYVE} != "no" || defined(ALL_MODULES)
+_vmm=		vmm
+.endif
+
 .endif
 
 .if ${MACHINE_CPUARCH} == "powerpc"

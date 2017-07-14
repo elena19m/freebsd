@@ -32,8 +32,23 @@
 #ifndef _GIC_COMMON_H_
 #define _GIC_COMMON_H_
 
-#define	GIC_IVAR_HW_REV		500
-#define	GIC_IVAR_BUS		501
+#ifndef __ASSEMBLER__
+
+#define DISTRIBUTOR_RES_IDX		0
+#define CPU_INTERFACE_RES_IDX		1
+#define	VIRT_INTERFACE_CONTROL_RES_IDX	2
+#define	VIRT_CPU_INTERFACE_RES_IDX	3
+#define	MAINTENANCE_INTR_RES_IDX	4
+#define	INTRNG_RES_IDX			5
+
+#define	GIC_IVAR_HW_REV			500
+#define	GIC_IVAR_BUS			501
+#define	GIC_IVAR_VIRTUAL_INT_CTRL_VADDR	502
+#define	GIC_IVAR_VIRTUAL_INT_CTRL_PADDR	503
+#define	GIC_IVAR_VIRTUAL_INT_CTRL_SIZE	504
+#define	GIC_IVAR_VIRTUAL_CPU_INT_PADDR	505
+#define	GIC_IVAR_VIRTUAL_CPU_INT_SIZE	506
+#define	GIC_IVAR_LR_NUM			507
 
 /* GIC_IVAR_BUS values */
 #define	GIC_BUS_UNKNOWN		0
@@ -43,6 +58,17 @@
 
 __BUS_ACCESSOR(gic, hw_rev, GIC, HW_REV, u_int);
 __BUS_ACCESSOR(gic, bus, GIC, BUS, u_int);
+__BUS_ACCESSOR(gic, virtual_int_ctrl_vaddr, GIC, VIRTUAL_INT_CTRL_VADDR, uint64_t);
+__BUS_ACCESSOR(gic, virtual_int_ctrl_paddr, GIC, VIRTUAL_INT_CTRL_PADDR, uint64_t);
+__BUS_ACCESSOR(gic, virtual_int_ctrl_size, GIC, VIRTUAL_INT_CTRL_SIZE, uint32_t);
+__BUS_ACCESSOR(gic, virtual_cpu_int_paddr, GIC, VIRTUAL_CPU_INT_PADDR, uint32_t);
+__BUS_ACCESSOR(gic, virtual_cpu_int_size, GIC, VIRTUAL_CPU_INT_SIZE, uint32_t);
+__BUS_ACCESSOR(gic, lr_num, GIC, LR_NUM, uint32_t);
+
+struct arm_gic_softc *arm_gic_get_sc(void);
+uint32_t arm_gic_get_lr_num(void);
+
+#endif /*__ASSEMBLER__ */
 
 /* Software Generated Interrupts */
 #define	GIC_FIRST_SGI		 0	/* Irqs 0-15 are SGIs/IPIs. */
@@ -82,6 +108,7 @@ __BUS_ACCESSOR(gic, bus, GIC, BUS, u_int);
 #define	GICD_ICENABLER(n)	(0x0180 + (((n) >> 5) * 4))	/* v1 ICDICER */
 #define	GICD_ISPENDR(n)		(0x0200 + (((n) >> 5) * 4))	/* v1 ICDISPR */
 #define	GICD_ICPENDR(n)		(0x0280 + (((n) >> 5) * 4))	/* v1 ICDICPR */
+#define GICD_ISACTIVER(n)	(0x0300 + (((n) >> 5) * 4))	/* v1 ICDABR */
 #define	GICD_ICACTIVER(n)	(0x0380 + (((n) >> 5) * 4))	/* v1 ICDABR */
 #define	GICD_IPRIORITYR(n)	(0x0400 + (((n) >> 2) * 4))	/* v1 ICDIPR */
 #define	 GICD_I_PER_IPRIORITYn	4
@@ -96,7 +123,33 @@ __BUS_ACCESSOR(gic, bus, GIC, BUS, u_int);
 #define	 GICD_ICFGR_TRIG_LVL	(0 << 1)
 #define	 GICD_ICFGR_TRIG_EDGE	(1 << 1)
 #define	 GICD_ICFGR_TRIG_MASK	0x2
-#define GICD_SGIR		0x0F00				/* v1 ICDSGIR */
+#define	 GICD_SGIR(n)		(0x0F00 + ((n) * 4))	/* v1 ICDSGIR */
 #define	 GICD_SGI_TARGET_SHIFT	16
+
+/* GIC Hypervisor specific registers */
+#define	GICH_HCR		0x0
+#define	GICH_VTR		0x4
+#define	GICH_VMCR		0x8
+#define	GICH_MISR		0x10
+#define	GICH_EISR0		0x20
+#define	GICH_EISR1		0x24
+#define	GICH_ELSR0		0x30
+#define	GICH_ELSR1		0x34
+#define	GICH_APR		0xF0
+#define	GICH_LR0		0x100
+
+#define	GICH_HCR_EN		(1 << 0)
+#define GICH_HCR_UIE		(1 << 1)
+
+#define GICH_LR_VIRTID		(0x3FF << 0)
+#define GICH_LR_PHYSID_CPUID_SHIFT	10
+#define GICH_LR_PHYSID_CPUID		(7 << GICH_LR_PHYSID_CPUID_SHIFT)
+#define GICH_LR_STATE		(3 << 28)
+#define GICH_LR_PENDING		(1 << 28)
+#define GICH_LR_ACTIVE		(1 << 29)
+#define GICH_LR_EOI			(1 << 19)
+
+#define GICH_MISR_EOI		(1 << 0)
+#define GICH_MISR_U		(1 << 1)
 
 #endif /* _GIC_COMMON_H_ */
