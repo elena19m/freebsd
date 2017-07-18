@@ -136,7 +136,6 @@ static struct resource_spec arm_gic_spec[] = {
 };
 
 extern char hypmode_enabled[];
-static void *arm_gic_maintenance_intr_ihl[1];
 
 #if defined(__arm__) && defined(INVARIANTS)
 static int gic_debug_spurious = 1;
@@ -320,22 +319,6 @@ arm_gic_reserve_msi_range(device_t dev, u_int start, u_int count)
 	}
 }
 
-static int
-arm_gic_maintenance_intr(void *arg)
-{
-
-	static struct arm_gic_softc *sc;
-	int maintenance_intr;
-
-	sc = (struct arm_gic_softc *)arg;
-	
-	maintenance_intr = gic_h_read_4(sc, GICH_MISR);
-
-	printf("%s: %x\n", __func__, maintenance_intr);
-
-	return (FILTER_HANDLED);
-}
-
 int
 arm_gic_attach(device_t dev)
 {
@@ -374,20 +357,6 @@ arm_gic_attach(device_t dev)
 	} else {
 		sc->gic_h_bst = rman_get_bustag(sc->gic_res[VIRT_INTERFACE_CONTROL_RES_IDX]);
 		sc->gic_h_bsh = rman_get_bushandle(sc->gic_res[VIRT_INTERFACE_CONTROL_RES_IDX]);
-
-		/* Register the vGIC maintenance interrupt */
-	
-		if (sc->gic_res[MAINTENANCE_INTR_RES_IDX] == NULL ||
-		    bus_setup_intr(gic_sc->gic_dev,
-		    sc->gic_res[MAINTENANCE_INTR_RES_IDX],
-		    INTR_TYPE_CLK,
-		    arm_gic_maintenance_intr,
-		    NULL,
-		    sc,
-		    &arm_gic_maintenance_intr_ihl[0])) {
-			device_printf(dev, "Cannot setup Maintenance Interrupt. Disabling Hyp-Mode... %p\n",sc->gic_res[MAINTENANCE_INTR_RES_IDX]);
-			//hypmode_enabled[0] = -1;
-		}
 	}
 
 
@@ -569,6 +538,9 @@ arm_gic_read_ivar(device_t dev, device_t child, int which, uintptr_t *result)
 		    ("arm_gic_read_ivar: Invalid bus type %u", sc->gic_bus));
 		*result = sc->gic_bus;
 		return (0);
+	case GIC_IVAR_VIRTUAL_INT_CTRL_RES:
+		*result = (uintptr_t)sc->gic_res[VIRT_INTERFACE_CONTROL_RES_IDX];
+		return (0);
 	case GIC_IVAR_VIRTUAL_INT_CTRL_VADDR:
 		*result = (unsigned int)rman_get_virtual(sc->gic_res[VIRT_INTERFACE_CONTROL_RES_IDX]);
 		return (0);
@@ -585,6 +557,9 @@ arm_gic_read_ivar(device_t dev, device_t child, int which, uintptr_t *result)
 		return (0);
 	case GIC_IVAR_LR_NUM:
 		*result = (gic_h_read_4(gic_sc, GICH_VTR) & 0x3f) + 1;
+		return (0);
+	case GIC_IVAR_MAINTENANCE_INTR_RES:
+		*result = (uintptr_t)sc->gic_res[MAINTENANCE_INTR_RES_IDX];
 		return (0);
 	}
 

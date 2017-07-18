@@ -123,6 +123,7 @@ int vgic_inject_irq(void *arg, unsigned int irq, bool level);
 
 struct arm_vgic_softc {
 	device_t vgic_dev;
+	device_t gic_dev;
 };
 
 DECLARE_CLASS(arm_vgic_driver);

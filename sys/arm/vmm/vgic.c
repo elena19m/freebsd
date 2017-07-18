@@ -70,9 +70,14 @@ static uint32_t virtual_cpu_int_size;
 
 static uint32_t lr_num;
 
+static void *arm_vgic_maintenance_intr_ihl[1];
+
+extern char hypmode_enabled[];
+
 static struct arm_vgic_softc sc =
 {
-	.vgic_dev = NULL
+	.vgic_dev = NULL,
+	.gic_dev  = NULL,
 };
 
 static void vgic_bitmap_set_irq_val(uint32_t *irq_prv, 
@@ -999,8 +1004,45 @@ vgic_hyp_init(void)
 }
 
 static int
+arm_vgic_maintenance_intr(void *arg)
+{
+
+	struct arm_vgic_softc *vgic_sc;
+	struct arm_gic_softc *gic_sc;
+	int maintenance_intr;
+
+	vgic_sc = arg;
+	gic_sc = device_get_softc(vgic_sc->gic_dev);
+	
+	maintenance_intr = bus_space_read_4(gic_sc->gic_h_bst, 
+					    gic_sc->gic_h_bsh, GICH_MISR);
+
+	printf("%s: %x\n", __func__, maintenance_intr);
+
+	return (FILTER_HANDLED);
+}
+
+
+static int
 arm_vgic_attach(device_t dev)
 {
+	struct resource *virtual_int_ctrl_res = gic_get_virtual_int_ctrl_res(sc.vgic_dev);
+	struct resource *maintenance_intr_res = gic_get_maintenance_intr_res(sc.vgic_dev);
+
+	if (virtual_int_ctrl_res) {
+		if (maintenance_intr_res == NULL ||
+		    bus_setup_intr(sc.vgic_dev, maintenance_intr_res, INTR_TYPE_CLK,
+	    			   arm_vgic_maintenance_intr, NULL, &sc,
+	    			   &arm_vgic_maintenance_intr_ihl[0])) {
+
+			device_printf(sc.vgic_dev, "Cannot setup Maintenance Interrupt. Disabling Hyp-Mode... %p\n",maintenance_intr_res);
+			//hypmode_enabled[0] = -1;
+		}
+	} else {
+		device_printf(sc.vgic_dev, "Cannot find Virtual Interface Control Registers.  Disabling Hyp-Mode...\n");
+		hypmode_enabled[0] = -1;
+	}
+
 	return (0);
 }
 
@@ -1016,6 +1058,7 @@ arm_vgic_identify(driver_t *driver, device_t parent)
 			device_printf(parent, "add vgic child failed\n");
 		} else {
 			sc.vgic_dev = dev;
+			sc.gic_dev = parent;
 		}
 	}
 }
