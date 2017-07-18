@@ -43,12 +43,14 @@
 
 #define	GIC_IVAR_HW_REV			500
 #define	GIC_IVAR_BUS			501
-#define	GIC_IVAR_VIRTUAL_INT_CTRL_VADDR	502
-#define	GIC_IVAR_VIRTUAL_INT_CTRL_PADDR	503
+#define GIC_IVAR_VIRTUAL_INT_CTRL_RES	502
+#define	GIC_IVAR_VIRTUAL_INT_CTRL_VADDR	503
+#define	GIC_IVAR_VIRTUAL_INT_CTRL_PADDR	505
 #define	GIC_IVAR_VIRTUAL_INT_CTRL_SIZE	504
-#define	GIC_IVAR_VIRTUAL_CPU_INT_PADDR	505
-#define	GIC_IVAR_VIRTUAL_CPU_INT_SIZE	506
-#define	GIC_IVAR_LR_NUM			507
+#define	GIC_IVAR_VIRTUAL_CPU_INT_PADDR	506
+#define	GIC_IVAR_VIRTUAL_CPU_INT_SIZE	507
+#define	GIC_IVAR_LR_NUM			508
+#define GIC_IVAR_MAINTENANCE_INTR_RES	509
 
 /* GIC_IVAR_BUS values */
 #define	GIC_BUS_UNKNOWN		0
@@ -58,12 +60,14 @@
 
 __BUS_ACCESSOR(gic, hw_rev, GIC, HW_REV, u_int);
 __BUS_ACCESSOR(gic, bus, GIC, BUS, u_int);
+__BUS_ACCESSOR(gic, virtual_int_ctrl_res, GIC, VIRTUAL_INT_CTRL_RES, struct resource *);
 __BUS_ACCESSOR(gic, virtual_int_ctrl_vaddr, GIC, VIRTUAL_INT_CTRL_VADDR, uint64_t);
 __BUS_ACCESSOR(gic, virtual_int_ctrl_paddr, GIC, VIRTUAL_INT_CTRL_PADDR, uint64_t);
 __BUS_ACCESSOR(gic, virtual_int_ctrl_size, GIC, VIRTUAL_INT_CTRL_SIZE, uint32_t);
 __BUS_ACCESSOR(gic, virtual_cpu_int_paddr, GIC, VIRTUAL_CPU_INT_PADDR, uint32_t);
 __BUS_ACCESSOR(gic, virtual_cpu_int_size, GIC, VIRTUAL_CPU_INT_SIZE, uint32_t);
 __BUS_ACCESSOR(gic, lr_num, GIC, LR_NUM, uint32_t);
+__BUS_ACCESSOR(gic, maintenance_intr_res, GIC, MAINTENANCE_INTR_RES, struct resource *);
 
 struct arm_gic_softc *arm_gic_get_sc(void);
 uint32_t arm_gic_get_lr_num(void);
