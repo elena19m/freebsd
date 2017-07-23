@@ -830,6 +830,14 @@ END(sigcode)
 esigcode:
 
 	.data
+/*
+ * TODO: be careful with putting this here, there might be some addressing
+ * constraints when reading it.
+ */
+	.global _C_LABEL(hypmode_enabled)
+_C_LABEL(hypmode_enabled):
+	.word -1
+
 	.align	3
 	.global	szsigcode
 szsigcode:
