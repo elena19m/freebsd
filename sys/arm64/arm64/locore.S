@@ -239,6 +239,11 @@ mp_virtdone:
 END(mpentry)
 #endif
 
+	.align 3
+	.globl _C_LABEL(hypmode_enabled)
+_C_LABEL(hypmode_enabled):
+	.word 0
+
 /*
  * If we are started in EL2, configure the required hypervisor
  * registers and drop to EL1.
@@ -248,6 +253,9 @@ drop_to_el1:
 	lsr	x23, x23, #2
 	cmp	x23, #0x2
 	b.eq	1f
+
+	/* We didn't start in EL2, hypmode will be disabled */
+
 	ret
 1:
 	/* Configure the Hypervisor */
@@ -282,8 +290,13 @@ drop_to_el1:
 	msr	cntvoff_el2, xzr
 
 	/* Hypervisor trap functions */
-	adr	x2, hyp_vectors
+	adr	x2, hyp_stub_vectors
 	msr	vbar_el2, x2
+
+	/* Mark hypervisor mode as enabled */
+	mov w1, #1
+	adr x2, hypmode_enabled
+	str w1, [x2]
 
 	mov	x2, #(PSR_F | PSR_I | PSR_A | PSR_D | PSR_M_EL1h)
 	msr	spsr_el2, x2
@@ -312,12 +325,28 @@ drop_to_el1:
 .Lsctlr_res1:
 	.quad SCTLR_RES1
 
+/*
+ * If the first parameter is -1 return the base address of the exception vector.
+ * If not, it holds the base address for the new exception vector. Set the
+ * exception vector base address to this value.
+ */
+ENTRY(hyp_stub_trap)
+	cmp	x0, #-1
+	b.ne    1f
+	mrs x0, vbar_el2
+	b       9f
+1:
+	msr vbar_el2, x0
+9:
+	eret
+END(hyp_stub_trap)
+
 #define	VECT_EMPTY	\
 	.align 7;	\
 	1:	b	1b
 
 	.align 11
-hyp_vectors:
+hyp_stub_vectors:
 	VECT_EMPTY	/* Synchronous EL2t */
 	VECT_EMPTY	/* IRQ EL2t */
 	VECT_EMPTY	/* FIQ EL2t */
@@ -328,7 +357,7 @@ hyp_vectors:
 	VECT_EMPTY	/* FIQ EL2h */
 	VECT_EMPTY	/* Error EL2h */
 
-	VECT_EMPTY	/* Synchronous 64-bit EL1 */
+	b hyp_stub_trap	/* Synchronous 64-bit EL1 */
 	VECT_EMPTY	/* IRQ 64-bit EL1 */
 	VECT_EMPTY	/* FIQ 64-bit EL1 */
 	VECT_EMPTY	/* Error 64-bit EL1 */
@@ -830,14 +859,6 @@ END(sigcode)
 esigcode:
 
 	.data
-/*
- * TODO: be careful with putting this here, there might be some addressing
- * constraints when reading it.
- */
-	.global _C_LABEL(hypmode_enabled)
-_C_LABEL(hypmode_enabled):
-	.word -1
-
 	.align	3
 	.global	szsigcode
 szsigcode:
