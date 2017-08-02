@@ -65,6 +65,8 @@
 #include "arm.h"
 #include "vgic.h"
 
+extern uint64_t hypmode_enabled;
+
 struct vcpu {
 	int		flags;
 	enum vcpu_state	state;
@@ -133,7 +135,7 @@ static struct vmm_ops *ops;
 #define	fpu_start_emulating()	load_cr0(rcr0() | CR0_TS)
 #define	fpu_stop_emulating()	clts()
 
-static int vm_handle_wfi(struct vm *vm, int vcpuid, 
+static int vm_handle_wfi(struct vm *vm, int vcpuid,
 			 struct vm_exit *vme, bool *retu);
 
 static MALLOC_DEFINE(M_VM, "vm", "vm");
@@ -171,7 +173,7 @@ static void
 vcpu_init(struct vm *vm, uint32_t vcpu_id)
 {
 	struct vcpu *vcpu;
-	
+
 	vcpu = &vm->vcpu[vcpu_id];
 
 	vcpu_lock_init(vcpu);
@@ -200,6 +202,8 @@ vmm_init(void)
 	return (VMM_INIT(0));
 }
 
+extern uint64_t hyp_stub_vectors[];
+
 static int
 vmm_handler(module_t mod, int what, void *arg)
 {
@@ -207,6 +211,8 @@ vmm_handler(module_t mod, int what, void *arg)
 
 	switch (what) {
 	case MOD_LOAD:
+		printf("hypmode_enabled = %lu\n", hypmode_enabled);
+		printf("hyp_stub_vectors = %p\n", hyp_stub_vectors);
 		vmmdev_init();
 		error = vmm_init();
 		if (error == 0)
@@ -352,7 +358,7 @@ restart:
 			retu = true;	/* handled in userland */
 			break;
 		}
-	} 
+	}
 
 	if (error == 0 && retu == false)
 		goto restart;
@@ -616,7 +622,7 @@ vm_malloc(struct vm *vm, uint64_t gpa, size_t len)
 
 	if ((gpa & PAGE_MASK) || (len & PAGE_MASK) || len == 0)
 		return (EINVAL);
-	
+
 	available = allocated = 0;
 	g = gpa;
 	while (g < gpa + len) {

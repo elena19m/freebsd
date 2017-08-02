@@ -240,7 +240,7 @@ END(mpentry)
 	.align 3
 	.globl _C_LABEL(hypmode_enabled)
 _C_LABEL(hypmode_enabled):
-	.word 0
+	.zero 8
 
 /*
  * If we are started in EL2, configure the required hypervisor
@@ -252,8 +252,7 @@ drop_to_el1:
 	cmp	x23, #0x2
 	b.eq	1f
 
-	/* We didn't start in EL2, hypmode will be disabled */
-
+	/* We didn't start in EL2, hypmode will remain disabled */
 	ret
 1:
 	/* Configure the Hypervisor */
@@ -287,14 +286,14 @@ drop_to_el1:
 	/* Set the counter offset to a known value */
 	msr	cntvoff_el2, xzr
 
-	/* Hypervisor trap functions */
-	adr	x2, hyp_stub_vectors
+	/* Install hypervisor trap functions */
+	adrp	x2, hyp_stub_vectors
 	msr	vbar_el2, x2
 
 	/* Mark hypervisor mode as enabled */
-	mov w1, #1
+	mov x1, #1
 	adr x2, hypmode_enabled
-	str w1, [x2]
+	str x1, [x2]
 
 	mov	x2, #(PSR_F | PSR_I | PSR_A | PSR_D | PSR_M_EL1h)
 	msr	spsr_el2, x2
@@ -322,48 +321,6 @@ drop_to_el1:
 	.align 3
 .Lsctlr_res1:
 	.quad SCTLR_RES1
-
-/*
- * If the first parameter is -1 return the base address of the exception vector.
- * If not, it holds the base address for the new exception vector. Set the
- * exception vector base address to this value.
- */
-ENTRY(hyp_stub_trap)
-	cmp	x0, #-1
-	b.ne    1f
-	mrs x0, vbar_el2
-	b       9f
-1:
-	msr vbar_el2, x0
-9:
-	eret
-END(hyp_stub_trap)
-
-#define	VECT_EMPTY	\
-	.align 7;	\
-	1:	b	1b
-
-	.align 11
-hyp_stub_vectors:
-	VECT_EMPTY	/* Synchronous EL2t */
-	VECT_EMPTY	/* IRQ EL2t */
-	VECT_EMPTY	/* FIQ EL2t */
-	VECT_EMPTY	/* Error EL2t */
-
-	VECT_EMPTY	/* Synchronous EL2h */
-	VECT_EMPTY	/* IRQ EL2h */
-	VECT_EMPTY	/* FIQ EL2h */
-	VECT_EMPTY	/* Error EL2h */
-
-	b hyp_stub_trap	/* Synchronous 64-bit EL1 */
-	VECT_EMPTY	/* IRQ 64-bit EL1 */
-	VECT_EMPTY	/* FIQ 64-bit EL1 */
-	VECT_EMPTY	/* Error 64-bit EL1 */
-
-	VECT_EMPTY	/* Synchronous 32-bit EL1 */
-	VECT_EMPTY	/* IRQ 32-bit EL1 */
-	VECT_EMPTY	/* FIQ 32-bit EL1 */
-	VECT_EMPTY	/* Error 32-bit EL1 */
 
 /*
  * Get the delta between the physical address we were loaded to and the

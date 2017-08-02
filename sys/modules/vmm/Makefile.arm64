@@ -13,8 +13,8 @@ SRCS+=	vmm.c		\
 	vmm_stat.c	\
 	arm.c		\
 	vgic.c		\
-	vtimer.c
-#	hyp.S
+	vtimer.c	\
+	hyp.S
 
 CLEANFILES=	hyp_assym.h hyp_genassym.o
 
