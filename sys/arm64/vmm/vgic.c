@@ -107,11 +107,7 @@ static uint32_t lr_num;
  */
 //static void *arm_vgic_maintenance_intr_ihl[1];
 
-/*
- * TODO - temporarly defined in arm.c
- */
-//char hypmode_enabled[] = {0};
-extern char hypmode_enabled[];
+extern uint64_t hypmode_enabled;
 
 static struct arm_vgic_softc sc =
 {
@@ -1129,11 +1125,11 @@ arm_vgic_attach(device_t dev)
 	    			   &arm_vgic_maintenance_intr_ihl[0])) {
 
 			device_printf(sc.vgic_dev, "Cannot setup Maintenance Interrupt. Disabling Hyp-Mode... %p\n",maintenance_intr_res);
-			//hypmode_enabled[0] = -1;
+			hypmode_enabled = 0;
 		}
 	} else {
 		device_printf(sc.vgic_dev, "Cannot find Virtual Interface Control Registers.  Disabling Hyp-Mode...\n");
-		hypmode_enabled[0] = -1;
+		hypmode_enabled = 0;
 	}
 	*/
 
@@ -1143,9 +1139,10 @@ arm_vgic_attach(device_t dev)
 static void
 arm_vgic_identify(driver_t *driver, device_t parent)
 {
-	device_t dev;
+	//device_t dev;
 
 	if (sc.vgic_dev == NULL) {
+		/*
 		dev = BUS_ADD_CHILD(parent, BUS_PASS_INTERRUPT + BUS_PASS_ORDER_MIDDLE,
 		    "vgic", -1);
 		if (dev == NULL) {
@@ -1154,6 +1151,7 @@ arm_vgic_identify(driver_t *driver, device_t parent)
 			sc.vgic_dev = dev;
 			sc.gic_dev = parent;
 		}
+		*/
 	}
 }
 

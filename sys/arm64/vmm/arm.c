@@ -41,7 +41,10 @@
 #include <vm/pmap.h>
 
 #include <machine/cpufunc.h>
-//#include <machine/cpu-v6.h>
+/*
+ * Replaced #include <machine/cpu-v6.h>
+ * with #include <machine/cpu.h>
+ */
 #include <machine/cpu.h>
 #include <machine/vmm.h>
 #include <machine/vmm_dev.h>
@@ -57,21 +60,18 @@
 
 MALLOC_DEFINE(M_HYP, "ARM VMM HYP", "ARM VMM HYP");
 
-/*
 extern char init_hyp_vector[];
-extern char hyp_vector[];
+extern char hyp_vectors[];
 extern char hyp_code_start[];
 extern char hypervisor_stub_vect[];
-*/
+/*
 char init_hyp_vector[] = {0};
 char hyp_vector[] = {0};
 char hyp_code_start[] = {0};
 char hypervisor_stub_vect[] = {0};
+*/
 
-/*
- * TODO - make it extern and define it properly.
- */
-char hypmode_enabled[] = {0};
+extern uint64_t hypmode_enabled;
 
 lpae_pd_entry_t *hyp_l1pd;
 char *stack;
@@ -110,14 +110,16 @@ out:
 	hyp->vttbr = BUILD_VTTBR((hyp->vmid_generation & VMID_GENERATION_MASK), hyp->l1pd_phys);
 }
 
+uint64_t vmm_call_hyp(int);
+
 static int
 arm_init(int ipinum)
 {
 	char *stack_top;
 	lpae_vm_paddr_t phys_hyp_l1pd;
 
-	if (hypmode_enabled[0]) {
-		printf("arm_init: processor didn't boot in HYP-mode (no support)\n");
+	if (!hypmode_enabled) {
+		printf("arm_init: processor didn't boot in EL2 (no support)\n");
 		return (ENXIO);
 	}
 
@@ -169,6 +171,13 @@ arm_init(int ipinum)
 
 	phys_hyp_l1pd = (lpae_vm_paddr_t)vtophys(hyp_l1pd);
 	//vmm_call_hyp(&hyp_vector[0], stack_top, LOW(phys_hyp_l1pd), HIGH(phys_hyp_l1pd));
+
+	char *base_vector_table;
+
+	base_vector_table = (char *)vmm_call_hyp(-1);
+	printf("base_vector_table = %p\n", base_vector_table);
+
+	printf("hyp_vectors = %p\n", hyp_vectors);
 
 	/* Initialize VGIC infrastructure */
 	if (vgic_hyp_init()) {
