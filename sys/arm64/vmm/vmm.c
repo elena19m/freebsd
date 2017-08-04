@@ -211,8 +211,10 @@ vmm_handler(module_t mod, int what, void *arg)
 
 	switch (what) {
 	case MOD_LOAD:
-		printf("hypmode_enabled = %lu\n", hypmode_enabled);
-		printf("hyp_stub_vectors = %p\n", hyp_stub_vectors);
+
+		printf("VMM_HANDLER:\n");
+		printf("\thypmode_enabled = %lu\n", hypmode_enabled);
+
 		vmmdev_init();
 		error = vmm_init();
 		if (error == 0)

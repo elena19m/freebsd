@@ -41,10 +41,6 @@
 #include <vm/pmap.h>
 
 #include <machine/cpufunc.h>
-/*
- * Replaced #include <machine/cpu-v6.h>
- * with #include <machine/cpu.h>
- */
 #include <machine/cpu.h>
 #include <machine/vmm.h>
 #include <machine/vmm_dev.h>
@@ -60,18 +56,19 @@
 
 MALLOC_DEFINE(M_HYP, "ARM VMM HYP", "ARM VMM HYP");
 
-extern char init_hyp_vector[];
+extern uint64_t hyp_init_vectors[];
 extern char hyp_vectors[];
 extern char hyp_code_start[];
 extern char hypervisor_stub_vect[];
 /*
-char init_hyp_vector[] = {0};
+char hyp_init_vectors[] = {0};
 char hyp_vector[] = {0};
 char hyp_code_start[] = {0};
 char hypervisor_stub_vect[] = {0};
 */
 
 extern uint64_t hypmode_enabled;
+extern uint64_t test_hyp_s;
 
 lpae_pd_entry_t *hyp_l1pd;
 char *stack;
@@ -110,13 +107,20 @@ out:
 	hyp->vttbr = BUILD_VTTBR((hyp->vmid_generation & VMID_GENERATION_MASK), hyp->l1pd_phys);
 }
 
-uint64_t vmm_call_hyp(int);
+extern uint64_t hyp_stub_vectors[];
 
 static int
 arm_init(int ipinum)
 {
 	char *stack_top;
 	lpae_vm_paddr_t phys_hyp_l1pd;
+
+	uint64_t current_vectors;
+
+	printf("ARM_INIT:\n");
+	printf("\thyp_stub_vectors = %016lx\n", vtophys(hyp_stub_vectors));
+	current_vectors = vmm_call_hyp((void *)-1);
+	printf("\tcurrent_vectors = %016lx\n", current_vectors);
 
 	if (!hypmode_enabled) {
 		printf("arm_init: processor didn't boot in EL2 (no support)\n");
@@ -155,10 +159,10 @@ arm_init(int ipinum)
 	    VM_PROT_READ | VM_PROT_WRITE);
 
 	/*
-	 * Install the temporary vector from which
-	 * will do the initialization part of VMM
+	 * Install the temporary vectors which will be responsible for
+	 * initializing the VMM when we next trap into EL2.
 	 */
-	//vmm_call_hyp((void *)vtophys(&init_hyp_vector[0]));
+	vmm_call_hyp((void *)vtophys(hyp_init_vectors));
 
 	/*
 	 * Special init call to activate the MMU
@@ -171,13 +175,9 @@ arm_init(int ipinum)
 
 	phys_hyp_l1pd = (lpae_vm_paddr_t)vtophys(hyp_l1pd);
 	//vmm_call_hyp(&hyp_vector[0], stack_top, LOW(phys_hyp_l1pd), HIGH(phys_hyp_l1pd));
-
-	char *base_vector_table;
-
-	base_vector_table = (char *)vmm_call_hyp(-1);
-	printf("base_vector_table = %p\n", base_vector_table);
-
-	printf("hyp_vectors = %p\n", hyp_vectors);
+	printf("\tbefore calling hyp\n");
+	vmm_call_hyp(NULL);
+	printf("\tcalled hyp\n");
 
 	/* Initialize VGIC infrastructure */
 	if (vgic_hyp_init()) {
