@@ -117,7 +117,7 @@ struct hyp {
 };
 CTASSERT((offsetof(struct hyp, l1pd) & PAGE_MASK) == 0);
 
-//uint64_t vmm_call_hyp(void *hyp_func_addr, ...);
+uint64_t vmm_call_hyp(void *hyp_func_addr, ...);
 
 //extern void vmm_stub_install(void *hypervisor_stub_vect);
 //extern int hyp_enter_guest(struct hypctx *hypctx);
