@@ -30,11 +30,11 @@
 __FBSDID("$FreeBSD$");
 
 /*
- * If the first parameter is -1 return the base address of the exception vector
- * table.  If not, the parameter is expected to hold the base address for the
- * new exception vector table. Set the base address to this value.
+ * Install a new exception vector table with the base address supplied by the
+ * parameter in X0. If the parameter is -1 then return the physical base
+ * address of the currently installed exception vectors.
  */
-ENTRY(handle_hyp_stub_trap)
+ENTRY(handle_hyp_stub)
 	cmp	x0, #-1
 	b.ne    1f
 	mrs 	x0, vbar_el2
@@ -43,7 +43,7 @@ ENTRY(handle_hyp_stub_trap)
 	msr 	vbar_el2, x0
 9:
 	eret
-END(handle_hyp_stub_trap)
+END(handle_hyp_stub)
 
 .macro vempty
 	.align 7
@@ -71,7 +71,7 @@ hyp_stub_vectors:
 	vempty		/* FIQ EL2h */
 	vempty		/* Error EL2h */
 
-	vector hyp_stub_trap	/* Synchronous 64-bit EL1 */
+	vector hyp_stub	/* Synchronous 64-bit EL1 */
 	vempty		/* IRQ 64-bit EL1 */
 	vempty		/* FIQ 64-bit EL1 */
 	vempty		/* Error 64-bit EL1 */
