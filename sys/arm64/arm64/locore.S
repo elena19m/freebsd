@@ -244,6 +244,7 @@ END(mpentry)
 _C_LABEL(hypmode_enabled):
 	.zero 8
 
+	.align 2
 /*
  * If we are started in EL2, configure the required hypervisor
  * registers and drop to EL1.
@@ -257,6 +258,21 @@ drop_to_el1:
 	/* We didn't start in EL2, hypmode will remain disabled */
 	ret
 1:
+	/*
+	 * If the MMU is active, then it is using a page table where VA == PA.
+	 * But the page table won't have entries for the hypervisor EL2 code
+	 * from arm64/vmm/hyp.S, which will only be loaded into memory with the
+	 * vmm module.
+	 *
+	 * So we disable the MMU in EL2 to make the vmm hypervisor code run
+	 * successfully.
+	 */
+	dsb	sy
+	mrs	x2, sctlr_el2
+	bic	x2, x2, SCTLR_M
+	msr	sctlr_el2, x2
+	isb
+
 	/* Configure the Hypervisor */
 	mov	x2, #(HCR_RW)
 	msr	hcr_el2, x2
@@ -293,9 +309,9 @@ drop_to_el1:
 	msr	vbar_el2, x2
 
 	/* Mark hypervisor mode as enabled */
-	mov x1, #1
-	adr x2, hypmode_enabled
-	str x1, [x2]
+	mov 	x1, #1
+	adr	x2, hypmode_enabled
+	str 	x1, [x2]
 
 	mov	x2, #(PSR_F | PSR_I | PSR_A | PSR_D | PSR_M_EL1h)
 	msr	spsr_el2, x2
