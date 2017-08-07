@@ -542,10 +542,10 @@ arm_gic_read_ivar(device_t dev, device_t child, int which, uintptr_t *result)
 		*result = (uintptr_t)sc->gic_res[VIRT_INTERFACE_CONTROL_RES_IDX];
 		return (0);
 	case GIC_IVAR_VIRTUAL_INT_CTRL_VADDR:
-		*result = (unsigned int)rman_get_virtual(sc->gic_res[VIRT_INTERFACE_CONTROL_RES_IDX]);
+		*result = (uintptr_t)rman_get_virtual(sc->gic_res[VIRT_INTERFACE_CONTROL_RES_IDX]);
 		return (0);
 	case GIC_IVAR_VIRTUAL_INT_CTRL_PADDR:
-		*result = (unsigned int)rman_get_start(sc->gic_res[VIRT_INTERFACE_CONTROL_RES_IDX]);
+		*result = (uintptr_t)rman_get_start(sc->gic_res[VIRT_INTERFACE_CONTROL_RES_IDX]);
 		return (0);
 	case GIC_IVAR_VIRTUAL_INT_CTRL_SIZE:
 		*result = rman_get_size(sc->gic_res[VIRT_INTERFACE_CONTROL_RES_IDX]);
