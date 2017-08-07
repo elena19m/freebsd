@@ -118,8 +118,7 @@ struct hyp {
 CTASSERT((offsetof(struct hyp, l1pd) & PAGE_MASK) == 0);
 
 uint64_t vmm_call_hyp(void *hyp_func_addr, ...);
-
-//extern void vmm_stub_install(void *hypervisor_stub_vect);
+void vmm_cleanup(void *hyp_stub_vectors);
 //extern int hyp_enter_guest(struct hypctx *hypctx);
 
 #define LOW(x)	(x & 0xFFFFFFFF)
