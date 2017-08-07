@@ -156,64 +156,64 @@
 	msr	ELR_hyp, r2
 
 #define	load_cp15_regs_batch1					\
-	mrc	p15, 0, r2, c1, c0, 0;		/* SCTLR */	\
-	mrc	p15, 0, r3, c1, c0, 2;		/* CPACR */	\
-	mrc	p15, 0, r4, c2, c0, 2;		/* TTBCR */	\
-	mrc	p15, 0, r5, c3, c0, 0;		/* DACR */	\
-	mrrc	p15, 0, r6, r7, c2;		/* TTBR 0 */	\
-	mrrc	p15, 1, r8, r9, c2;		/* TTBR 1 */	\
-	mrc	p15, 0, r10, c10, c2, 0;	/* PRRR */	\
-	mrc	p15, 0, r11, c10, c2, 1;	/* NMRR */	\
-	mrc	p15, 2, r12, c0, c0, 0		/* CSSELR */
+	mrc	CP15_SCTLR(r2);			/* SCTLR */	\
+	mrc	CP15_CPACR(r3);			/* CPACR */	\
+	mrc	CP15_TTBCR(r4);			/* TTBCR */	\
+	mrc	CP15_DACR(r5);			/* DACR */	\
+	mrrc	CP15_TTBR0_2(r6, r7);		/* TTBR 0 */	\
+	mrrc	CP15_TTBR1_2(r8, r9);		/* TTBR 1 */	\
+	mrc	CP15_PRRR(r10);			/* PRRR */	\
+	mrc	CP15_NMRR(r11);			/* NMRR */	\
+	mrc	CP15_CSSELR(r12)		/* CSSELR */
 
 #define	load_cp15_regs_batch2					\
-	mrc	p15, 0, r2, c13, c0, 1;		/* CID */	\
-	mrc	p15, 0, r3, c13, c0, 2;		/* TID_URW */	\
-	mrc	p15, 0, r4, c13, c0, 3;		/* TID_URO */	\
-	mrc	p15, 0, r5, c13, c0, 4;		/* TID_PRIV */	\
-	mrc	p15, 0, r6, c5, c0, 0;		/* DFSR */	\
-	mrc	p15, 0, r7, c5, c0, 1;		/* IFSR */	\
-	mrc	p15, 0, r8, c5, c1, 0;		/* ADFSR */	\
-	mrc	p15, 0, r9, c5, c1, 1;		/* AIFSR */	\
-	mrc	p15, 0, r10, c6, c0, 0;		/* DFAR */	\
-	mrc	p15, 0, r11, c6, c0, 2;		/* IFAR */	\
-	mrc	p15, 0, r12, c12, c0, 0		/* VBAR */
+	mrc	CP15_CONTEXTIDR(r2);		/* CID */	\
+	mrc	CP15_TPIDRURW(r3);		/* TID_URW */	\
+	mrc	CP15_TPIDRURO(r4);		/* TID_URO */	\
+	mrc	CP15_TPIDRPRW(r5);		/* TID_PRIV */	\
+	mrc	CP15_DFSR(r6);			/* DFSR */	\
+	mrc	CP15_IFSR(r7);			/* IFSR */	\
+	mrc	CP15_ADFSR(r8);			/* ADFSR */	\
+	mrc	CP15_AIFSR(r9);			/* AIFSR */	\
+	mrc	CP15_DFAR(r10);			/* DFAR */	\
+	mrc	CP15_IFAR(r11);			/* IFAR */	\
+	mrc	CP15_VBAR(r12)			/* VBAR */
 
 #define	load_cp15_regs_batch3					\
-	mrc	p15, 0, r2, c14, c1, 0;		/* CNTKCTL */	\
-	mrrc	p15, 0, r4, r5, c7;		/* PAR */	\
-	mrc	p15, 0, r3, c10, c3, 0;		/* AMAIR0 */	\
-	mrc	p15, 0, r6, c10, c3, 1		/* AMAIR1 */
+	mrc	CP15_CNTKCTL(r2);		/* CNTKCTL */	\
+	mrrc	CP15_PAR_2(r4, r5);		/* PAR */	\
+	mrc	CP15_AMAIR0(r3);		/* AMAIR0 */	\
+	mrc	CP15_AMAIR1(r6)			/* AMAIR1 */
 
 #define	store_cp15_regs_batch1					\
-	mcr	p15, 0, r2, c1, c0, 0;		/* SCTLR */	\
-	mcr	p15, 0, r3, c1, c0, 2;		/* CPACR */	\
-	mcr	p15, 0, r4, c2, c0, 2;		/* TTBCR */	\
-	mcr	p15, 0, r5, c3, c0, 0;		/* DACR */	\
-	mcrr	p15, 0, r6, r7, c2;		/* TTBR 0 */	\
-	mcrr	p15, 1, r8, r9, c2;		/* TTBR 1 */	\
-	mcr	p15, 0, r10, c10, c2, 0;	/* PRRR */	\
-	mcr	p15, 0, r11, c10, c2, 1;	/* NMRR */	\
-	mcr	p15, 2, r12, c0, c0, 0		/* CSSELR */
+	mcr	CP15_SCTLR(r2);			/* SCTLR */	\
+	mcr	CP15_CPACR(r3);			/* CPACR */	\
+	mcr	CP15_TTBCR(r4);			/* TTBCR */	\
+	mcr	CP15_DACR(r5);			/* DACR */	\
+	mcrr	CP15_TTBR0_2(r6, r7);		/* TTBR 0 */	\
+	mcrr	CP15_TTBR1_2(r8, r9);		/* TTBR 1 */	\
+	mcr	CP15_PRRR(r10);			/* PRRR */	\
+	mcr	CP15_NMRR(r11);			/* NMRR */	\
+	mcr	CP15_CSSELR(r12)		/* CSSELR */
 
 #define	store_cp15_regs_batch2					\
-	mcr	p15, 0, r2, c13, c0, 1;		/* CID */	\
-	mcr	p15, 0, r3, c13, c0, 2;		/* TID_URW */	\
-	mcr	p15, 0, r4, c13, c0, 3;		/* TID_URO */	\
-	mcr	p15, 0, r5, c13, c0, 4;		/* TID_PRIV */	\
-	mcr	p15, 0, r6, c5, c0, 0;		/* DFSR */	\
-	mcr	p15, 0, r7, c5, c0, 1;		/* IFSR */	\
-	mcr	p15, 0, r8, c5, c1, 0;		/* ADFSR */	\
-	mcr	p15, 0, r9, c5, c1, 1;		/* AIFSR */	\
-	mcr	p15, 0, r10, c6, c0, 0;		/* DFAR */	\
-	mcr	p15, 0, r11, c6, c0, 2;		/* IFAR */	\
-	mcr	p15, 0, r12, c12, c0, 0		/* VBAR */
+	mcr	CP15_CONTEXTIDR(r2);		/* CID */	\
+	mcr	CP15_TPIDRURW(r3);		/* TID_URW */	\
+	mcr	CP15_TPIDRURO(r4);		/* TID_URO */	\
+	mcr	CP15_TPIDRPRW(r5);		/* TID_PRIV */	\
+	mcr	CP15_DFSR(r6);			/* DFSR */	\
+	mcr	CP15_IFSR(r7);			/* IFSR */	\
+	mcr	CP15_ADFSR(r8);			/* ADFSR */	\
+	mcr	CP15_AIFSR(r9);			/* AIFSR */	\
+	mcr	CP15_DFAR(r10);			/* DFAR */	\
+	mcr	CP15_IFAR(r11);			/* IFAR */	\
+	mcr	CP15_VBAR(r12)			/* VBAR */
 
 #define	store_cp15_regs_batch3					\
-	mcr	p15, 0, r2, c14, c1, 0;		/* CNTKCTL */	\
-	mcrr	p15, 0, r4, r5, c7;		/* PAR */	\
-	mcr	p15, 0, r3, c10, c3, 0;		/* AMAIR0 */	\
-	mcr	p15, 0, r6, c10, c3, 1		/* AMAIR1 */
+	mcr	CP15_CNTKCTL(r2);		/* CNTKCTL */	\
+	mcrr	CP15_PAR_2(r4, r5);		/* PAR */	\
+	mcr	CP15_AMAIR0(r3);		/* AMAIR0 */	\
+	mcr	CP15_AMAIR1(r6)			/* AMAIR1 */
 
 #define	store_guest_cp15_regs_batch1				\
 	str	r2, [r0, #HYPCTX_CP15_SCTLR];			\
@@ -355,25 +355,25 @@
 	cmp	r2, #0;						\
 	beq	1f;						\
 								\
-	mrc	p15, 0, r2, c14, c3, 1;		/* CNTV_CTL */	\
+	mrc	CP15_CNTV_CTL(r2);		/* CNTV_CTL */	\
 	str	r2, [r0, #HYPCTX_VTIMER_CPU_CNTV_CTL];		\
 	bic	r2, #1;						\
-	mcr	p15, 0, r2, c14, c3, 1;				\
+	mcr	CP15_CNTV_CTL(r2);				\
 	isb;							\
 								\
-	mrrc	p15, 3, r4, r5, c14;		/* CNTV_CVAL */	\
+	mrrc	CP15_CNTV_CVAL(r4, r5);		/* CNTV_CVAL */	\
 	add	r2, r0, #HYPCTX_VTIMER_CPU_CNTV_CVAL;		\
 	strd	r4, r5, [r2];					\
 1:								\
-	mrc	p15, 4, r2, c14, c1, 0;				\
+	mrc	CP15_CNTHCTL(r2);				\
 	orr	r2, r2, #(CNTHCTL_PL1PCEN | CNTHCTL_PL1PCTEN);	\
-	mcr	p15, 4, r2, c14, c1, 0
+	mcr	CP15_CNTHCTL(r2)
 	
 #define restore_timer_regs					\
-	mrc	p15, 4, r2, c14, c1, 0;				\
+	mrc	CP15_CNTHCTL(r2);				\
 	orr	r2, r2, #CNTHCTL_PL1PCTEN;			\
 	bic	r2, r2, #CNTHCTL_PL1PCEN;			\
-	mcr	p15, 4, r2, c14, c1, 0;				\
+	mcr	CP15_CNTHCTL(r2);				\
 								\
 	ldr	r2, [r0, #HYPCTX_HYP];				\
 	add	r3, r2, #HYP_VTTBR;				\
@@ -385,16 +385,16 @@
 	add	r4, r2, #HYP_VTTBR;				\
 	add	r4, r4, #(HYP_VTIMER_CNTVOFF - HYP_VTTBR);	\
 	ldrd	r4, r5, [r4];					\
-	mcrr	p15, 4, r4, r5, c14;		/* CNTVOFF */	\
+	mcrr	CP15_CNTVOFF(r4, r5);		/* CNTVOFF */	\
 								\
 	add	r2, r0, #HYPCTX_VTIMER_CPU_CNTV_CVAL;		\
 	ldrd	r4, r5, [r2];					\
-	mcrr	p15, 3, r4, r5, c14;		/* CNTV_TVAL */	\
+	mcrr	CP15_CNTV_CVAL(r4, r5);		/* CNTV_CVAL */	\
 	isb;							\
 								\
 	ldr	r2, [r0, #HYPCTX_VTIMER_CPU_CNTV_CTL];		\
 	and	r2, r2, #3;					\
-	mcr	p15, 0, r2, c14, c3, 1;		/* CNTV_CTL */	\
+	mcr	CP15_CNTV_CTL(r2);		/* CNTV_CTL */	\
 2:
 
 #ifdef VFP
