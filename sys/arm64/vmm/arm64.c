@@ -46,7 +46,7 @@
 #include <machine/vmm_dev.h>
 
 #include "mmu.h"
-#include "arm.h"
+#include "arm64.h"
 #include "hyp.h"
 #include "vgic.h"
 #include "vtimer.h"

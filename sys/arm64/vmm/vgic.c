@@ -91,7 +91,7 @@
 #include "hyp.h"
 #include "mmu.h"
 #include "vgic.h"
-#include "arm.h"
+#include "arm64.h"
 
 static uint64_t virtual_int_ctrl_vaddr;
 static uint64_t virtual_int_ctrl_paddr;

@@ -48,7 +48,7 @@
 
 #include <machine/vmm.h>
 #include "mmu.h"
-#include "arm.h"
+#include "arm64.h"
 
 MALLOC_DECLARE(M_HYP);
 extern lpae_pd_entry_t *hyp_l1pd;

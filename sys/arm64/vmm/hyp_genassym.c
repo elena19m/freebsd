@@ -35,7 +35,7 @@
 #include <vm/pmap.h>
 
 #include <machine/vmm.h>
-#include "arm.h"
+#include "arm64.h"
 
 ASSYM(HYPCTX_HYP, offsetof(struct hypctx, hyp));
 ASSYM(HYP_VTTBR, offsetof(struct hyp, vttbr));
