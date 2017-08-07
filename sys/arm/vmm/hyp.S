@@ -69,11 +69,11 @@ ENTRY(hyp_enter_guest)
 
 	/* Save HOST CP15 registers */
 	load_cp15_regs_batch1				@ Load in r2-r12 CP15 regs
-	push {r2-r12}
+	push	{r2-r12}
 	load_cp15_regs_batch2				@ Load in r2-r12 CP15 regs
-	push {r2-r12}
+	push	{r2-r12}
 	load_cp15_regs_batch3				@ Load in r2-r6 CP15 regs
-	push {r2-r6}
+	push	{r2-r6}
 
 	/* Load GUEST CP15 registers */
 	load_guest_cp15_regs_batch1
@@ -107,10 +107,10 @@ ENTRY(hyp_enter_guest)
 #endif
 
 	/* Trap access to the CP10/CP11 [vfp/simd] */
-	mrc     CP15_HCPTR(r1)
+	mrc	CP15_HCPTR(r1)
 	ldr	r2, =(HCPTR_TTA | HCPTR_TCP(10) | HCPTR_TCP(11))
-	orr     r1, r1, r2
-	mcr     CP15_HCPTR(r1)
+	orr	r1, r1, r2
+	mcr	CP15_HCPTR(r1)
 
 	restore_guest_regs
 
@@ -135,10 +135,10 @@ hyp_exit_guest:
 	save_guest_regs
 
 	/* Disable trap access to the CP10/CP11 [vfp/simd] */
-	mrc     CP15_HCPTR(r2)
+	mrc	CP15_HCPTR(r2)
 	ldr	r3, =(HCPTR_TTA | HCPTR_TCP(10) | HCPTR_TCP(11))
-	bic     r3, r2, r3
-	mcr     CP15_HCPTR(r3)
+	bic	r3, r2, r3
+	mcr	CP15_HCPTR(r3)
 
 #ifdef VFP
 	tst	r2, #(HCPTR_TCP(10) | HCPTR_TCP(11))
@@ -154,13 +154,13 @@ after_restore:
 	/* Set VTTBR to 0 (VMID to 0) */
 	mov	r2, #0
 	mov	r3, #0
-	mcrr    CP15_VTTBR(r2, r3)
+	mcrr	CP15_VTTBR(r2, r3)
 
 	/* Set MIDR and MPIDR at hardware values */
-	mrc     CP15_MIDR(r2)
-	mcr     CP15_VPIDR(r2)
-	mrc     CP15_MPIDR(r2)
-	mcr     CP15_VMPIDR(r2)
+	mrc	CP15_MIDR(r2)
+	mcr	CP15_VPIDR(r2)
+	mrc	CP15_MPIDR(r2)
+	mcr	CP15_VMPIDR(r2)
 
 	/* Disable all traps - HCR */
 	mov	r2, #0
@@ -176,11 +176,11 @@ after_restore:
 	store_guest_cp15_regs_batch3
 
 	/* Load HOST CP15 registers in reverse order from the stack */
-	pop {r2-r6}
+	pop	{r2-r6}
 	store_cp15_regs_batch3			@ Load in r2-r6 CP15 regs
-	pop {r2-r12}
+	pop	{r2-r12}
 	store_cp15_regs_batch2			@ Load in r2-r12 CP15 regs
-	pop {r2-r12}
+	pop	{r2-r12}
 	store_cp15_regs_batch1			@ Load in r2-r12 CP15 regs
 
 	save_timer_regs
@@ -250,18 +250,18 @@ hyp_init_hvc:
 	@ HTCR_MASK contains all the above bits
 	mrc	CP15_HTCR(r0)		@ HTCR
 	ldr	r1,=HTCR_MASK
-	bic     r0, r0, r1
+	bic	r0, r0, r1
 	mcr	CP15_HTCR(r0)		@ HTCR
 
 	@ VTCR for supporting only 32 bit IPA [see VMM_VTCR_T0SZ in hyp.h]
-	ldr     r0, =(VTCR_RES | VTCR_SL_L1 | VMM_VTCR_T0SZ | VMM_VTCR_S)
+	ldr	r0, =(VTCR_RES | VTCR_SL_L1 | VMM_VTCR_T0SZ | VMM_VTCR_S)
 	mcr     CP15_VTCR(r0)		@ VTCR
 
 	@ Set the HMAIR0/1 (same as MAIR0/1) registers for AttrIndx[2:0]
 	ldr	r0, =HMAIR0
-	mcr     CP15_MAIR0(r0)
+	mcr	CP15_MAIR0(r0)
 	ldr	r0, =HMAIR1
-	mcr     CP15_MAIR1(r0)
+	mcr	CP15_MAIR1(r0)
 
 	@ Flush the TLB entries from Hyp-Mode
 	mcr	CP15_TLBIALLH(r0)	@ TLBIALLH
@@ -269,14 +269,14 @@ hyp_init_hvc:
 
 	mrc	CP15_HSCTLR(r0)		@ Read current HSCTLR
 	ldr	r2, =HSCTLR_MASK
-	bic     r0, r0, r2
+	bic	r0, r0, r2
 
 	mrc	CP15_SCTLR(r1)		@ Read the current SCTLR
-	ldr     r2, =(HSCTLR_EE | HSCTLR_FI | HSCTLR_I | HSCTLR_C)
-	and     r1, r1, r2
-	ldr     r2, =(HSCTLR_M | HSCTLR_A)
-	orr     r1, r1, r2
-	orr     r0, r0, r1
+	ldr	r2, =(HSCTLR_EE | HSCTLR_FI | HSCTLR_I | HSCTLR_C)
+	and	r1, r1, r2
+	ldr	r2, =(HSCTLR_M | HSCTLR_A)
+	orr	r1, r1, r2
+	orr	r0, r0, r1
 	isb
 	mcr     CP15_HSCTLR(r0)		@ Set the new HSCTLR
 	eret
@@ -294,37 +294,37 @@ hyp_vector:
 	.align
 
 hyp_reset:
-	b loop
+	b	loop
 
 	.align
 hyp_undef:
-	ldr r0, =und_die_str
-	mov r1, #EXCEPTION_UNDEF
-	bl handle_bad_exception
+	ldr	r0, =und_die_str
+	mov	r1, #EXCEPTION_UNDEF
+	bl	handle_bad_exception
 und_die_str:
 	.ascii  "unexpected undefined exception in Hyp mode at: %#08x\n"
 
 	.align
 hyp_svc:
-	ldr r0, =svc_die_str
-	mov r1, #EXCEPTION_SVC
-	bl handle_bad_exception
+	ldr	r0, =svc_die_str
+	mov	r1, #EXCEPTION_SVC
+	bl	handle_bad_exception
 svc_die_str:
 	.ascii  "unexpected HVC/SVC trap in Hyp mode at: %#08x\n"
 
 	.align
 hyp_pabt:
-	ldr r0, =pabt_die_str
-	mov r1, #EXCEPTION_PABT
-	bl handle_bad_exception
+	ldr	r0, =pabt_die_str
+	mov	r1, #EXCEPTION_PABT
+	bl	handle_bad_exception
 pabt_die_str:
 	.ascii  "unexpected prefetch abort in Hyp mode at: %#08x\n"
 
 	.align
 hyp_dabt:
-	ldr r0, =dabt_die_str
-	mov r1, #EXCEPTION_DABT
-	bl handle_bad_exception
+	ldr	r0, =dabt_die_str
+	mov	r1, #EXCEPTION_DABT
+	bl	handle_bad_exception
 dabt_die_str:
 	.ascii  "unexpected data abort in Hyp mode at: %#08x\n"
 
@@ -335,17 +335,17 @@ hyp_hvc:
 	lsr	r0, r1, #HSR_EC_SHIFT
 
 #ifdef VFP
-	cmp r0, #HSR_EC_HCPTR_CP0_CP13
-	bne hyp_not_vfp
+	cmp	r0, #HSR_EC_HCPTR_CP0_CP13
+	bne	hyp_not_vfp
 	mrc	CP15_HCPTR(r1)
 	ldr	r2, =(HCPTR_TCP(10) | HCPTR_TCP(11))
 	bic	r1, r1, r2
 	mcr	CP15_HCPTR(r1)
 	mrc	CP15_HTPIDR(r0)
-	push {r3-r7}
+	push	{r3-r7}
 	vfp_switch_to_guest
-	pop {r3-r7}
-	pop {r0, r1, r2}
+	pop	{r3-r7}
+	pop	{r0, r1, r2}
 	eret
 
 hyp_not_vfp:
@@ -426,6 +426,6 @@ guest_bad_exception:
 END(handle_bad_exception)
 
 loop:
-	b loop
+	b	loop
 
 hyp_code_end:
