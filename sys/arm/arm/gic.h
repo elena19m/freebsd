@@ -37,7 +37,7 @@
  */
 
 #ifndef _ARM_GIC_H_
-#define	_ARM_GIC_H_
+#define _ARM_GIC_H_
 
 struct arm_gic_range {
 	uint64_t bus;
