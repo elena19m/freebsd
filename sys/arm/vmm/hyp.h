@@ -162,7 +162,7 @@
 #define HCR_PTW		(1 << 2)
 #define HCR_SWIO	(1 << 1)
 #define HCR_VM		1
-/* 
+/*
  * B4.1.65 HCR, Hyp Configuration Register,
  *
  * HCR_TSW - Trap set/way cache maintenance operations

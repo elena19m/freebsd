@@ -92,7 +92,7 @@ vmm_mem_alloc(size_t size)
 	}
 
 	pa = VM_PAGE_TO_PHYS(m);
-	
+
 	if ((m->flags & PG_ZERO) == 0)
 		pmap_zero_page(m);
 

@@ -53,7 +53,7 @@ extern lpae_pd_entry_t *hyp_l1pd;
  * - l1pd - the level 1 address of the PD (NULL for the HYP mode PD)
  * - virt_start - a 32 bit virtual address to be mapped
  * - phys_start - a 64 bit physical address to map to
- * - len - the desired length mapping, but it will be truncated to the virt_start 
+ * - len - the desired length mapping, but it will be truncated to the virt_start
  *         alignment
  * - prot - the FreeBSD mapping permissions
  * - returns the actual length of the mapping
@@ -141,7 +141,7 @@ static int create_lpae_mapping(lpae_pd_entry_t *l1pd,
 	} else {
 		l3pd = (lpae_pd_entry_t *) (l2pd_shadow[l2_index]);
 	}
-	
+
 	pd = &l3pd[l3_index];
 
 set_prot:
@@ -180,7 +180,7 @@ void dump_lpae_mapping(void *arg)
 
 	if (arg)
 		l1pd = &vm_hyp->l1pd[0];
-	else 
+	else
 		l1pd = &hyp_l1pd[0];
 
 	l1pd_shadow = &l1pd[LPAE_L1_ENTRIES];
@@ -251,7 +251,7 @@ uint64_t lpae_vmmmap_get(void *arg, uint64_t ipa)
 
 	if (arg)
 		l1pd = &vm_hyp->l1pd[0];
-	else 
+	else
 		l1pd = &hyp_l1pd[0];
 
 	l1pd_shadow = &l1pd[LPAE_L1_ENTRIES];
@@ -267,9 +267,9 @@ uint64_t lpae_vmmmap_get(void *arg, uint64_t ipa)
 		/* Check if there is a connect to a 3nd level PT */
 		l2_index = (ipa >> LPAE_L2_SHIFT) & LPAE_L2_INDEX_MASK;
 		if ((l2pd[l2_index] & LPAE_TYPE_LINK) == LPAE_TYPE_LINK) {
-			
+
 			l3pd = (lpae_pd_entry_t *) (l2pd_shadow[l2_index]);
-		
+
 			l3_index = (ipa >> LPAE_L3_SHIFT) & LPAE_L3_INDEX_MASK;
 			return (l3pd[l3_index] & LPAE_L3_B_ADDR_MASK);
 		} else {
@@ -292,7 +292,7 @@ void lpae_vmcleanup(void *arg)
 
 	if (arg)
 		l1pd = &vm_hyp->l1pd[0];
-	else 
+	else
 		l1pd = &hyp_l1pd[0];
 
 	l1pd_shadow = &l1pd[LPAE_L1_ENTRIES];

@@ -80,7 +80,7 @@ static struct arm_vgic_softc sc =
 	.gic_dev  = NULL,
 };
 
-static void vgic_bitmap_set_irq_val(uint32_t *irq_prv, 
+static void vgic_bitmap_set_irq_val(uint32_t *irq_prv,
 						uint32_t *irq_shr, int irq, int val);
 static void vgic_update_state(struct hyp *hyp);
 static void vgic_retire_disabled_irqs(struct hypctx *hypctx);
@@ -265,12 +265,12 @@ vgic_dist_mmio_write(void *vm, int vcpuid, uint64_t gpa, uint64_t val, int size,
 
 		/* private set-enable irq */
 		dist->irq_enabled_prv[vcpuid][0] |= (val & mask) << byte_offset;
-		
+
 	} else if (base_offset >= GICD_ISENABLER(VGIC_NR_PRV_IRQ) && base_offset < GICD_ICENABLER(0)) {
 
 		/* shared set-enable irq */
 		dist->irq_enabled_shr[(base_offset - GICD_ISENABLER(VGIC_NR_PRV_IRQ)) / sizeof(uint32_t)] |= (val & mask) << byte_offset;
-		
+
 	} else if (base_offset >= GICD_ICENABLER(0) && base_offset < GICD_ICENABLER(VGIC_NR_PRV_IRQ)) {
 
 		/* private clear-enable irq */
@@ -405,14 +405,14 @@ vgic_attach_to_vm(void *arg, uint64_t distributor_paddr, uint64_t cpu_int_paddr)
 
 	hyp = arg;
 
-	/* 
-	 * Set the distributor address which will be 
+	/*
+	 * Set the distributor address which will be
 	 * emulated using the MMIO infrasctructure
 	 * */
 	hyp->vgic_distributor.distributor_base = distributor_paddr;
 	hyp->vgic_distributor.cpu_int_base = cpu_int_paddr;
 	hyp->vgic_attached = true;
-	/* 
+	/*
 	 * Set the Virtual Interface Control address to
 	 * save/restore registers at context switch.
 	 * Also set the number of LRs
@@ -428,7 +428,7 @@ vgic_attach_to_vm(void *arg, uint64_t distributor_paddr, uint64_t cpu_int_paddr)
 			if (j < VGIC_NR_PPI)
 				vgic_bitmap_set_irq_val(hyp->vgic_distributor.irq_enabled_prv[i],
 										hyp->vgic_distributor.irq_enabled_shr, j, 1);
-			
+
 			if (j < VGIC_NR_PRV_IRQ)
 				vgic_bitmap_set_irq_val(hyp->vgic_distributor.irq_conf_prv[i],
 										hyp->vgic_distributor.irq_conf_shr, j, VGIC_CFG_EDGE);
@@ -480,7 +480,7 @@ vgic_irq_is_edge(struct hypctx *hypctx, int irq)
 	struct vgic_distributor *vgic_distributor = &hypctx->hyp->vgic_distributor;
 	int irq_val;
 
-	irq_val = vgic_bitmap_get_irq_val(vgic_distributor->irq_conf_prv[hypctx->vcpu], 
+	irq_val = vgic_bitmap_get_irq_val(vgic_distributor->irq_conf_prv[hypctx->vcpu],
 									  vgic_distributor->irq_conf_shr, irq);
 	return irq_val == VGIC_CFG_EDGE;
 }
@@ -578,7 +578,7 @@ compute_pending_for_cpu(struct hyp *hyp, int vcpu)
 
 	uint32_t *pending, *enabled, *pend_percpu, *pend_shared, *target;
 	int32_t pending_private, pending_shared;
-	
+
 	pend_percpu = vgic_cpu_int->pending_prv;
 	pend_shared = vgic_cpu_int->pending_shr;
 
@@ -743,7 +743,7 @@ vgic_queue_sgi(struct hypctx *hypctx, int irq)
 		vgic_cpu_irq_clear(hypctx, irq);
 		return true;
 	}
-	
+
 	return false;
 }
 
@@ -893,7 +893,7 @@ vgic_vcpu_pending_irq(void *arg)
 	hypctx = arg;
 	vgic_distributor = &hypctx->hyp->vgic_distributor;
 
-	return bit_test((bitstr_t *)&vgic_distributor->irq_pending_on_cpu, 
+	return bit_test((bitstr_t *)&vgic_distributor->irq_pending_on_cpu,
 		            hypctx->vcpu);
 }
 
@@ -987,7 +987,7 @@ vgic_hyp_init(void)
 	virtual_int_ctrl_vaddr = gic_get_virtual_int_ctrl_vaddr(sc.vgic_dev);
 	virtual_int_ctrl_paddr = gic_get_virtual_int_ctrl_paddr(sc.vgic_dev);
 	virtual_int_ctrl_size = gic_get_virtual_int_ctrl_size(sc.vgic_dev);
-	
+
 	/* Virtual CPU Interface */
 	virtual_cpu_int_paddr = gic_get_virtual_cpu_int_paddr(sc.vgic_dev);
 	virtual_cpu_int_size = gic_get_virtual_cpu_int_size(sc.vgic_dev);
@@ -1013,8 +1013,8 @@ arm_vgic_maintenance_intr(void *arg)
 
 	vgic_sc = arg;
 	gic_sc = device_get_softc(vgic_sc->gic_dev);
-	
-	maintenance_intr = bus_space_read_4(gic_sc->gic_h_bst, 
+
+	maintenance_intr = bus_space_read_4(gic_sc->gic_h_bst,
 					    gic_sc->gic_h_bsh, GICH_MISR);
 
 	printf("%s: %x\n", __func__, maintenance_intr);
