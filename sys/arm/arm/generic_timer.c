@@ -88,10 +88,10 @@ __FBSDID("$FreeBSD$");
 #define	GT_CNTKCTL_PL0VCTEN	(1 << 1) /* PL0 CNTVCT and CNTFRQ access */
 #define	GT_CNTKCTL_PL0PCTEN	(1 << 0) /* PL0 CNTPCT and CNTFRQ access */
 
-#define GT_PHYS_SECURE		0
-#define GT_PHYS_NONSECURE	1
-#define GT_VIRT			2
-#define GT_HYP			3
+#define	GT_PHYS_SECURE		0
+#define	GT_PHYS_NONSECURE	1
+#define	GT_VIRT			2
+#define	GT_HYP			3
 
 extern char hypmode_enabled[];
 
