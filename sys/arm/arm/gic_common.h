@@ -30,7 +30,7 @@
  */
 
 #ifndef _GIC_COMMON_H_
-#define	_GIC_COMMON_H_
+#define _GIC_COMMON_H_
 
 #ifndef __ASSEMBLER__
 
