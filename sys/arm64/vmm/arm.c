@@ -69,7 +69,7 @@ char hypervisor_stub_vect[] = {0};
 */
 
 extern uint64_t hypmode_enabled;
-extern uint64_t test_hyp_s;
+extern uint64_t hyp_debug;
 
 lpae_pd_entry_t *hyp_l1pd;
 char *stack;
@@ -121,7 +121,8 @@ arm_init(int ipinum)
 	printf("ARM_INIT:\n");
 	printf("\thyp_stub_vectors = %016lx\n", vtophys(hyp_stub_vectors));
 	printf("\thyp_init_vectors = %016lx\n", vtophys(hyp_init_vectors));
-	printf("\thyp_vectors = %016lx\n\n", vtophys(hyp_vectors));
+	printf("\thyp_vectors = %016lx\n", vtophys(hyp_vectors));
+	printf("\n\thyp_debug = %016lx\n\n", hyp_debug);
 
 	printf("vmm_call_hyp(-1)\n");
 	current_vectors = vmm_call_hyp((void *)-1);
@@ -180,14 +181,13 @@ arm_init(int ipinum)
 	 */
 
 	phys_hyp_l1pd = (lpae_vm_paddr_t)vtophys(hyp_l1pd);
-	//vmm_call_hyp(&hyp_vector[0], stack_top, LOW(phys_hyp_l1pd), HIGH(phys_hyp_l1pd));
 
 	printf("vmm_call_hyp(-1)\n");
 	current_vectors = vmm_call_hyp((void *)-1);
 	printf("\tcurrent_vectors = %016lx\n\n", current_vectors);
 
-	printf("vmm_call_hyp(hyp_vectors)\n");
-	vmm_call_hyp((void *)vtophys(hyp_vectors));
+	printf("vmm_call_hyp(hyp_vectors, stack_top)\n");
+	vmm_call_hyp((void *)vtophys(hyp_vectors), vtophys(stack_top));
 
 	printf("vmm_call_hyp(-1)\n");
 	current_vectors = vmm_call_hyp((void *)-1);
@@ -199,7 +199,8 @@ arm_init(int ipinum)
 
 	printf("vmm_call_hyp(-1)\n");
 	current_vectors = vmm_call_hyp((void *)-1);
-	printf("\tcurrent_vectors = %016lx\n\n", current_vectors);
+	printf("\tcurrent_vectors = %016lx\n", current_vectors);
+	printf("\thyp_debug = %016lx\n\n", hyp_debug);
 
 	/* Initialize VGIC infrastructure */
 	if (vgic_hyp_init()) {
@@ -214,7 +215,10 @@ arm_init(int ipinum)
 static int
 arm_cleanup(void)
 {
-	//vmm_call_hyp((void *) vtophys(vmm_stub_install), (void *)vtophys(&hypervisor_stub_vect[0]));
+	/*
+	vmm_call_hyp((void *)vtophys(vmm_cleanup),
+			(void *)vtophys(hyp_stub_vectors));
+	*/
 
 	free(stack, M_HYP);
 

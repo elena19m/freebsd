@@ -42,6 +42,7 @@
  * #include "hyp_assym.h"
  * #include "hyp_helpers.h"
  */
+
 	.text
 
 	.globl	hyp_code_start
@@ -50,6 +51,17 @@
 	.align 12
 
 hyp_code_start:
+
+	.align 3
+	.globl _C_LABEL(hyp_debug)
+_C_LABEL(hyp_debug):
+	.zero 8
+
+.macro debug val
+	mov	x14, #\val
+	adr	x15, hyp_debug
+	str	x14, [x15]
+.endm
 
 ENTRY(vmm_call_hyp)
 	hvc	#0
@@ -97,7 +109,10 @@ ENTRY(handle_hyp_init)
 	mrs	x0, vbar_el2
 	b	9f
 1:
+	/* Install the new exception vectors */
 	msr	vbar_el2, x0
+	/* Set the new stack top */
+	mov	sp, x1
 9:
 	eret
 END(handle_hyp_init)
@@ -133,16 +148,24 @@ ENTRY(handle_hyp_hvc)
 	mrs	x0, vbar_el2
 	b	9f
 1:
+	debug 1
+
 	/* Save vmm_call_hyp() return address */
-	mov 	x3, lr
+	str	lr, [sp, #-16]!
 	/* Save function address */
-	mov	x2, x0
+	mov	x9, x0
 	/* Shuffle function parameters */
 	mov 	x0, x1
+	mov	x1, x2
+	mov 	x2, x3
+	mov	x3, x4
+	mov	x4, x5
+	mov	x5, x6
+	mov 	x6, x7
 	/* Call function */
-	blr 	x2
+	blr 	x9
 	/* Restore vmm_call_hyp() return address */
-	mov	lr, x3
+	ldr	lr, [sp], #16
 9:
 
 	eret
