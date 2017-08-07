@@ -83,15 +83,15 @@ __FBSDID("$FreeBSD$");
 /* Distributor Registers */
 
 /* CPU Registers */
-#define GICC_CTLR		0x0000			/* v1 ICCICR */
-#define GICC_PMR		0x0004			/* v1 ICCPMR */
-#define GICC_BPR		0x0008			/* v1 ICCBPR */
-#define GICC_IAR		0x000C			/* v1 ICCIAR */
-#define GICC_EOIR		0x0010			/* v1 ICCEOIR */
-#define GICC_RPR		0x0014			/* v1 ICCRPR */
-#define GICC_HPPIR		0x0018			/* v1 ICCHPIR */
-#define GICC_ABPR		0x001C			/* v1 ICCABPR */
-#define GICC_IIDR		0x00FC			/* v1 ICCIIDR*/
+#define	GICC_CTLR		0x0000			/* v1 ICCICR */
+#define	GICC_PMR		0x0004			/* v1 ICCPMR */
+#define	GICC_BPR		0x0008			/* v1 ICCBPR */
+#define	GICC_IAR		0x000C			/* v1 ICCIAR */
+#define	GICC_EOIR		0x0010			/* v1 ICCEOIR */
+#define	GICC_RPR		0x0014			/* v1 ICCRPR */
+#define	GICC_HPPIR		0x0018			/* v1 ICCHPIR */
+#define	GICC_ABPR		0x001C			/* v1 ICCABPR */
+#define	GICC_IIDR		0x00FC			/* v1 ICCIIDR*/
 
 /* TYPER Registers */
 #define	GICD_TYPER_SECURITYEXT	0x400
@@ -107,10 +107,10 @@ struct gic_irqsrc {
 	uint32_t		gi_irq;
 	enum intr_polarity	gi_pol;
 	enum intr_trigger	gi_trig;
-#define GI_FLAG_EARLY_EOI	(1 << 0)
-#define GI_FLAG_MSI		(1 << 1) /* This interrupt source should only */
+#define	GI_FLAG_EARLY_EOI	(1 << 0)
+#define	GI_FLAG_MSI		(1 << 1) /* This interrupt source should only */
 					 /* be used for MSI/MSI-X interrupts */
-#define GI_FLAG_MSI_USED	(1 << 2) /* This irq is already allocated */
+#define	GI_FLAG_MSI_USED	(1 << 2) /* This irq is already allocated */
 					 /* for a MSI/MSI-X interrupt */
 	u_int			gi_flags;
 };
@@ -1090,8 +1090,8 @@ DEFINE_CLASS_0(gic, arm_gic_driver, arm_gic_methods,
  */
 
 #define	GICV2M_MSI_TYPER	0x008
-#define	 MSI_TYPER_SPI_BASE(x)	(((x) >> 16) & 0x3ff)
-#define	 MSI_TYPER_SPI_COUNT(x)	(((x) >> 0) & 0x3ff)
+#define	MSI_TYPER_SPI_BASE(x)	(((x) >> 16) & 0x3ff)
+#define	MSI_TYPER_SPI_COUNT(x)	(((x) >> 0) & 0x3ff)
 #define	GICv2M_MSI_SETSPI_NS	0x040
 #define	GICV2M_MSI_IIDR		0xFCC
 
