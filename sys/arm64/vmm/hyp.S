@@ -28,15 +28,14 @@
 #include <sys/syscall.h>
 #include <machine/asm.h>
 #include <machine/armreg.h>
+#include <machine/hypervisor.h>
+#include <arm/arm/gic_common.h>
 
 /*
  * TODO
  * hypervisor.h might replace hyp.h
  *  #include "hyp.h"
  */
-#include <machine/hypervisor.h>
-
-#include <arm/arm/gic_common.h>
 
 /*
  * TODO
@@ -51,6 +50,7 @@
 	.align 12
 
 hyp_code_start:
+
 ENTRY(vmm_call_hyp)
 	hvc	#0
 	ret
@@ -90,9 +90,15 @@ hyp_init_vectors:
 	vempty		/* FIQ 32-bit EL1 */
 	vempty		/* Error 32-bit EL1 */
 
-
 ENTRY(handle_hyp_init)
 	/* TODO */
+	cmp 	x0, #-1
+	b.ne	1f
+	mrs	x0, vbar_el2
+	b	9f
+1:
+	msr	vbar_el2, x0
+9:
 	eret
 END(handle_hyp_init)
 
@@ -122,7 +128,45 @@ hyp_vectors:
 
 ENTRY(handle_hyp_hvc)
 	/* TODO */
+	cmp 	x0, #-1
+	b.ne	1f
+	mrs	x0, vbar_el2
+	b	9f
+1:
+	/* Save vmm_call_hyp() return address */
+	mov 	x3, lr
+	/* Save function address */
+	mov	x2, x0
+	/* Shuffle function parameters */
+	mov 	x0, x1
+	/* Call function */
+	blr 	x2
+	/* Restore vmm_call_hyp() return address */
+	mov	lr, x3
+9:
+
 	eret
 END(handle_hyp_hvc)
+
+/*
+ * Usage:
+ * void vmm_cleanup(void *hyp_stub_vectors)
+ *
+ * Expecting:
+ * x0 - physical address of hyp_stub_vectors
+ */
+ENTRY(vmm_cleanup)
+	/* Restore the stub vectors */
+	msr	vbar_el2, x0
+
+	/* Disable the MMU */
+	dsb	sy
+	mrs	x2, sctlr_el2
+	bic	x2, x2, SCTLR_M
+	msr	sctlr_el2, x2
+	isb
+
+	ret
+END(vmm_cleanup)
 
 hyp_code_end:

@@ -56,10 +56,11 @@
 
 MALLOC_DEFINE(M_HYP, "ARM VMM HYP", "ARM VMM HYP");
 
-extern uint64_t hyp_init_vectors[];
+extern char hyp_init_vectors[];
 extern char hyp_vectors[];
 extern char hyp_code_start[];
 extern char hypervisor_stub_vect[];
+
 /*
 char hyp_init_vectors[] = {0};
 char hyp_vector[] = {0};
@@ -107,7 +108,7 @@ out:
 	hyp->vttbr = BUILD_VTTBR((hyp->vmid_generation & VMID_GENERATION_MASK), hyp->l1pd_phys);
 }
 
-extern uint64_t hyp_stub_vectors[];
+extern char hyp_stub_vectors[];
 
 static int
 arm_init(int ipinum)
@@ -119,8 +120,12 @@ arm_init(int ipinum)
 
 	printf("ARM_INIT:\n");
 	printf("\thyp_stub_vectors = %016lx\n", vtophys(hyp_stub_vectors));
+	printf("\thyp_init_vectors = %016lx\n", vtophys(hyp_init_vectors));
+	printf("\thyp_vectors = %016lx\n\n", vtophys(hyp_vectors));
+
+	printf("vmm_call_hyp(-1)\n");
 	current_vectors = vmm_call_hyp((void *)-1);
-	printf("\tcurrent_vectors = %016lx\n", current_vectors);
+	printf("\tcurrent_vectors = %016lx\n\n", current_vectors);
 
 	if (!hypmode_enabled) {
 		printf("arm_init: processor didn't boot in EL2 (no support)\n");
@@ -162,6 +167,7 @@ arm_init(int ipinum)
 	 * Install the temporary vectors which will be responsible for
 	 * initializing the VMM when we next trap into EL2.
 	 */
+	printf("vmm_call_hyp(hyp_init_vectors)\n");
 	vmm_call_hyp((void *)vtophys(hyp_init_vectors));
 
 	/*
@@ -175,9 +181,25 @@ arm_init(int ipinum)
 
 	phys_hyp_l1pd = (lpae_vm_paddr_t)vtophys(hyp_l1pd);
 	//vmm_call_hyp(&hyp_vector[0], stack_top, LOW(phys_hyp_l1pd), HIGH(phys_hyp_l1pd));
-	printf("\tbefore calling hyp\n");
-	vmm_call_hyp(NULL);
-	printf("\tcalled hyp\n");
+
+	printf("vmm_call_hyp(-1)\n");
+	current_vectors = vmm_call_hyp((void *)-1);
+	printf("\tcurrent_vectors = %016lx\n\n", current_vectors);
+
+	printf("vmm_call_hyp(hyp_vectors)\n");
+	vmm_call_hyp((void *)vtophys(hyp_vectors));
+
+	printf("vmm_call_hyp(-1)\n");
+	current_vectors = vmm_call_hyp((void *)-1);
+	printf("\tcurrent_vectors = %016lx\n\n", current_vectors);
+
+	printf("vmm_call_hyp(vmm_cleanup, hyp_stub_vectors)\n");
+	vmm_call_hyp((void *)vtophys(vmm_cleanup),
+			(void *)vtophys(hyp_stub_vectors));
+
+	printf("vmm_call_hyp(-1)\n");
+	current_vectors = vmm_call_hyp((void *)-1);
+	printf("\tcurrent_vectors = %016lx\n\n", current_vectors);
 
 	/* Initialize VGIC infrastructure */
 	if (vgic_hyp_init()) {
