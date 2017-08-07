@@ -37,7 +37,7 @@
 
 #include "vmm.h"
 #include "vgic.h"
-#include "arm.h"
+#include "arm64.h"
 #include "vtimer.h"
 
 #define USECS_PER_SEC	1000000

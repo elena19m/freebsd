@@ -11,7 +11,7 @@ SRCS+=	vmm.c		\
 	vmm_mem.c	\
 	mmu.c		\
 	vmm_stat.c	\
-	arm.c		\
+	arm64.c		\
 	vgic.c		\
 	vtimer.c	\
 	hyp.S

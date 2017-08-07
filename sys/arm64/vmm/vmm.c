@@ -62,7 +62,7 @@
 #include "vmm_stat.h"
 #include "vmm_mem.h"
 #include "mmu.h"
-#include "arm.h"
+#include "arm64.h"
 #include "vgic.h"
 
 extern uint64_t hypmode_enabled;
