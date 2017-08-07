@@ -368,7 +368,7 @@
 	mrc	CP15_CNTHCTL(r2);				\
 	orr	r2, r2, #(CNTHCTL_PL1PCEN | CNTHCTL_PL1PCTEN);	\
 	mcr	CP15_CNTHCTL(r2)
-	
+
 #define restore_timer_regs					\
 	mrc	CP15_CNTHCTL(r2);				\
 	orr	r2, r2, #CNTHCTL_PL1PCTEN;			\

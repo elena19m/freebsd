@@ -282,7 +282,7 @@ sysctl_vmm_destroy(SYSCTL_HANDLER_ARGS)
 	 * goes down to 0 so we should not do it again in the callback.
 	 */
 	cdev = sc->cdev;
-	sc->cdev = NULL;		
+	sc->cdev = NULL;
 	mtx_unlock(&vmmdev_mtx);
 
 	/*

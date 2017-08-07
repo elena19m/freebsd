@@ -133,7 +133,7 @@ static struct vmm_ops *ops;
 #define	fpu_start_emulating()	load_cr0(rcr0() | CR0_TS)
 #define	fpu_stop_emulating()	clts()
 
-static int vm_handle_wfi(struct vm *vm, int vcpuid, 
+static int vm_handle_wfi(struct vm *vm, int vcpuid,
 			 struct vm_exit *vme, bool *retu);
 
 static MALLOC_DEFINE(M_VM, "vm", "vm");
@@ -171,7 +171,7 @@ static void
 vcpu_init(struct vm *vm, uint32_t vcpu_id)
 {
 	struct vcpu *vcpu;
-	
+
 	vcpu = &vm->vcpu[vcpu_id];
 
 	vcpu_lock_init(vcpu);
@@ -352,7 +352,7 @@ restart:
 			retu = true;	/* handled in userland */
 			break;
 		}
-	} 
+	}
 
 	if (error == 0 && retu == false)
 		goto restart;
@@ -616,7 +616,7 @@ vm_malloc(struct vm *vm, uint64_t gpa, size_t len)
 
 	if ((gpa & PAGE_MASK) || (len & PAGE_MASK) || len == 0)
 		return (EINVAL);
-	
+
 	available = allocated = 0;
 	g = gpa;
 	while (g < gpa + len) {

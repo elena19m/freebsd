@@ -74,7 +74,7 @@ ENTRY(hyp_enter_guest)
 	push {r2-r12}
 	load_cp15_regs_batch3				@ Load in r2-r6 CP15 regs
 	push {r2-r6}
-	
+
 	/* Load GUEST CP15 registers */
 	load_guest_cp15_regs_batch1
 	store_cp15_regs_batch1
@@ -82,7 +82,7 @@ ENTRY(hyp_enter_guest)
 	store_cp15_regs_batch2
 	load_guest_cp15_regs_batch3
 	store_cp15_regs_batch3
-	
+
 	/* Enable stage-2 MMU, trap interrupts */
 	ldr	r1, [r0, #HYPCTX_HCR]
 	mcr	CP15_HCR(r1)
@@ -116,12 +116,12 @@ ENTRY(hyp_enter_guest)
 
 	eret
 hyp_exit_guest:
-	/* 
+	/*
 	 * r0 - hypctx pointer
 	 * r1 - exception code
-	 * guest r0-r2 saved on stack when trapping in HYP mode 
+	 * guest r0-r2 saved on stack when trapping in HYP mode
 	 */
-	
+
 	/* Save exit status registers */
 	mrc	CP15_HSR(r2)	@ Load HSR
 	str	r2, [r0, #HYPCTX_EXIT_INFO_HSR]
@@ -133,7 +133,7 @@ hyp_exit_guest:
 	str	r2, [r0, #HYPCTX_EXIT_INFO_HPFAR]
 
 	save_guest_regs
-	
+
 	/* Disable trap access to the CP10/CP11 [vfp/simd] */
 	mrc     CP15_HCPTR(r2)
 	ldr	r3, =(HCPTR_TTA | HCPTR_TCP(10) | HCPTR_TCP(11))
@@ -192,7 +192,7 @@ after_restore:
 	bx	lr				@ go back to the host ("Returned from function" comment)
 END(hyp_enter_guest)
 
-/* 
+/*
  * void vmm_stub_install(void *hypervisor_stub_vect);
  * - r0 - the pointer to the stub vector
  */
@@ -208,7 +208,7 @@ ENTRY(vmm_stub_install)
 	mcr	CP15_HSTR(r0)		@ HSTR
 	mcr	CP15_HSCTLR(r0)		@ HSCTLR
 
-	/* Don't disable access to perf-mon from PL0,1 */ 
+	/* Don't disable access to perf-mon from PL0,1 */
 	mrc	CP15_HDCR(r0)		@ HDCR
 	and	r0, #0x1f		@ Preserve HPMN
 	mcr	CP15_HDCR(r0)		@ HDCR
@@ -347,7 +347,7 @@ hyp_hvc:
 	pop {r3-r7}
 	pop {r0, r1, r2}
 	eret
-	
+
 hyp_not_vfp:
 #endif
 

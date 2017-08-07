@@ -100,7 +100,7 @@ static void
 vtimer_inject_irq_task(void *context, int pending)
 {
 	struct hypctx *hypctx = context;
-	
+
 	if (hypctx->vtimer_cpu.started) {
 		hypctx->vtimer_cpu.started = false;
 		vtimer_inject_irq(hypctx);
@@ -157,7 +157,7 @@ vtimer_cpu_terminate(void *arg)
 
 int
 vtimer_hyp_init(void)
-{	
+{
 	// TODO Get interrupt number
 
 	return 0;

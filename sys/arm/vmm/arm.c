@@ -70,7 +70,7 @@ static struct mtx vmid_generation_mtx;
 
 static void set_vttbr(struct hyp* hyp) {
 	if (hyp->vmid_generation &&
-	    ((hyp->vmid_generation & ~VMID_GENERATION_MASK) != 
+	    ((hyp->vmid_generation & ~VMID_GENERATION_MASK) !=
 	    (atomic_load_64(&vmid_generation) & ~VMID_GENERATION_MASK)))
 		goto out;
 
@@ -99,7 +99,7 @@ arm_init(int ipinum)
 {
 	char *stack_top;
 	lpae_vm_paddr_t phys_hyp_l1pd;
-	
+
 	if (hypmode_enabled[0]) {
 		printf("arm_init: processor didn't boot in HYP-mode (no support)\n");
 		return (ENXIO);
@@ -185,7 +185,7 @@ arm_restore(void)
 {
 
 	;
-}		
+}
 
 static void *
 arm_vminit(struct vm *vm, pmap_t pmap)
@@ -207,7 +207,7 @@ arm_vminit(struct vm *vm, pmap_t pmap)
 
 	hyp->l1pd_phys = (lpae_pd_entry_t) vtophys(&hyp->l1pd[0]);
 	set_vttbr(hyp);
-	
+
 	for (i = 0; i < VM_MAXCPU; i++) {
 		hypctx = &hyp->ctx[i];
 		hypctx->vcpu = i;
@@ -418,7 +418,7 @@ hyp_exit_process(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 {
 	int handled;
 	struct hypctx *hypctx;
-	
+
 	hypctx = &hyp->ctx[vcpu];
 
 	handled = UNHANDLED;
@@ -453,7 +453,7 @@ hyp_exit_process(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 }
 
 static int
-arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap, 
+arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	void *rend_cookie, void *suspended_cookie)
 {
 	int rc;
