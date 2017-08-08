@@ -555,7 +555,7 @@ vm_set_register(struct vm *vm, int vcpuid, int reg, uint64_t val)
 	if (reg >= VM_REG_LAST)
 		return (EINVAL);
 	error = (VMSETREG(vm->cookie, vcpuid, reg, val));
-	if (error || reg != VM_REG_GUEST_PC)
+	if (error)
 		return (error);
 
 	vcpu = &vm->vcpu[vcpuid];
