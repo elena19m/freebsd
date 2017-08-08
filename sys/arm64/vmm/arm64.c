@@ -61,13 +61,6 @@ extern char hyp_vectors[];
 extern char hyp_code_start[];
 extern char hypervisor_stub_vect[];
 
-/*
-char hyp_init_vectors[] = {0};
-char hyp_vector[] = {0};
-char hyp_code_start[] = {0};
-char hypervisor_stub_vect[] = {0};
-*/
-
 extern uint64_t hypmode_enabled;
 extern uint64_t hyp_debug;
 
@@ -300,84 +293,84 @@ arm_vminit(struct vm *vm, pmap_t pmap)
 }
 
 static enum vm_reg_name
-get_vm_reg_name(uint32_t reg_nr, uint32_t mode)
+get_vm_reg_name(uint32_t reg_nr, uint32_t mode __attribute__((unused)))
 {
-	/*
-	 * TODO - invalid register macros.
-	 */
-	/*
 	switch(reg_nr) {
 		case 0:
-			return VM_REG_GUEST_R0;
+			return VM_REG_GUEST_X0;
 		case 1:
-			return VM_REG_GUEST_R1;
+			return VM_REG_GUEST_X1;
 		case 2:
-			return VM_REG_GUEST_R2;
+			return VM_REG_GUEST_X2;
 		case 3:
-			return VM_REG_GUEST_R3;
+			return VM_REG_GUEST_X3;
 		case 4:
-			return VM_REG_GUEST_R4;
+			return VM_REG_GUEST_X4;
 		case 5:
-			return VM_REG_GUEST_R5;
+			return VM_REG_GUEST_X5;
 		case 6:
-			return VM_REG_GUEST_R6;
+			return VM_REG_GUEST_X6;
 		case 7:
-			return VM_REG_GUEST_R7;
+			return VM_REG_GUEST_X7;
 		case 8:
-			if (mode == PSR_FIQ32_MODE)
-				return VM_REG_GUEST_R8_FIQ;
-			else
-				return VM_REG_GUEST_R8;
+			return VM_REG_GUEST_X8;
 		case 9:
-			if (mode == PSR_FIQ32_MODE)
-				return VM_REG_GUEST_R9_FIQ;
-			else
-				return VM_REG_GUEST_R9;
+			return VM_REG_GUEST_X9;
 		case 10:
-			if (mode == PSR_FIQ32_MODE)
-				return VM_REG_GUEST_R10_FIQ;
-			else
-				return VM_REG_GUEST_R10;
+			return VM_REG_GUEST_X10;
 		case 11:
-			if (mode == PSR_FIQ32_MODE)
-				return VM_REG_GUEST_R11_FIQ;
-			else
-				return VM_REG_GUEST_R11;
+			return VM_REG_GUEST_X11;
 		case 12:
-			if (mode == PSR_FIQ32_MODE)
-				return VM_REG_GUEST_R12_FIQ;
-			else
-				return VM_REG_GUEST_R12;
+			return VM_REG_GUEST_X12;
 		case 13:
-			if (mode == PSR_FIQ32_MODE)
-				return VM_REG_GUEST_SP_FIQ;
-			else if (mode == PSR_SVC32_MODE)
-				return VM_REG_GUEST_SP_SVC;
-			else if (mode == PSR_ABT32_MODE)
-				return VM_REG_GUEST_SP_ABT;
-			else if (mode == PSR_UND32_MODE)
-				return VM_REG_GUEST_SP_UND;
-			else if (mode == PSR_IRQ32_MODE)
-				return VM_REG_GUEST_SP_IRQ;
-			else
-				return VM_REG_GUEST_SP;
+			return VM_REG_GUEST_X13;
 		case 14:
-			if (mode == PSR_FIQ32_MODE)
-				return VM_REG_GUEST_LR_FIQ;
-			else if (mode == PSR_SVC32_MODE)
-				return VM_REG_GUEST_LR_SVC;
-			else if (mode == PSR_ABT32_MODE)
-				return VM_REG_GUEST_LR_ABT;
-			else if (mode == PSR_UND32_MODE)
-				return VM_REG_GUEST_LR_UND;
-			else if (mode == PSR_IRQ32_MODE)
-				return VM_REG_GUEST_LR_IRQ;
-			else
-				return VM_REG_GUEST_LR;
+			return VM_REG_GUEST_X14;
+		case 15:
+			return VM_REG_GUEST_X15;
+		case 16:
+			return VM_REG_GUEST_X16;
+		case 17:
+			return VM_REG_GUEST_X17;
+		case 18:
+			return VM_REG_GUEST_X18;
+		case 19:
+			return VM_REG_GUEST_X19;
+		case 20:
+			return VM_REG_GUEST_X20;
+		case 21:
+			return VM_REG_GUEST_X21;
+		case 22:
+			return VM_REG_GUEST_X22;
+		case 23:
+			return VM_REG_GUEST_X23;
+		case 24:
+			return VM_REG_GUEST_X24;
+		case 25:
+			return VM_REG_GUEST_X25;
+		case 26:
+			return VM_REG_GUEST_X26;
+		case 27:
+			return VM_REG_GUEST_X27;
+		case 28:
+			return VM_REG_GUEST_X28;
+		case 29:
+			return VM_REG_GUEST_X29;
+		case 30:
+			return VM_REG_GUEST_X30;
+		case 31:
+			return VM_REG_GUEST_SP;
+		case 32:
+			return VM_REG_GUEST_LR;
+		case 33:
+			return VM_REG_GUEST_ELR;
+		case 34:
+			return VM_REG_GUEST_SPSR;
+		default:
+			break;
 	}
+
 	return VM_REG_LAST;
-				*/
-	return 0;
 }
 
 static int hyp_handle_exception(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
@@ -600,88 +593,94 @@ arm_vmcleanup(void *arg)
 	free(hyp, M_HYP);
 }
 
-static uint32_t *
+/*
+ * Return register value. Registers have different sizes and an explicit cast
+ * must be made to ensure proper conversion.
+ */
+static void *
 hypctx_regptr(struct hypctx *hypctx, int reg)
 {
-	/*
-	 * TODO: rename regs struct members appropiately (r->x, etc).
-	 */
-
-	/*
 	switch (reg) {
-	case VM_REG_GUEST_R0:
-		return (&hypctx->regs.r[0]);
-	case VM_REG_GUEST_R1:
-		return (&hypctx->regs.r[1]);
-	case VM_REG_GUEST_R2:
-		return (&hypctx->regs.r[2]);
-	case VM_REG_GUEST_R3:
-		return (&hypctx->regs.r[3]);
-	case VM_REG_GUEST_R5:
-		return (&hypctx->regs.r[4]);
-	case VM_REG_GUEST_R6:
-		return (&hypctx->regs.r[5]);
-	case VM_REG_GUEST_R7:
-		return (&hypctx->regs.r[6]);
-	case VM_REG_GUEST_R8:
-		return (&hypctx->regs.r[7]);
-	case VM_REG_GUEST_R9:
-		return (&hypctx->regs.r[8]);
-	case VM_REG_GUEST_R10:
-		return (&hypctx->regs.r[9]);
-	case VM_REG_GUEST_R11:
-		return (&hypctx->regs.r[10]);
-	case VM_REG_GUEST_R12:
-		return (&hypctx->regs.r[11]);
+	case VM_REG_GUEST_X0:
+		return (&hypctx->regs.x[0]);
+	case VM_REG_GUEST_X1:
+		return (&hypctx->regs.x[1]);
+	case VM_REG_GUEST_X2:
+		return (&hypctx->regs.x[2]);
+	case VM_REG_GUEST_X3:
+		return (&hypctx->regs.x[3]);
+	case VM_REG_GUEST_X4:
+		return (&hypctx->regs.x[4]);
+	case VM_REG_GUEST_X5:
+		return (&hypctx->regs.x[5]);
+	case VM_REG_GUEST_X6:
+		return (&hypctx->regs.x[6]);
+	case VM_REG_GUEST_X7:
+		return (&hypctx->regs.x[7]);
+	case VM_REG_GUEST_X8:
+		return (&hypctx->regs.x[8]);
+	case VM_REG_GUEST_X9:
+		return (&hypctx->regs.x[9]);
+	case VM_REG_GUEST_X10:
+		return (&hypctx->regs.x[10]);
+	case VM_REG_GUEST_X11:
+		return (&hypctx->regs.x[11]);
+	case VM_REG_GUEST_X12:
+		return (&hypctx->regs.x[12]);
+	case VM_REG_GUEST_X13:
+		return (&hypctx->regs.x[13]);
+	case VM_REG_GUEST_X14:
+		return (&hypctx->regs.x[14]);
+	case VM_REG_GUEST_X15:
+		return (&hypctx->regs.x[15]);
+	case VM_REG_GUEST_X16:
+		return (&hypctx->regs.x[16]);
+	case VM_REG_GUEST_X17:
+		return (&hypctx->regs.x[17]);
+	case VM_REG_GUEST_X18:
+		return (&hypctx->regs.x[18]);
+	case VM_REG_GUEST_X19:
+		return (&hypctx->regs.x[19]);
+	case VM_REG_GUEST_X20:
+		return (&hypctx->regs.x[20]);
+	case VM_REG_GUEST_X21:
+		return (&hypctx->regs.x[21]);
+	case VM_REG_GUEST_X22:
+		return (&hypctx->regs.x[22]);
+	case VM_REG_GUEST_X23:
+		return (&hypctx->regs.x[23]);
+	case VM_REG_GUEST_X24:
+		return (&hypctx->regs.x[24]);
+	case VM_REG_GUEST_X25:
+		return (&hypctx->regs.x[25]);
+	case VM_REG_GUEST_X26:
+		return (&hypctx->regs.x[26]);
+	case VM_REG_GUEST_X27:
+		return (&hypctx->regs.x[27]);
+	case VM_REG_GUEST_X28:
+		return (&hypctx->regs.x[28]);
+	case VM_REG_GUEST_X29:
+		return (&hypctx->regs.x[29]);
+	case VM_REG_GUEST_X30:
+		return (&hypctx->regs.x[30]);
 	case VM_REG_GUEST_SP:
-		return (&hypctx->regs.r_sp);
+		return (&hypctx->regs.sp);
 	case VM_REG_GUEST_LR:
-		return (&hypctx->regs.r_lr);
-	case VM_REG_GUEST_PC:
-		return (&hypctx->regs.r_pc);
-	case VM_REG_GUEST_CPSR:
-		return (&hypctx->regs.r_cpsr);
-	case VM_REG_GUEST_SP_SVC:
-		return (&hypctx->sp_svc);
-	case VM_REG_GUEST_LR_SVC:
-		return (&hypctx->lr_svc);
-	case VM_REG_GUEST_SP_ABT:
-		return (&hypctx->sp_abt);
-	case VM_REG_GUEST_LR_ABT:
-		return (&hypctx->lr_abt);
-	case VM_REG_GUEST_SP_UND:
-		return (&hypctx->sp_und);
-	case VM_REG_GUEST_LR_UND:
-		return (&hypctx->lr_und);
-	case VM_REG_GUEST_SP_IRQ:
-		return (&hypctx->sp_irq);
-	case VM_REG_GUEST_LR_IRQ:
-		return (&hypctx->lr_irq);
-	case VM_REG_GUEST_R8_FIQ:
-		return (&hypctx->r8_fiq);
-	case VM_REG_GUEST_R9_FIQ:
-		return (&hypctx->r9_fiq);
-	case VM_REG_GUEST_R10_FIQ:
-		return (&hypctx->r10_fiq);
-	case VM_REG_GUEST_R11_FIQ:
-		return (&hypctx->r11_fiq);
-	case VM_REG_GUEST_R12_FIQ:
-		return (&hypctx->r12_fiq);
-	case VM_REG_GUEST_SP_FIQ:
-		return (&hypctx->sp_fiq);
-	case VM_REG_GUEST_LR_FIQ:
-		return (&hypctx->lr_fiq);
+		return (&hypctx->regs.lr);
+	case VM_REG_GUEST_ELR:
+		return (&hypctx->regs.elr);
+	case VM_REG_GUEST_SPSR:
+		return (&hypctx->regs.spsr);
 	default:
 		break;
 	}
-	*/
 	return (NULL);
 }
 
 static int
 arm_getreg(void *arg, int vcpu, int reg, uint64_t *retval)
 {
-	uint32_t *regp;
+	void *regp;
 	int running, hostcpu;
 	struct hyp *hyp = arg;
 
@@ -690,7 +689,10 @@ arm_getreg(void *arg, int vcpu, int reg, uint64_t *retval)
 		panic("arm_getreg: %s%d is running", vm_name(hyp->vm), vcpu);
 
 	if ((regp = hypctx_regptr(&hyp->ctx[vcpu], reg)) != NULL) {
-		*retval = *regp;
+		if (reg == VM_REG_GUEST_SPSR)
+			*retval = *(uint32_t *)regp;
+		else
+			*retval = *(uint64_t *)regp;
 		return (0);
 	} else
 		return (EINVAL);
@@ -699,7 +701,7 @@ arm_getreg(void *arg, int vcpu, int reg, uint64_t *retval)
 static int
 arm_setreg(void *arg, int vcpu, int reg, uint64_t val)
 {
-	uint32_t *regp;
+	void *regp;
 	struct hyp *hyp = arg;
 	int running, hostcpu;
 
@@ -708,7 +710,25 @@ arm_setreg(void *arg, int vcpu, int reg, uint64_t val)
 		panic("hyp_setreg: %s%d is running", vm_name(hyp->vm), vcpu);
 
 	if ((regp = hypctx_regptr(&hyp->ctx[vcpu], reg)) != NULL) {
-		*regp = val;
+		if (reg == VM_REG_GUEST_SPSR) {
+			*(uint32_t *)regp = (uint32_t)val;
+		} else {
+			*(uint64_t *)regp = val;
+			/*
+			 * LR is an alias for the X30 register, make sure both
+			 * are updated at the same time to keep the registers
+			 * consistent.
+			 */
+			if (reg == VM_REG_GUEST_LR) {
+				regp = hypctx_regptr(&hyp->ctx[vcpu],
+						VM_REG_GUEST_X30);
+				*(uint64_t *)regp = val;
+			} else if (reg == VM_REG_GUEST_X30) {
+				regp = hypctx_regptr(&hyp->ctx[vcpu],
+						VM_REG_GUEST_LR);
+				*(uint64_t *)regp = val;
+			}
+		}
 		return (0);
 	} else
 		return (EINVAL);
@@ -725,6 +745,6 @@ struct vmm_ops vmm_ops_arm = {
 	lpae_vmmmap_get,
 	arm_getreg,
 	arm_setreg,
-	NULL, /* vmi_get_cap_t */
-	NULL /* vmi_set_cap_t */
+	NULL, 		/* vmi_get_cap_t */
+	NULL 		/* vmi_set_cap_t */
 };
