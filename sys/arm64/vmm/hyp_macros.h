@@ -24,8 +24,8 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _VMM_HYP_HELPERS_H_
-#define	_VMM_HYP_HELPERS_H_
+#ifndef _VMM_HYP_MACROS_H_
+#define	_VMM_HYP_MACROS_H_
 
 /* Banked registers */
 #define SAVE_GUEST_BANKED_REG(reg)		\
@@ -449,6 +449,6 @@
 	add	r2, r0, #HYPCTX_HOST_VFP_STATE;	\
 	vfp_restore
 
-#endif //VFP
+#endif /* VFP */
 
-#endif
+#endif /* !_VMM_HYP_MACROS_H_ */
