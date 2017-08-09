@@ -1090,8 +1090,8 @@ DEFINE_CLASS_0(gic, arm_gic_driver, arm_gic_methods,
  */
 
 #define	GICV2M_MSI_TYPER	0x008
-#define	MSI_TYPER_SPI_BASE(x)	(((x) >> 16) & 0x3ff)
-#define	MSI_TYPER_SPI_COUNT(x)	(((x) >> 0) & 0x3ff)
+#define	 MSI_TYPER_SPI_BASE(x)	(((x) >> 16) & 0x3ff)
+#define	 MSI_TYPER_SPI_COUNT(x)	(((x) >> 0) & 0x3ff)
 #define	GICv2M_MSI_SETSPI_NS	0x040
 #define	GICV2M_MSI_IIDR		0xFCC
 
