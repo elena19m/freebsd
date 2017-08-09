@@ -532,22 +532,24 @@ hypctx_regptr(struct hypctx *hypctx, int reg)
 		return (&hypctx->regs.r[2]);
 	case VM_REG_GUEST_R3:
 		return (&hypctx->regs.r[3]);
-	case VM_REG_GUEST_R5:
+	case VM_REG_GUEST_R4:
 		return (&hypctx->regs.r[4]);
-	case VM_REG_GUEST_R6:
+	case VM_REG_GUEST_R5:
 		return (&hypctx->regs.r[5]);
-	case VM_REG_GUEST_R7:
+	case VM_REG_GUEST_R6:
 		return (&hypctx->regs.r[6]);
-	case VM_REG_GUEST_R8:
+	case VM_REG_GUEST_R7:
 		return (&hypctx->regs.r[7]);
-	case VM_REG_GUEST_R9:
+	case VM_REG_GUEST_R8:
 		return (&hypctx->regs.r[8]);
-	case VM_REG_GUEST_R10:
+	case VM_REG_GUEST_R9:
 		return (&hypctx->regs.r[9]);
-	case VM_REG_GUEST_R11:
+	case VM_REG_GUEST_R10:
 		return (&hypctx->regs.r[10]);
-	case VM_REG_GUEST_R12:
+	case VM_REG_GUEST_R11:
 		return (&hypctx->regs.r[11]);
+	case VM_REG_GUEST_R12:
+		return (&hypctx->regs.r[12]);
 	case VM_REG_GUEST_SP:
 		return (&hypctx->regs.r_sp);
 	case VM_REG_GUEST_LR:
