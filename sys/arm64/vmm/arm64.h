@@ -23,6 +23,8 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
+#ifndef _VMM_ARM64_H_
+#define _VMM_ARM64_H_
 
 #include <machine/reg.h>
 #include <machine/vfp.h>
@@ -103,3 +105,5 @@ void vmm_cleanup(void *hyp_stub_vectors);
 #define MPIDR_SMP_MASK (0x3 << 30)
 #define MPIDR_AFF1_LEVEL(x) ((x >> 2) << 8)
 #define MPIDR_AFF0_LEVEL(x) ((x & 0x3) << 0)
+
+#endif /* !_VMM_ARM64_H_ */
