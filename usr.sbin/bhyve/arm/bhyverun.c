@@ -45,6 +45,7 @@
 #include "bhyverun.h"
 #include "mem.h"
 #include "mevent.h"
+#include "reset.h"
 
 #define GUEST_NIO_PORT		0x488	/* guest upcalls via i/o port */
 
@@ -210,6 +211,9 @@ vmexit_inst_emul(struct vmctx *ctx, struct vm_exit *vmexit, int *pvcpu)
 			    vmexit->u.inst_emul.gpa);
 		}
 
+		if (err == RESET_MAGIC)
+			return (VMEXIT_RESET);
+
 		fprintf(stderr, "Failed to emulate instruction at 0x%llx\n", vmexit->pc);
 		return (VMEXIT_ABORT);
 	}
@@ -313,7 +317,7 @@ main(int argc, char *argv[])
 			guest_ncpus = atoi(optarg);
 			break;
 		case 'h':
-			usage(0);			
+			usage(0);
 		default:
 			usage(1);
 		}
@@ -343,6 +347,8 @@ main(int argc, char *argv[])
 
 	if (bvmcons)
 		init_bvmcons();
+
+	init_reset();
 
 	error = vm_get_register(ctx, BSP, VM_REG_GUEST_PC, &pc);
 	assert(error == 0);

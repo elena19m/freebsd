@@ -2,7 +2,7 @@
 # $FreeBSD$
 #
 .PATH: ${BHYVE_SRCTOP}/arm/
-SRCS=	bhyverun.c block_if.c mem.c mevent.c consport.c
+SRCS=	bhyverun.c block_if.c mem.c mevent.c consport.c reset.c
 
 .PATH:	${.CURDIR}/../../sys/arm/vmm
 

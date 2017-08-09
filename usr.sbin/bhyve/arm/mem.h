@@ -57,4 +57,5 @@ int	register_mem_fallback(struct mem_range *memp);
 int	unregister_mem(struct mem_range *memp);
 
 void	init_bvmcons(void);
+void	init_reset(void);
 #endif	/* _MEM_H_ */
