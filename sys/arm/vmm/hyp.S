@@ -259,9 +259,9 @@ hyp_init_hvc:
 
 	@ Set the HMAIR0/1 (same as MAIR0/1) registers for AttrIndx[2:0]
 	ldr	r0, =HMAIR0
-	mcr	CP15_MAIR0(r0)
+	mcr	CP15_HMAIR0(r0)
 	ldr	r0, =HMAIR1
-	mcr	CP15_MAIR1(r0)
+	mcr	CP15_HMAIR1(r0)
 
 	@ Flush the TLB entries from Hyp-Mode
 	mcr	CP15_TLBIALLH(r0)	@ TLBIALLH
