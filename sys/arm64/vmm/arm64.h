@@ -24,77 +24,50 @@
  * SUCH DAMAGE.
  */
 
-#include "mmu.h"
-#include "vgic.h"
-#include "vtimer.h"
 #include <machine/reg.h>
 #include <machine/vfp.h>
 
+#include "mmu.h"
+#include "vgic.h"
+#include "vtimer.h"
+
 struct hypctx {
-	uint32_t	vcpu;
-	struct hyp*	hyp;
-
-	uint32_t	hcr;
-
-	uint32_t	midr;
-	uint32_t	mpidr;
-
 	struct reg	regs;
 
-	uint32_t	sp_und;
-	uint32_t	lr_und;
-	uint32_t	spsr_und;
+	/* EL0 and EL1 control registers */
+	uint64_t	actlr_el1;	/* Auxiliary Control Register */
+	uint64_t	amair_el1;	/* Auxiliary Memory Attribute Indirection Register */
+	uint64_t	par_el1;	/* Physical Address Register */
+	uint64_t	mair_el1;	/* Memory Attribute Indirection Register */
+	uint64_t	tcr_el1;	/* Translation Control Register */
+	uint64_t	tpidr_el0;	/* EL0 Software ID Register */
+	uint64_t	tpidr_el1;	/* EL1 Software ID Register */
+	uint64_t	tpidrr0_el0;	/* EL0 Read-Only Software Thread ID Register */
+	uint64_t	ttbr0_el1;	/* Translation Table Base Register 0 */
+	uint64_t	ttbr1_el1;	/* Translation Table Base Register 1 */
+	uint64_t	vbar_el1;	/* Vector Base Address Register */
+	uint32_t	afsr0_el1;	/* Auxiliary Fault Status Register 0 */
+	uint32_t	afsr1_el1;	/* Auxiliary Fault Status Register 1 */
+	uint32_t	contextdir_el1;	/* Current Process Identifier */
+	uint32_t	cpacr_el1;	/* Arhitectural Feature Access Control Register */
+	uint32_t	esr_el1;	/* Exception Syndrome Register */
+	uint32_t	far_el1;	/* Fault Address Register */
+	uint32_t	isr_el1;	/* Interrupt Status Register */
+	uint32_t	sctlr_el1;	/* System Control Register */
 
-	uint32_t	sp_svc;
-	uint32_t	lr_svc;
-	uint32_t	spsr_svc;
+	/* EL2 constrol registers */
+	uint64_t	actlr_el2;	/* Auxiliary Control Register */
+	uint64_t	hcr_el2;	/* Hypervisor Configuration Register */
+	uint32_t	cptr_el2;	/* Architectural Feature Trap Register */
+	uint32_t	hacr_el2;	/* Hypervisor Auxiliary Control Register */
+	uint32_t	hstr_el2;	/* Hypervisor System Trap Register */
 
-	uint32_t	sp_abt;
-	uint32_t	lr_abt;
-	uint32_t	spsr_abt;
-
-	uint32_t	sp_irq;
-	uint32_t	lr_irq;
-	uint32_t	spsr_irq;
-
-	uint32_t	sp_fiq;
-	uint32_t	lr_fiq;
-	uint32_t	spsr_fiq;
-	uint32_t	r8_fiq;
-	uint32_t	r9_fiq;
-	uint32_t	r10_fiq;
-	uint32_t	r11_fiq;
-	uint32_t	r12_fiq;
-
-	uint32_t	cp15_sctlr;
-	uint32_t	cp15_cpacr;
-	uint32_t	cp15_ttbcr;
-	uint32_t	cp15_dacr;
-	uint64_t	cp15_ttbr0;
-	uint64_t	cp15_ttbr1;
-	uint32_t	cp15_prrr;
-	uint32_t	cp15_nmrr;
-	uint32_t	cp15_csselr;
-	uint32_t	cp15_cid;
-	uint32_t	cp15_tid_urw;
-	uint32_t	cp15_tid_uro;
-	uint32_t	cp15_tid_priv;
-	uint32_t	cp15_dfsr;
-	uint32_t	cp15_ifsr;
-	uint32_t	cp15_adfsr;
-	uint32_t	cp15_aifsr;
-	uint32_t	cp15_dfar;
-	uint32_t	cp15_ifar;
-	uint32_t	cp15_vbar;
-	uint32_t	cp15_cntkctl;
-	uint64_t	cp15_par;
-	uint32_t	cp15_amair0;
-	uint32_t	cp15_amair1;
+	uint32_t	vcpu;
+	struct hyp	*hyp;
 	struct {
-		uint32_t	hsr;	/* Hyp Syndrome Register */
-		uint32_t	hdfar;	/* VA at a Data Abort exception */
-		uint32_t	hifar;	/* VA at a Prefetch Abort exception */
-		uint32_t	hpfar;	/* IPA[39:12] at aborts on stage 2 address translations */
+		uint32_t esr_el2;	/* Exception Syndrome Register */
+		uint32_t far_el2;	/* Fault Address Register */
+		uint32_t hpfar_el2;	/* Hypervisor IPA Fault Address Register */
 	} exit_info;
 	struct vtimer_cpu vtimer_cpu;
 	struct vgic_cpu_int	vgic_cpu_int;
@@ -112,7 +85,7 @@ struct hyp {
 	struct vm		*vm;
 	lpae_pd_entry_t		l1pd_phys;
 	struct hypctx		ctx[VM_MAXCPU];
-	bool		vgic_attached;
+	bool			vgic_attached;
 	struct vgic_distributor	vgic_distributor;
 };
 CTASSERT((offsetof(struct hyp, l1pd) & PAGE_MASK) == 0);

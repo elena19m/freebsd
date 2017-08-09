@@ -70,7 +70,7 @@ char *stack;
 static uint64_t vmid_generation = 0;
 static struct mtx vmid_generation_mtx;
 
-static void set_vttbr(struct hyp* hyp) {
+static void set_vttbr(struct hyp *hyp) {
 	/*
 	 * TODO atomic_load_64 not implemented
 	 */
@@ -256,6 +256,7 @@ arm_vminit(struct vm *vm, pmap_t pmap)
 		hypctx = &hyp->ctx[i];
 		hypctx->vcpu = i;
 		hypctx->hyp = hyp;
+#if 0
 		hypctx->hcr = HCR_GUEST_MASK & ~HCR_TSW & ~HCR_TAC;
 		/*
 		 * TODO - cpu_ident not implemented.
@@ -277,6 +278,7 @@ arm_vminit(struct vm *vm, pmap_t pmap)
 		 * TODO - regs.r_cpsr does not exists on arm64.
 		 */
 		//hypctx->regs.r_cpsr = PSR_SVC32_MODE | PSR_A | PSR_I | PSR_F;
+#endif
 		hypctx->regs.spsr = 0;
 		vtimer_cpu_init(hypctx);
 	}
@@ -359,9 +361,9 @@ get_vm_reg_name(uint32_t reg_nr, uint32_t mode __attribute__((unused)))
 		case 30:
 			return VM_REG_GUEST_X30;
 		case 31:
-			return VM_REG_GUEST_SP;
-		case 32:
 			return VM_REG_GUEST_LR;
+		case 32:
+			return VM_REG_GUEST_SP;
 		case 33:
 			return VM_REG_GUEST_ELR;
 		case 34:
@@ -519,7 +521,7 @@ hyp_exit_process(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 }
 
 static int
-arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap, 
+arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	void *rend_cookie, void *suspended_cookie)
 {
 	int rc;
@@ -535,8 +537,10 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	vm = hyp->vm;
 	vmexit = vm_exitinfo(vm, vcpu);
 
-	//hypctx->regs.r_pc = (uint32_t) pc;
+#if 0
+	hypctx->regs.r_pc = (uint32_t) pc;
 	hypctx->regs.elr = (uint32_t) pc;
+#endif
 
 	do {
 		handled = UNHANDLED;
@@ -549,7 +553,13 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 		//rc = vmm_call_hyp((void *)hyp_enter_guest, hypctx);
 		rc = 0;
 
-		//vmexit->pc = hypctx->regs.r_pc;
+		/*
+		 * TODO
+		 *
+		 * Use the correct register names.
+		 */
+#if 0
+		vmexit->pc = hypctx->regs.r_pc;
 		vmexit->pc = hypctx->regs.elr;
 
 		vmexit->u.hyp.exception_nr = rc;
@@ -559,12 +569,9 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 		vmexit->u.hyp.hifar = hypctx->exit_info.hifar;
 		vmexit->u.hyp.hdfar = hypctx->exit_info.hdfar;
 		vmexit->u.hyp.hpfar = hypctx->exit_info.hpfar;
-		/*
-		 * TODO - use the correct register names and implement the macro
-		 * PSR_MODE.
-		 */
-		//vmexit->u.hyp.mode = hypctx->regs.r_cpsr & PSR_MODE;
+		vmexit->u.hyp.mode = hypctx->regs.r_cpsr & PSR_MODE;
 		vmexit->u.hyp.mode = hypctx->regs.spsr;
+#endif
 
 		intr_restore(regs);
 
@@ -663,10 +670,10 @@ hypctx_regptr(struct hypctx *hypctx, int reg)
 		return (&hypctx->regs.x[29]);
 	case VM_REG_GUEST_X30:
 		return (&hypctx->regs.x[30]);
-	case VM_REG_GUEST_SP:
-		return (&hypctx->regs.sp);
 	case VM_REG_GUEST_LR:
 		return (&hypctx->regs.lr);
+	case VM_REG_GUEST_SP:
+		return (&hypctx->regs.sp);
 	case VM_REG_GUEST_ELR:
 		return (&hypctx->regs.elr);
 	case VM_REG_GUEST_SPSR:

@@ -72,8 +72,8 @@ enum vm_reg_name {
 	VM_REG_GUEST_X28,
 	VM_REG_GUEST_X29,	/* Frame Pointer */
 	VM_REG_GUEST_X30,	/* Link Register */
-	VM_REG_GUEST_SP,
 	VM_REG_GUEST_LR,
+	VM_REG_GUEST_SP,
 	VM_REG_GUEST_ELR,
 	VM_REG_GUEST_SPSR,
 	VM_REG_LAST
