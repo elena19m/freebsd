@@ -42,6 +42,8 @@ ASSYM(HYPCTX_REGS_ELR, offsetof(struct hypctx, regs.elr));
 ASSYM(HYPCTX_REGS_SPSR, offsetof(struct hypctx, regs.spsr));
 
 ASSYM(HYPCTX_ACTLR_EL1, offsetof(struct hypctx, actlr_el1));
+ASSYM(HYPCTX_AMAIR_EL1, offsetof(struct hypctx, amair_el1));
+ASSYM(HYPCTX_ELR_EL1, offsetof(struct hypctx, elr_el1));
 ASSYM(HYPCTX_PAR_EL1, offsetof(struct hypctx, par_el1));
 ASSYM(HYPCTX_MAIR_EL1, offsetof(struct hypctx, mair_el1));
 ASSYM(HYPCTX_TCR_EL1, offsetof(struct hypctx, tcr_el1));
@@ -59,6 +61,7 @@ ASSYM(HYPCTX_ESR_EL1, offsetof(struct hypctx, esr_el1));
 ASSYM(HYPCTX_FAR_EL1, offsetof(struct hypctx, far_el1));
 ASSYM(HYPCTX_ISR_EL1, offsetof(struct hypctx, isr_el1));
 ASSYM(HYPCTX_SCTLR_EL1, offsetof(struct hypctx, sctlr_el1));
+ASSYM(HYPCTX_SPSR_EL1, offsetof(struct hypctx, spsr_el1));
 
 ASSYM(HYPCTX_ACTLR_EL2, offsetof(struct hypctx, actlr_el2));
 ASSYM(HYPCTX_HCR_EL2, offsetof(struct hypctx, hcr_el2));

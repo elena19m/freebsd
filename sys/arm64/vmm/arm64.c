@@ -62,7 +62,6 @@ extern char hyp_code_start[];
 extern char hypervisor_stub_vect[];
 
 extern uint64_t hypmode_enabled;
-extern uint64_t hyp_debug;
 
 lpae_pd_entry_t *hyp_l1pd;
 char *stack;
@@ -116,7 +115,6 @@ arm_init(int ipinum)
 	printf("\thyp_stub_vectors = %016lx\n", vtophys(hyp_stub_vectors));
 	printf("\thyp_init_vectors = %016lx\n", vtophys(hyp_init_vectors));
 	printf("\thyp_vectors = %016lx\n", vtophys(hyp_vectors));
-	printf("\n\thyp_debug = %016lx\n\n", hyp_debug);
 
 	printf("vmm_call_hyp(-1)\n");
 	current_vectors = vmm_call_hyp((void *)-1);
@@ -190,12 +188,14 @@ arm_init(int ipinum)
 	struct hypctx hypctx;
 
 	hypctx.regs.x[2] = 666;
+	hypctx.regs.x[3] = 666;
 	hypctx.regs.x[4] = 666;
 	hypctx.hcr_el2 = 666;
 	hypctx.hacr_el2 = 666;
 	hypctx.cptr_el2 = 666;
 
 	printf("\thypctx.regs.x[2] = %lu\n", hypctx.regs.x[2]);
+	printf("\thypctx.regs.x[3] = %lu\n", hypctx.regs.x[3]);
 	printf("\thypctx.regs.x[4] = %lu\n", hypctx.regs.x[4]);
 	printf("\thypctx.hcr_el2 = %lu\n", hypctx.hcr_el2);
 	printf("\thypctx.hacr_el2 = %u\n", hypctx.hacr_el2);
@@ -203,6 +203,7 @@ arm_init(int ipinum)
 	printf("vmm_call_hyp(-2)\n");
 	current_vectors = vmm_call_hyp((void *)-2, vtophys(&hypctx));
 	printf("\thypctx.regs.x[2] = %lu\n", hypctx.regs.x[2]);
+	printf("\thypctx.regs.x[3] = %lu\n", hypctx.regs.x[3]);
 	printf("\thypctx.regs.x[4] = %lu\n", hypctx.regs.x[4]);
 	printf("\thypctx.hcr_el2 = %lu\n", hypctx.hcr_el2);
 	printf("\thypctx.hacr_el2 = %u\n", hypctx.hacr_el2);
@@ -215,7 +216,6 @@ arm_init(int ipinum)
 	printf("vmm_call_hyp(-1)\n");
 	current_vectors = vmm_call_hyp((void *)-1);
 	printf("\tcurrent_vectors = %016lx\n", current_vectors);
-	printf("\thyp_debug = %016lx\n\n", hyp_debug);
 
 	/* Initialize VGIC infrastructure */
 	if (vgic_hyp_init()) {
