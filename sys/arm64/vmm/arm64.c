@@ -102,6 +102,7 @@ out:
 }
 
 extern char hyp_stub_vectors[];
+#include "hyp_assym.h"
 
 static int
 arm_init(int ipinum)
@@ -185,6 +186,27 @@ arm_init(int ipinum)
 	printf("vmm_call_hyp(-1)\n");
 	current_vectors = vmm_call_hyp((void *)-1);
 	printf("\tcurrent_vectors = %016lx\n\n", current_vectors);
+
+	struct hypctx hypctx;
+
+	hypctx.regs.x[2] = 666;
+	hypctx.regs.x[4] = 666;
+	hypctx.hcr_el2 = 666;
+	hypctx.hacr_el2 = 666;
+	hypctx.cptr_el2 = 666;
+
+	printf("\thypctx.regs.x[2] = %lu\n", hypctx.regs.x[2]);
+	printf("\thypctx.regs.x[4] = %lu\n", hypctx.regs.x[4]);
+	printf("\thypctx.hcr_el2 = %lu\n", hypctx.hcr_el2);
+	printf("\thypctx.hacr_el2 = %u\n", hypctx.hacr_el2);
+	printf("\thypctx.cptr_el2 = %u\n", hypctx.cptr_el2);
+	printf("vmm_call_hyp(-2)\n");
+	current_vectors = vmm_call_hyp((void *)-2, vtophys(&hypctx));
+	printf("\thypctx.regs.x[2] = %lu\n", hypctx.regs.x[2]);
+	printf("\thypctx.regs.x[4] = %lu\n", hypctx.regs.x[4]);
+	printf("\thypctx.hcr_el2 = %lu\n", hypctx.hcr_el2);
+	printf("\thypctx.hacr_el2 = %u\n", hypctx.hacr_el2);
+	printf("\thypctx.cptr_el2 = %u\n", hypctx.cptr_el2);
 
 	printf("vmm_call_hyp(vmm_cleanup, hyp_stub_vectors)\n");
 	vmm_call_hyp((void *)vtophys(vmm_cleanup),
@@ -359,14 +381,12 @@ get_vm_reg_name(uint32_t reg_nr, uint32_t mode __attribute__((unused)))
 		case 29:
 			return VM_REG_GUEST_X29;
 		case 30:
-			return VM_REG_GUEST_X30;
-		case 31:
 			return VM_REG_GUEST_LR;
-		case 32:
+		case 31:
 			return VM_REG_GUEST_SP;
-		case 33:
+		case 32:
 			return VM_REG_GUEST_ELR;
-		case 34:
+		case 33:
 			return VM_REG_GUEST_SPSR;
 		default:
 			break;
@@ -668,8 +688,6 @@ hypctx_regptr(struct hypctx *hypctx, int reg)
 		return (&hypctx->regs.x[28]);
 	case VM_REG_GUEST_X29:
 		return (&hypctx->regs.x[29]);
-	case VM_REG_GUEST_X30:
-		return (&hypctx->regs.x[30]);
 	case VM_REG_GUEST_LR:
 		return (&hypctx->regs.lr);
 	case VM_REG_GUEST_SP:
@@ -717,25 +735,10 @@ arm_setreg(void *arg, int vcpu, int reg, uint64_t val)
 		panic("hyp_setreg: %s%d is running", vm_name(hyp->vm), vcpu);
 
 	if ((regp = hypctx_regptr(&hyp->ctx[vcpu], reg)) != NULL) {
-		if (reg == VM_REG_GUEST_SPSR) {
+		if (reg == VM_REG_GUEST_SPSR)
 			*(uint32_t *)regp = (uint32_t)val;
-		} else {
+		else
 			*(uint64_t *)regp = val;
-			/*
-			 * LR is an alias for the X30 register, make sure both
-			 * are updated at the same time to keep the registers
-			 * consistent.
-			 */
-			if (reg == VM_REG_GUEST_LR) {
-				regp = hypctx_regptr(&hyp->ctx[vcpu],
-						VM_REG_GUEST_X30);
-				*(uint64_t *)regp = val;
-			} else if (reg == VM_REG_GUEST_X30) {
-				regp = hypctx_regptr(&hyp->ctx[vcpu],
-						VM_REG_GUEST_LR);
-				*(uint64_t *)regp = val;
-			}
-		}
 		return (0);
 	} else
 		return (EINVAL);
