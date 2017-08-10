@@ -34,6 +34,9 @@
 #include <machine/hypervisor.h>
 #include <arm/arm/gic_common.h>
 
+#include "hyp_assym.h"
+#include "hyp_macros.h"
+
 /*
  * TODO
  * hypervisor.h might replace hyp.h
@@ -43,7 +46,7 @@
 /*
  * TODO
  * #include "hyp_assym.h"
- * #include "hyp_helpers.h"
+ * #include "hyp_helpers.h" - this was renamed to hyp_macros.h
  */
 
 	.text
@@ -54,17 +57,6 @@
 	.align 12
 
 hyp_code_start:
-
-	.align 3
-	.globl _C_LABEL(hyp_debug)
-_C_LABEL(hyp_debug):
-	.zero 8
-
-.macro debug val
-	mov	x14, #\val
-	adr	x15, hyp_debug
-	str	x14, [x15]
-.endm
 
 ENTRY(vmm_call_hyp)
 	hvc	#0
@@ -145,18 +137,20 @@ hyp_vectors:
 	vempty		/* Error 32-bit EL1 */
 
 ENTRY(handle_hyp_hvc)
-	/* TODO */
 	cmp 	x0, #-1
 	b.ne	1f
 	mrs	x0, vbar_el2
 	b	9f
 1:
-	debug 1
+	cmp	x0, #-2
+	b.eq	2f
 
 	/* Save vmm_call_hyp() return address */
-	str	lr, [sp, #-16]!
+	PUSH_REG(lr)
+
 	/* Save function address */
 	mov	x9, x0
+
 	/* Shuffle function parameters */
 	mov 	x0, x1
 	mov	x1, x2
@@ -165,12 +159,27 @@ ENTRY(handle_hyp_hvc)
 	mov	x4, x5
 	mov	x5, x6
 	mov 	x6, x7
+
 	/* Call function */
 	blr 	x9
-	/* Restore vmm_call_hyp() return address */
-	ldr	lr, [sp], #16
-9:
 
+	/* Restore vmm_call_hyp() return address */
+	POP_REG(lr)
+
+	b	9f
+2:
+	mov	x2, #42
+	mov	x3, #42
+	PUSH_REG_PAIR_X(2, 3)
+	mov	x2, xzr
+	mov	x3, xzr
+	POP_REG_PAIR_X(2, 3)
+	SAVE_REG_PAIR_X(2, 3)
+
+	PUSH_SYSTEM_REG_PAIR(CPTR_EL2, HCR_EL2)
+	POP_SYSTEM_REG_PAIR(CPTR_EL2, HCR_EL2)
+	isb
+9:
 	eret
 END(handle_hyp_hvc)
 
@@ -194,5 +203,19 @@ ENTRY(vmm_cleanup)
 
 	ret
 END(vmm_cleanup)
+
+/*
+ * Usage:
+ * void vmm_enter_guest(struct hypctx *hypctx)
+ *
+ * Expecting:
+ * x0 - physical address of hypctx
+ */
+ENTRY(vmm_enter_guest)
+	/* Save host regs goes here */
+	SAVE_HOST_REGS()
+
+	ret
+END(vmm_enter_guest)
 
 hyp_code_end:
