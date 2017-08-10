@@ -56,6 +56,7 @@ struct hypctx {
 	uint32_t	far_el1;	/* Fault Address Register */
 	uint32_t	isr_el1;	/* Interrupt Status Register */
 	uint32_t	sctlr_el1;	/* System Control Register */
+	uint32_t	spsr_el1;	/* Saved Program Status Register */
 
 	/* EL2 constrol registers */
 	uint64_t	actlr_el2;	/* Auxiliary Control Register */
@@ -67,9 +68,9 @@ struct hypctx {
 	uint32_t	vcpu;
 	struct hyp	*hyp;
 	struct {
-		uint32_t esr_el2;	/* Exception Syndrome Register */
-		uint32_t far_el2;	/* Fault Address Register */
-		uint32_t hpfar_el2;	/* Hypervisor IPA Fault Address Register */
+		uint32_t	esr_el2;	/* Exception Syndrome Register */
+		uint32_t 	far_el2;	/* Fault Address Register */
+		uint32_t 	hpfar_el2;	/* Hypervisor IPA Fault Address Register */
 	} exit_info;
 	struct vtimer_cpu vtimer_cpu;
 	struct vgic_cpu_int	vgic_cpu_int;
