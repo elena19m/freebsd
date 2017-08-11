@@ -45,17 +45,16 @@ struct hypctx {
 	uint64_t	tcr_el1;	/* Translation Control Register */
 	uint64_t	tpidr_el0;	/* EL0 Software ID Register */
 	uint64_t	tpidr_el1;	/* EL1 Software ID Register */
-	uint64_t	tpidrr0_el0;	/* EL0 Read-Only Software Thread ID Register */
+	uint64_t	tpidrro_el0;	/* EL0 Read-Only Software Thread ID Register */
 	uint64_t	ttbr0_el1;	/* Translation Table Base Register 0 */
 	uint64_t	ttbr1_el1;	/* Translation Table Base Register 1 */
 	uint64_t	vbar_el1;	/* Vector Base Address Register */
 	uint32_t	afsr0_el1;	/* Auxiliary Fault Status Register 0 */
 	uint32_t	afsr1_el1;	/* Auxiliary Fault Status Register 1 */
-	uint32_t	contextdir_el1;	/* Current Process Identifier */
+	uint32_t	contextidr_el1;	/* Current Process Identifier */
 	uint32_t	cpacr_el1;	/* Arhitectural Feature Access Control Register */
 	uint32_t	esr_el1;	/* Exception Syndrome Register */
 	uint32_t	far_el1;	/* Fault Address Register */
-	uint32_t	isr_el1;	/* Interrupt Status Register */
 	uint32_t	sctlr_el1;	/* System Control Register */
 	uint32_t	spsr_el1;	/* Saved Program Status Register */
 
@@ -96,7 +95,7 @@ CTASSERT((offsetof(struct hyp, l1pd) & PAGE_MASK) == 0);
 
 uint64_t vmm_call_hyp(void *hyp_func_addr, ...);
 void vmm_cleanup(void *hyp_stub_vectors);
-//extern int hyp_enter_guest(struct hypctx *hypctx);
+uint64_t vmm_enter_guest(struct hypctx *hypctx);
 
 #define LOW(x)	(x & 0xFFFFFFFF)
 #define HIGH(x)	LOW(x >> 32)

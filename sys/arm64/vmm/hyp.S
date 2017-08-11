@@ -142,15 +142,10 @@ ENTRY(handle_hyp_hvc)
 	mrs	x0, vbar_el2
 	b	9f
 1:
-	cmp	x0, #-2
-	b.eq	2f
-
-	/* Save vmm_call_hyp() return address */
-	PUSH_REG(lr)
-
+	/* Push the vmm_call_hyp() return address on the stack */
+	str	lr, [sp, #-16]!
 	/* Save function address */
 	mov	x9, x0
-
 	/* Shuffle function parameters */
 	mov 	x0, x1
 	mov	x1, x2
@@ -159,26 +154,11 @@ ENTRY(handle_hyp_hvc)
 	mov	x4, x5
 	mov	x5, x6
 	mov 	x6, x7
-
 	/* Call function */
 	blr 	x9
 
-	/* Restore vmm_call_hyp() return address */
-	POP_REG(lr)
-
-	b	9f
-2:
-	mov	x2, #42
-	mov	x3, #42
-	PUSH_REG_PAIR_X(2, 3)
-	mov	x2, xzr
-	mov	x3, xzr
-	POP_REG_PAIR_X(2, 3)
-	SAVE_REG_PAIR_X(2, 3)
-
-	PUSH_SYSTEM_REG_PAIR(CPTR_EL2, HCR_EL2)
-	POP_SYSTEM_REG_PAIR(CPTR_EL2, HCR_EL2)
-	isb
+	/* Pop the vmm_call_hyp() return address from the stack */
+	ldr	lr, [sp], #16;
 9:
 	eret
 END(handle_hyp_hvc)
