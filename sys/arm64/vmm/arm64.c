@@ -187,6 +187,8 @@ arm_init(int ipinum)
 
 	struct hypctx hypctx;
 
+	hypctx.regs.x[0] = 666;
+	hypctx.regs.x[1] = 666;
 	hypctx.regs.x[2] = 666;
 	hypctx.regs.x[3] = 666;
 	hypctx.regs.x[4] = 666;
@@ -194,14 +196,21 @@ arm_init(int ipinum)
 	hypctx.hacr_el2 = 666;
 	hypctx.cptr_el2 = 666;
 
+	printf("\thypctx.regs.x[0] = %lu\n", hypctx.regs.x[0]);
+	printf("\thypctx.regs.x[1] = %lu\n", hypctx.regs.x[1]);
 	printf("\thypctx.regs.x[2] = %lu\n", hypctx.regs.x[2]);
 	printf("\thypctx.regs.x[3] = %lu\n", hypctx.regs.x[3]);
 	printf("\thypctx.regs.x[4] = %lu\n", hypctx.regs.x[4]);
 	printf("\thypctx.hcr_el2 = %lu\n", hypctx.hcr_el2);
 	printf("\thypctx.hacr_el2 = %u\n", hypctx.hacr_el2);
 	printf("\thypctx.cptr_el2 = %u\n", hypctx.cptr_el2);
-	printf("vmm_call_hyp(-2)\n");
-	current_vectors = vmm_call_hyp((void *)-2, vtophys(&hypctx));
+
+	printf("vmm_call_hyp(hyp_enter_guest, &hypctx)\n");
+	current_vectors = vmm_call_hyp((void *)vtophys(vmm_enter_guest),
+			vtophys(&hypctx));
+
+	printf("\thypctx.regs.x[0] = %lu\n", hypctx.regs.x[0]);
+	printf("\thypctx.regs.x[1] = %lu\n", hypctx.regs.x[1]);
 	printf("\thypctx.regs.x[2] = %lu\n", hypctx.regs.x[2]);
 	printf("\thypctx.regs.x[3] = %lu\n", hypctx.regs.x[3]);
 	printf("\thypctx.regs.x[4] = %lu\n", hypctx.regs.x[4]);
