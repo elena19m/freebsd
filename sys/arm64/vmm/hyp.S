@@ -212,10 +212,26 @@ END(vmm_cleanup)
  * x0 - physical address of hypctx
  */
 ENTRY(vmm_enter_guest)
-	/* Save host regs goes here */
-	SAVE_HOST_REGS()
+	/* Pop vmm_call_hyp() return address */
+	ldr	lr, [sp], #16;
 
-	ret
+	LOAD_REG_PAIR(X1, X2)
+	LOAD_REG_PAIR(X3, X4)
+
+	PUSH_HOST_REGS()
+
+	mov	x1, xzr
+	mov	x2, xzr
+	mov	x3, xzr
+	mov	x4, xzr
+
+	POP_HOST_REGS()
+
+	SAVE_REG_PAIR(X1, X2)
+	SAVE_REG_PAIR(X3, X4)
+
+	/* Return from exception */
+	eret
 END(vmm_enter_guest)
 
 hyp_code_end:

@@ -35,7 +35,36 @@
 
 #include "arm64.h"
 
-ASSYM(HYPCTX_REGS, offsetof(struct hypctx, regs));
+ASSYM(HYPCTX_REGS_X0, offsetof(struct hypctx, regs) + 0 * 8);
+ASSYM(HYPCTX_REGS_X1, offsetof(struct hypctx, regs) + 1 * 8);
+ASSYM(HYPCTX_REGS_X2, offsetof(struct hypctx, regs) + 2 * 8);
+ASSYM(HYPCTX_REGS_X3, offsetof(struct hypctx, regs) + 3 * 8);
+ASSYM(HYPCTX_REGS_X4, offsetof(struct hypctx, regs) + 4 * 8);
+ASSYM(HYPCTX_REGS_X5, offsetof(struct hypctx, regs) + 5 * 8);
+ASSYM(HYPCTX_REGS_X6, offsetof(struct hypctx, regs) + 6 * 8);
+ASSYM(HYPCTX_REGS_X7, offsetof(struct hypctx, regs) + 7 * 8);
+ASSYM(HYPCTX_REGS_X8, offsetof(struct hypctx, regs) + 8 * 8);
+ASSYM(HYPCTX_REGS_X9, offsetof(struct hypctx, regs) + 9 * 8);
+ASSYM(HYPCTX_REGS_X10, offsetof(struct hypctx, regs) + 10 * 8);
+ASSYM(HYPCTX_REGS_X11, offsetof(struct hypctx, regs) + 11 * 8);
+ASSYM(HYPCTX_REGS_X12, offsetof(struct hypctx, regs) + 12 * 8);
+ASSYM(HYPCTX_REGS_X13, offsetof(struct hypctx, regs) + 13 * 8);
+ASSYM(HYPCTX_REGS_X14, offsetof(struct hypctx, regs) + 14 * 8);
+ASSYM(HYPCTX_REGS_X15, offsetof(struct hypctx, regs) + 15 * 8);
+ASSYM(HYPCTX_REGS_X16, offsetof(struct hypctx, regs) + 16 * 8);
+ASSYM(HYPCTX_REGS_X17, offsetof(struct hypctx, regs) + 17 * 8);
+ASSYM(HYPCTX_REGS_X18, offsetof(struct hypctx, regs) + 18 * 8);
+ASSYM(HYPCTX_REGS_X19, offsetof(struct hypctx, regs) + 19 * 8);
+ASSYM(HYPCTX_REGS_X20, offsetof(struct hypctx, regs) + 20 * 8);
+ASSYM(HYPCTX_REGS_X21, offsetof(struct hypctx, regs) + 21 * 8);
+ASSYM(HYPCTX_REGS_X22, offsetof(struct hypctx, regs) + 22 * 8);
+ASSYM(HYPCTX_REGS_X23, offsetof(struct hypctx, regs) + 23 * 8);
+ASSYM(HYPCTX_REGS_X24, offsetof(struct hypctx, regs) + 24 * 8);
+ASSYM(HYPCTX_REGS_X25, offsetof(struct hypctx, regs) + 25 * 8);
+ASSYM(HYPCTX_REGS_X26, offsetof(struct hypctx, regs) + 26 * 8);
+ASSYM(HYPCTX_REGS_X27, offsetof(struct hypctx, regs) + 27 * 8);
+ASSYM(HYPCTX_REGS_X28, offsetof(struct hypctx, regs) + 28 * 8);
+ASSYM(HYPCTX_REGS_X29, offsetof(struct hypctx, regs) + 29 * 8);
 ASSYM(HYPCTX_REGS_LR, offsetof(struct hypctx, regs.lr));
 ASSYM(HYPCTX_REGS_SP, offsetof(struct hypctx, regs.sp));
 ASSYM(HYPCTX_REGS_ELR, offsetof(struct hypctx, regs.elr));
