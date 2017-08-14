@@ -129,17 +129,24 @@ static int
 gic_fdt_attach(device_t dev)
 {
 	struct arm_gic_fdt_softc *sc = device_get_softc(dev);
-	phandle_t pxref;
-	intptr_t xref;
+	phandle_t pxref = ofw_bus_find_iparent(ofw_bus_get_node(dev));
+	intptr_t xref = OF_xref_from_node(ofw_bus_get_node(dev));
 	int err;
+
+	sc->base.is_root = false;
+	/*
+	 * Controller is root if:
+	 * - doesn't have interrupt parent
+	 * - his interrupt parent is this controller
+	 */
+	if (pxref == 0 || xref == pxref)
+		sc->base.is_root = true;
 
 	sc->base.gic_bus = GIC_BUS_FDT;
 
 	err = arm_gic_attach(dev);
 	if (err != 0)
 		return (err);
-
-	xref = OF_xref_from_node(ofw_bus_get_node(dev));
 
 	/*
 	 * Now, when everything is initialized, it's right time to
@@ -150,13 +157,7 @@ gic_fdt_attach(device_t dev)
 		goto cleanup;
 	}
 
-	/*
-	 * Controller is root if:
-	 * - doesn't have interrupt parent
-	 * - his interrupt parent is this controller
-	 */
-	pxref = ofw_bus_find_iparent(ofw_bus_get_node(dev));
-	if (pxref == 0 || xref == pxref) {
+	if (sc->base.is_root) {
 		if (intr_pic_claim_root(dev, xref, arm_gic_intr, sc,
 		    GIC_LAST_SGI - GIC_FIRST_SGI + 1) != 0) {
 			device_printf(dev, "could not set PIC as a root\n");
