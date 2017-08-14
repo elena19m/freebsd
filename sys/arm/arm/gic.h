@@ -47,6 +47,7 @@ struct arm_gic_range {
 
 struct arm_gic_softc {
 	device_t		gic_dev;
+	bool			is_root;
 	void *			gic_intrhand;
 	struct gic_irqsrc *	gic_irqs;
 	struct resource *	gic_res[6];

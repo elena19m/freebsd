@@ -130,8 +130,7 @@ static struct resource_spec arm_gic_spec[] = {
 	{ SYS_RES_MEMORY,	1,	RF_ACTIVE },	/* CPU Interrupt Intf. registers */
 	{ SYS_RES_MEMORY,       2,      RF_ACTIVE | RF_OPTIONAL },    /* Virtual Interface Control */
 	{ SYS_RES_MEMORY,       3,      RF_ACTIVE | RF_OPTIONAL },    /* Virtual CPU interface */
-	{ SYS_RES_IRQ,		0,	RF_ACTIVE | RF_OPTIONAL },	/* vGIC maintenance interrupt */
-	{ SYS_RES_IRQ,	  	0, 	RF_ACTIVE | RF_OPTIONAL }, /* Parent interrupt */
+	{ SYS_RES_IRQ,		0,	RF_ACTIVE | RF_OPTIONAL },	/* vGIC maintenance interrupt or parent interrupt */
 	{ -1, 0 }
 };
 
@@ -351,14 +350,17 @@ arm_gic_attach(device_t dev)
 	sc->gic_c_bsh = rman_get_bushandle(sc->gic_res[CPU_INTERFACE_RES_IDX]);
 
 	/* Virtual Interface Control */
-	if (sc->gic_res[VIRT_INTERFACE_CONTROL_RES_IDX] == NULL) {
-		device_printf(dev, "Cannot find Virtual Interface Control Registers. Disabling Hyp-Mode...\n");
-		hypmode_enabled[0] = -1;
+	if (sc->is_root) {
+		if (sc->gic_res[VIRT_INTERFACE_CONTROL_RES_IDX] == NULL) {
+			device_printf(dev, "Cannot find Virtual Interface Control Registers. Disabling Hyp-Mode...\n");
+			hypmode_enabled[0] = -1;
+		} else {
+			sc->gic_h_bst = rman_get_bustag(sc->gic_res[VIRT_INTERFACE_CONTROL_RES_IDX]);
+			sc->gic_h_bsh = rman_get_bushandle(sc->gic_res[VIRT_INTERFACE_CONTROL_RES_IDX]);
+		}
 	} else {
-		sc->gic_h_bst = rman_get_bustag(sc->gic_res[VIRT_INTERFACE_CONTROL_RES_IDX]);
-		sc->gic_h_bsh = rman_get_bushandle(sc->gic_res[VIRT_INTERFACE_CONTROL_RES_IDX]);
+		hypmode_enabled[0] = -1;
 	}
-
 
 	/* Disable interrupt forwarding to the CPU interface */
 	gic_d_write_4(sc, GICD_CTLR, 0x00);
@@ -559,7 +561,10 @@ arm_gic_read_ivar(device_t dev, device_t child, int which, uintptr_t *result)
 		*result = (gic_h_read_4(gic_sc, GICH_VTR) & 0x3f) + 1;
 		return (0);
 	case GIC_IVAR_MAINTENANCE_INTR_RES:
-		*result = (uintptr_t)sc->gic_res[MAINTENANCE_INTR_RES_IDX];
+		if (sc->is_root)
+			*result = (uintptr_t)sc->gic_res[MAINTENANCE_INTR_RES_IDX];
+		else
+			result = NULL;
 		return (0);
 	}
 
