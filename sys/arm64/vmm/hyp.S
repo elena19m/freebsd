@@ -193,22 +193,29 @@ END(vmm_cleanup)
  */
 ENTRY(vmm_enter_guest)
 	/* Pop vmm_call_hyp() return address */
-	ldr	lr, [sp], #16;
+	ldr	lr, [sp], #16
 
-	LOAD_REG_PAIR(X1, X2)
-	LOAD_REG_PAIR(X3, X4)
+	/*
+	 * SAVE_GUEST_REGS() will be called when the guest traps to hyp mode and
+	 * it expects to find the hypctx address in tpidr_el2, make it so.
+	 */
+	msr	tpidr_el2, x0
 
-	PUSH_HOST_REGS()
+	/* These are the original hypctx values */
+	mov	x0, #666
+	mov	x1, #666
+	mov	x2, #666
+	mov	x3, #666
+	mov	x4, #666
+
+	SAVE_GUEST_REGS()
 
 	mov	x1, xzr
 	mov	x2, xzr
 	mov	x3, xzr
 	mov	x4, xzr
 
-	POP_HOST_REGS()
-
-	SAVE_REG_PAIR(X1, X2)
-	SAVE_REG_PAIR(X3, X4)
+	LOAD_GUEST_REGS()
 
 	/* Return from exception */
 	eret
