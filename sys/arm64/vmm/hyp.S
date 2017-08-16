@@ -106,8 +106,14 @@ ENTRY(handle_hyp_init)
 1:
 	/* Install the new exception vectors */
 	msr	vbar_el2, x0
+
 	/* Set the new stack top */
 	mov	sp, x1
+
+	/* Set the host VMID */
+	mov	x2, #VTTBR_HOST
+	msr	vttbr_el2, x2
+	isb
 9:
 	eret
 END(handle_hyp_init)
@@ -137,15 +143,26 @@ hyp_vectors:
 	vempty		/* Error 32-bit EL1 */
 
 ENTRY(handle_hyp_hvc)
+	/* Check for host hypervisor call */
+	mrs	x9, vttbr_el2
+	cmp	x9, #VTTBR_HOST
+	bne	9f
+
+	/* Return the vector table base address is argument is -1 */
 	cmp 	x0, #-1
 	b.ne	1f
 	mrs	x0, vbar_el2
 	b	9f
 1:
+	/*
+	 * Call function in EL2 context.
+	 */
 	/* Push the vmm_call_hyp() return address on the stack */
 	str	lr, [sp, #-16]!
+
 	/* Save function address */
 	mov	x9, x0
+
 	/* Shuffle function parameters */
 	mov 	x0, x1
 	mov	x1, x2
@@ -154,6 +171,7 @@ ENTRY(handle_hyp_hvc)
 	mov	x4, x5
 	mov	x5, x6
 	mov 	x6, x7
+
 	/* Call function */
 	blr 	x9
 
@@ -197,11 +215,11 @@ ENTRY(vmm_enter_guest)
 
 	/*
 	 * SAVE_GUEST_REGS() will be called when the guest traps to hyp mode and
-	 * it expects to find the hypctx address in tpidr_el2, make it so.
+	 * the hypervisor expects to find the hypctx address in tpidr_el2.
 	 */
 	msr	tpidr_el2, x0
 
-	/* These are the original hypctx values */
+	/* These are the arm_init() original hypctx values */
 	mov	x0, #666
 	mov	x1, #666
 	mov	x2, #666
