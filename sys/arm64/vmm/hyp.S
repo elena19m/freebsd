@@ -113,7 +113,6 @@ ENTRY(handle_hyp_init)
 	/* Set the host VMID */
 	mov	x2, #VTTBR_HOST
 	msr	vttbr_el2, x2
-	isb
 9:
 	eret
 END(handle_hyp_init)
