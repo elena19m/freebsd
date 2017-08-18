@@ -35,11 +35,11 @@
 #include <sys/sysctl.h>
 #include <sys/lock.h>
 #include <sys/mutex.h>
-
-
 #include <vm/vm.h>
 #include <vm/pmap.h>
-
+#include <vm/vm_page.h>
+#include <machine/vm.h>
+#include <machine/pte.h>
 #include <machine/cpufunc.h>
 #include <machine/cpu.h>
 #include <machine/vmm.h>
@@ -59,12 +59,16 @@ MALLOC_DEFINE(M_HYP, "ARM VMM HYP", "ARM VMM HYP");
 extern char hyp_init_vectors[];
 extern char hyp_vectors[];
 extern char hyp_code_start[];
+extern char hyp_code_end[];
 extern char hypervisor_stub_vect[];
 
 extern uint64_t hypmode_enabled;
 
 lpae_pd_entry_t *hyp_l1pd;
 char *stack;
+
+pmap_t el2_pmap;
+vm_offset_t el2_va_top;
 
 static uint64_t vmid_generation = 0;
 static struct mtx vmid_generation_mtx;
@@ -100,6 +104,42 @@ out:
 	hyp->vttbr = BUILD_VTTBR((hyp->vmid_generation & VMID_GENERATION_MASK), hyp->l1pd_phys);
 }
 
+static void
+arm_create_el2_pmap()
+{
+	el2_pmap = malloc(sizeof(*el2_pmap), M_HYP, M_WAITOK | M_ZERO);
+	mtx_init(&el2_pmap->pm_mtx, "el2_pmap_pm_mtx", NULL, MTX_DEF);
+	pmap_pinit(el2_pmap);
+
+	el2_va_top = 0;
+}
+
+static void
+arm_map_into_el2_pmap(vm_offset_t va_start, vm_offset_t va_end)
+{
+	vm_page_t tmp_page;
+
+	tmp_page = malloc(sizeof(*tmp_page), M_HYP, M_WAITOK | M_ZERO);
+	tmp_page->oflags = VPO_UNMANAGED;
+	tmp_page->md.pv_memattr = VM_MEMATTR_DEFAULT;
+
+	/*
+	 * Add the physical pages which correspond to the specified virtual
+	 * addresses.The virtual addresses might span contiguous virtual pages,
+	 * but they might not reside in contiguous physical pages.
+	 */
+	va_start = trunc_page(va_start);
+	while (va_start < va_end) {
+		tmp_page->phys_addr = vtophys(va_start);
+		pmap_enter(el2_pmap, el2_va_top, tmp_page,
+				VM_PROT_DEFAULT, PMAP_ENTER_WIRED, 0);
+		va_start += PAGE_SIZE;
+		el2_va_top += PAGE_SIZE;
+	}
+
+	free(tmp_page, M_HYP);
+}
+
 extern char hyp_stub_vectors[];
 #include "hyp_assym.h"
 
@@ -112,6 +152,13 @@ arm_init(int ipinum)
 	uint64_t current_vectors;
 
 	printf("ARM_INIT:\n");
+
+	arm_create_el2_pmap();
+	arm_map_into_el2_pmap((vm_offset_t)hyp_code_start, (vm_offset_t)hyp_code_end);
+
+	printf("*el2_pmap->pm_l0 = %016lx\n", (uint64_t)*el2_pmap->pm_l0);
+
+	printf("\thyp_stub_vectors = %016lx (virtual)\n\n", (uint64_t)hyp_stub_vectors);
 	printf("\thyp_stub_vectors = %016lx\n", vtophys(hyp_stub_vectors));
 	printf("\thyp_init_vectors = %016lx\n", vtophys(hyp_init_vectors));
 	printf("\thyp_vectors = %016lx\n", vtophys(hyp_vectors));
@@ -187,14 +234,14 @@ arm_init(int ipinum)
 
 	struct hypctx hypctx;
 
-	hypctx.regs.x[0] = 666;
-	hypctx.regs.x[1] = 666;
-	hypctx.regs.x[2] = 666;
-	hypctx.regs.x[3] = 666;
-	hypctx.regs.x[4] = 666;
-	hypctx.hcr_el2 = 666;
-	hypctx.hacr_el2 = 666;
-	hypctx.cptr_el2 = 666;
+	hypctx.regs.x[0] = 42;
+	hypctx.regs.x[1] = 42;
+	hypctx.regs.x[2] = 42;
+	hypctx.regs.x[3] = 42;
+	hypctx.regs.x[4] = 42;
+	hypctx.hcr_el2 = 42;
+	hypctx.hacr_el2 = 42;
+	hypctx.cptr_el2 = 42;
 
 	printf("\thypctx.regs.x[0] = %lu\n", hypctx.regs.x[0]);
 	printf("\thypctx.regs.x[1] = %lu\n", hypctx.regs.x[1]);
