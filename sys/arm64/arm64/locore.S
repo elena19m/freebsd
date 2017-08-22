@@ -258,9 +258,8 @@ drop_to_el1:
 1:
 	/*
 	 * If the MMU is active, then it is using a page table where VA == PA.
-	 * But the page table won't have entries for the hypervisor EL2 code
-	 * from arm64/vmm/hyp.S, which will only be loaded into memory with the
-	 * vmm module.
+	 * But the page table won't have entries for the hypervisor EL2
+	 * initialization code which is loaded into memory with the vmm module.
 	 *
 	 * So we disable the MMU in EL2 to make the vmm hypervisor code run
 	 * successfully.
@@ -272,7 +271,7 @@ drop_to_el1:
 	isb
 
 	/* Configure the Hypervisor */
-	mov	x2, #(HCR_RW)
+	ldr	x2, hcr
 	msr	hcr_el2, x2
 
 	/* Load the Virtualization Process ID Register */
@@ -337,6 +336,10 @@ drop_to_el1:
 	.align 3
 .Lsctlr_res1:
 	.quad SCTLR_RES1
+
+hcr:
+	/* Make sure the HVC instruction is not disabled */
+	.quad (HCR_RW & ~HCR_HCD)
 
 /*
  * Get the delta between the physical address we were loaded to and the
