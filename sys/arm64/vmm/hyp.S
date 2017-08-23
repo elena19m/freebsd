@@ -43,12 +43,6 @@
  *  #include "hyp.h"
  */
 
-/*
- * TODO
- * #include "hyp_assym.h"
- * #include "hyp_helpers.h" - this was renamed to hyp_macros.h
- */
-
 	.text
 
 	.globl	hyp_code_start
@@ -57,6 +51,16 @@
 	.align 12
 
 hyp_code_start:
+
+	.align 3
+	.globl _C_LABEL(hyp_debug1)
+_C_LABEL(hyp_debug1):
+	.zero 8
+
+	.align 3
+	.globl _C_LABEL(hyp_debug2)
+_C_LABEL(hyp_debug2):
+	.zero 8
 
 ENTRY(vmm_call_hyp)
 	hvc	#0
@@ -97,25 +101,87 @@ hyp_init_vectors:
 	vempty		/* FIQ 32-bit EL1 */
 	vempty		/* Error 32-bit EL1 */
 
+/*
+ * Initialize the hypervisor mode with a new exception vector table, translation
+ * tables and stack.
+ *
+ * Expecting:
+ * x0 - the hypervisor exception vectors
+ * x1 - translation tables physical address
+ * x2 - stack top virtual address
+ */
 ENTRY(handle_hyp_init)
-	/* TODO */
-	cmp 	x0, #-1
-	b.ne	1f
-	mrs	x0, vbar_el2
-	b	9f
-1:
 	/* Install the new exception vectors */
 	msr	vbar_el2, x0
 
-	/* Set the new stack top */
-	mov	sp, x1
+	/* Set the stack top address */
+	mov	sp, x2
 
 	/* Set the host VMID */
 	mov	x2, #VTTBR_HOST
 	msr	vttbr_el2, x2
-9:
+
+	/* Load the base address for the translation tables */
+	msr	ttbr0_el2, x1
+	isb
+
+	/* Invalidate the TLB */
+	tlbi	alle2
+
+	/* Use the same memory attributes as EL1 */
+	mrs	x3, mair_el1
+	msr	mair_el2, x3
+	isb
+
+	/*
+	 * We've generated the translation tables using pmap, set up TCR
+ 	 * using the kernel EL1 values.
+	 */
+	mrs	x3, tcr_el1
+	ldr	x4, tcr
+	/* Copy T0SZ from EL1 */
+	bfi	x4, x3, #0, #6
+	/* Copy IRGN0, ORGN0, SH0 and TG0 from EL1 */
+	lsr	x3, x3, #TCR_IRGN0_SHIFT
+	bfi	x4, x3, #8, #8
+	msr	tcr_el2, x4
+
+	/* Set up SCTLR */
+	mrs	x3, sctlr_el2
+	ldr	x4, sctlr_el2_set
+	ldr	x5, sctlr_el2_clear
+	bic	x3, x3, x5
+	orr	x3, x3, x4
+	msr	sctlr_el2, x3
+
+	/* MMU is up and running */
 	eret
 END(handle_hyp_init)
+
+	.align 3
+tcr:
+	/* 48 bits physical addresses */
+	.quad (TCR_EL2_RES1 | TCR_EL2_PS_48BITS)
+
+sctlr_el2_set:
+	/* Bits to set */
+	.quad (SCTLR_EL2_M | SCTLR_EL2_C | SCTLR_EL2_SA | SCTLR_I)
+
+sctlr_el2_clear:
+	/* Bits to clear */
+	.quad (SCTLR_EL2_WXN | SCTLR_EL2_A)
+
+hcr_el2_set:
+	/* Bits to set */
+	.quad (HCR_ID | HCR_CD)
+
+hcr_el2_clear:
+	/* Bits to clear */
+	.quad (HCR_TRVM | HCR_HCD | HCR_TDZ | HCR_TGE | HCR_TVM | HCR_TTLB | \
+		HCR_TPU | HCR_TPCP | HCR_TSW | HCR_TACR | HCR_TIDCP | \
+		HCR_TSC | HCR_TID3 | HCR_TID2 | HCR_TID1 | HCR_TID0 | \
+		HCR_TWE | HCR_TWI | HCR_AMO | HCR_IMO | HCR_FMO | HCR_PTW | \
+		HCR_VM)
 
 	.align 11
 
@@ -147,7 +213,7 @@ ENTRY(handle_hyp_hvc)
 	cmp	x9, #VTTBR_HOST
 	bne	9f
 
-	/* Return the vector table base address is argument is -1 */
+	/* Return the vector table base address if is argument is -1 */
 	cmp 	x0, #-1
 	b.ne	1f
 	mrs	x0, vbar_el2
@@ -188,17 +254,20 @@ END(handle_hyp_hvc)
  * x0 - physical address of hyp_stub_vectors
  */
 ENTRY(vmm_cleanup)
+	/* Pop vmm_call_hyp() return address */
+	ldr	lr, [sp], #16
+
 	/* Restore the stub vectors */
 	msr	vbar_el2, x0
 
 	/* Disable the MMU */
 	dsb	sy
 	mrs	x2, sctlr_el2
-	bic	x2, x2, SCTLR_M
+	bic	x2, x2, #SCTLR_EL2_M
 	msr	sctlr_el2, x2
-	isb
 
-	ret
+	/* Return here from the exception */
+	eret
 END(vmm_cleanup)
 
 /*
@@ -206,7 +275,7 @@ END(vmm_cleanup)
  * void vmm_enter_guest(struct hypctx *hypctx)
  *
  * Expecting:
- * x0 - physical address of hypctx
+ * x0 - hypctx address
  */
 ENTRY(vmm_enter_guest)
 	/* Pop vmm_call_hyp() return address */
@@ -219,11 +288,11 @@ ENTRY(vmm_enter_guest)
 	msr	tpidr_el2, x0
 
 	/* These are the arm_init() original hypctx values */
-	mov	x0, #666
-	mov	x1, #666
-	mov	x2, #666
-	mov	x3, #666
-	mov	x4, #666
+	mov	x0, #42
+	mov	x1, #42
+	mov	x2, #42
+	mov	x3, #42
+	mov	x4, #42
 
 	SAVE_GUEST_REGS()
 
