@@ -45,6 +45,8 @@
 #include "bhyverun.h"
 #include "mem.h"
 #include "mevent.h"
+#include "mmio_emul.h"
+#include "mmio_irq.h"
 #include "reset.h"
 
 #define GUEST_NIO_PORT		0x488	/* guest upcalls via i/o port */
@@ -93,11 +95,12 @@ usage(int code)
 {
 
         fprintf(stderr,
-                "Usage: %s [-b] [-c vcpus][-p pincpu]"
+                "Usage: %s [-b] [-c vcpus][-p pincpu][-m <mmio>]"
 		" <vmname>\n"
-		"       -b: use bvmconsole"
+		"       -b: use bvmconsole\n"
 		"       -c: # cpus (default 1)\n"
 		"       -p: pin vcpu 'n' to host cpu 'pincpu + n'\n"
+		"       -m: mmio config\n"
 		"       -h: help\n",
 		progname);
 
@@ -316,6 +319,10 @@ main(int argc, char *argv[])
                 case 'c':
 			guest_ncpus = atoi(optarg);
 			break;
+		case 'm':
+			if (mmio_parse_opts(optarg) != 0)
+				exit(1);
+			break;
 		case 'h':
 			usage(0);
 		default:
@@ -344,6 +351,10 @@ main(int argc, char *argv[])
 	}
 
 	init_mem();
+	mmio_irq_init(ctx);
+
+	if (init_mmio(ctx) != 0)
+		exit(1);
 
 	if (bvmcons)
 		init_bvmcons();

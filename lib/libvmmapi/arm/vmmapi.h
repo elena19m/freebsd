@@ -29,6 +29,8 @@
 #ifndef _VMMAPI_H_
 #define	_VMMAPI_H_
 
+#include <sys/param.h>
+
 struct vmctx;
 struct vm_exit;
 enum vm_cap_type;
@@ -60,6 +62,8 @@ int	vm_get_capability(struct vmctx *ctx, int vcpu, enum vm_cap_type cap,
 			  int *retval);
 int	vm_set_capability(struct vmctx *ctx, int vcpu, enum vm_cap_type cap,
 			  int val);
+int	vm_assert_irq(struct vmctx *ctx);
+int	vm_deassert_irq(struct vmctx *ctx);
 
 /*
  * Return a pointer to the statistics buffer. Note that this is not MT-safe.

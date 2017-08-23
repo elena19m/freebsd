@@ -330,7 +330,7 @@ int
 vm_attach_vgic(struct vmctx *ctx, uint64_t distributor_paddr, uint64_t cpu_int_paddr)
 {
 	struct vm_attach_vgic vav;
-	
+
 	bzero(&vav, sizeof(vav));
 	vav.distributor_paddr = distributor_paddr;
 	vav.cpu_int_paddr = cpu_int_paddr;
@@ -338,4 +338,14 @@ vm_attach_vgic(struct vmctx *ctx, uint64_t distributor_paddr, uint64_t cpu_int_p
 	return (ioctl(ctx->fd, VM_ATTACH_VGIC, &vav));
 }
 
+int
+vm_assert_irq(struct vmctx *ctx)
+{
+	return (ioctl(ctx->fd, VM_ASSERT_IRQ, NULL));
+}
 
+int
+vm_deassert_irq(struct vmctx *ctx)
+{
+	return (ioctl(ctx->fd, VM_DEASSERT_IRQ, NULL));
+}
