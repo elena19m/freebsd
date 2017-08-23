@@ -27,6 +27,7 @@
 #ifndef _VMM_H_
 #define	_VMM_H_
 
+#include <sys/stdint.h>
 
 enum vm_suspend_how {
 	VM_SUSPEND_NONE,

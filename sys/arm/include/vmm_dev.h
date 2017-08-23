@@ -126,6 +126,10 @@ enum {
 	IOCNUM_VM_STATS = 50, 
 	IOCNUM_VM_STAT_DESC = 51,
 
+	/* interrupt injection */
+	IOCNUM_ASSERT_IRQ = 80,
+	IOCNUM_DEASSERT_IRQ = 81,
+
 	/* vm_cpuset */
 	IOCNUM_ACTIVATE_CPU = 90,
 	IOCNUM_GET_CPUSET = 91,
@@ -156,6 +160,10 @@ enum {
 	_IOWR('v', IOCNUM_VM_STATS, struct vm_stats)
 #define	VM_STAT_DESC \
 	_IOWR('v', IOCNUM_VM_STAT_DESC, struct vm_stat_desc)
+#define VM_ASSERT_IRQ \
+	_IOW('v', IOCNUM_ASSERT_IRQ, long)
+#define VM_DEASSERT_IRQ \
+	_IOW('v', IOCNUM_DEASSERT_IRQ, long)
 #define	VM_GLA2GPA	\
 	_IOWR('v', IOCNUM_GLA2GPA, struct vm_gla2gpa)
 #define	VM_ACTIVATE_CPU	\
