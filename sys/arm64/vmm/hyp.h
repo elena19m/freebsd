@@ -77,9 +77,10 @@
 
 #define HSR_ISS_ACCESS_SIZE(x)	((x == 0) ? 1 : (x == 1) ? 2 : 4)
 
-
+#if 0
 #define	VTTBR_VMID_SHIFT	16
 #define	VTTBR_VMID_MASK		0xff
+#endif
 
 /* Hyp System Control Register (HSCTLR) bits */
 #define HSCTLR_TE	(1 << 30)
@@ -131,6 +132,7 @@
 /* The sign bit VTCR.S = VTCR.T0SZ[4] */
 #define VMM_VTCR_S	(((VMM_VTCR_T0SZ) << 1) & VTCR_S)
 
+#if 0
 /* Hyp Configuration Register (HCR) bits */
 #define HCR_TGE		(1 << 27)
 #define HCR_TVM		(1 << 26)
@@ -180,6 +182,7 @@
 #define HCR_GUEST_MASK (HCR_TSW | HCR_TAC | HCR_TIDCP | \
     HCR_TSC | HCR_TWI | HCR_BSU_IS | HCR_FB | \
     HCR_AMO | HCR_IMO | HCR_FMO | HCR_SWIO | HCR_VM)
+#endif
 
 /* Hyp Coprocessor Trap Register */
 #define HCPTR_TCP(x)	(1 << x)

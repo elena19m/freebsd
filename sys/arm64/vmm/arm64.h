@@ -28,6 +28,7 @@
 
 #include <machine/reg.h>
 #include <machine/vfp.h>
+#include <machine/hypervisor.h>
 
 #include "mmu.h"
 #include "vgic.h"
@@ -81,13 +82,13 @@ struct hypctx {
 };
 
 struct hyp {
-	pd_entry_t		vttbr;
-	struct vtimer		vtimer;
-	uint64_t		vmid_generation;
-	struct vm		*vm;
-	pd_entry_t		l1pd_phys;
-	struct hypctx		ctx[VM_MAXCPU];
-	bool			vgic_attached;
+	uint64_t	vttbr;
+	struct vtimer	vtimer;
+	uint64_t	vmid_generation;
+	struct vm	*vm;
+	pmap_t		stage2_pmap;
+	struct hypctx	ctx[VM_MAXCPU];
+	bool		vgic_attached;
 	struct vgic_distributor	vgic_distributor;
 };
 CTASSERT((offsetof(struct hyp, vttbr) & PAGE_MASK) == 0);
@@ -96,11 +97,11 @@ uint64_t vmm_call_hyp(void *hyp_func_addr, ...);
 void vmm_cleanup(void *hyp_stub_vectors);
 uint64_t vmm_enter_guest(struct hypctx *hypctx);
 
-#define VMID_GENERATION_MASK ((1UL<<8) - 1)
-#define BUILD_VTTBR(VMID, PTADDR) ((VMID << 48) | PTADDR);
+#define VMID_GENERATION_MASK 		((1UL<<8) - 1)
+#define build_vttbr(vmid, ptaddr) 	((vmid << VTTBR_VMID_SHIFT) | ptaddr);
 
-#define MPIDR_SMP_MASK (0x3 << 30)
-#define MPIDR_AFF1_LEVEL(x) ((x >> 2) << 8)
-#define MPIDR_AFF0_LEVEL(x) ((x & 0x3) << 0)
+#define MPIDR_SMP_MASK 		(0x3 << 30)
+#define MPIDR_AFF1_LEVEL(x) 	((x >> 2) << 8)
+#define MPIDR_AFF0_LEVEL(x) 	((x & 0x3) << 0)
 
 #endif /* !_VMM_ARM64_H_ */
