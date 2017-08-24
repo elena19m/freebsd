@@ -44,6 +44,7 @@
 #include <machine/cpu.h>
 #include <machine/vmm.h>
 #include <machine/vmm_dev.h>
+#include <machine/atomic.h>
 
 #include "mmu.h"
 #include "arm64.h"
@@ -70,16 +71,12 @@ pmap_t hyp_pmap;
 static uint64_t vmid_generation = 0;
 static struct mtx vmid_generation_mtx;
 
-static void set_vttbr(struct hyp *hyp) {
-	/*
-	 * TODO atomic_load_64 not implemented
-	 */
-	/*
-	if (hyp->vmid_generation &&
-	    ((hyp->vmid_generation & ~VMID_GENERATION_MASK) != 
-	    (atomic_load_64(&vmid_generation) & ~VMID_GENERATION_MASK)))
+static void set_vttbr(struct hyp *hyp)
+{
+	if (hyp->vmid_generation != 0 &&
+			((hyp->vmid_generation & ~VMID_GENERATION_MASK) !=
+			(atomic_load_acq_64(&vmid_generation) & ~VMID_GENERATION_MASK)))
 		goto out;
-		*/
 
 	mtx_lock(&vmid_generation_mtx);
 
@@ -98,7 +95,8 @@ static void set_vttbr(struct hyp *hyp) {
 	hyp->vmid_generation = vmid_generation;
 	mtx_unlock(&vmid_generation_mtx);
 out:
-	hyp->vttbr = BUILD_VTTBR((hyp->vmid_generation & VMID_GENERATION_MASK), hyp->l1pd_phys);
+	hyp->vttbr = build_vttbr((hyp->vmid_generation & VMID_GENERATION_MASK),
+			(uint64_t)hyp->stage2_pmap->pm_l0);
 }
 
 extern uint64_t hyp_debug1, hyp_debug2;
@@ -251,9 +249,8 @@ arm_vminit(struct vm *vm, pmap_t pmap)
 
 	mtx_init(&hyp->vgic_distributor.distributor_lock, "Distributor Lock", "", MTX_SPIN);
 
-	/*
-	hyp->l1pd_phys = (lpae_pd_entry_t) vtophys(&hyp->l1pd[0]);
-	*/
+	/* TODO: properly create a stage 2 mapping */
+	hyp->stage2_pmap = malloc(sizeof(*hyp->stage2_pmap), M_HYP, M_WAITOK | M_ZERO);
 	set_vttbr(hyp);
 
 	for (i = 0; i < VM_MAXCPU; i++) {
