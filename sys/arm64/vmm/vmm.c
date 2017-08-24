@@ -25,7 +25,6 @@
  */
 
 #include <sys/cdefs.h>
-
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -40,7 +39,6 @@
 #include <sys/sched.h>
 #include <sys/smp.h>
 #include <sys/cpuset.h>
-
 
 #include <vm/vm.h>
 #include <vm/vm_object.h>
@@ -72,10 +70,10 @@ struct vcpu {
 	enum vcpu_state	state;
 	struct mtx	mtx;
 	int		hostcpu;	/* host cpuid this vcpu last ran on */
-	int		 vcpuid;
+	int		vcpuid;
 	void		*stats;
 	struct vm_exit	exitinfo;
-	uint64_t	nextpc;	/* (x) next instruction to execute */
+	uint64_t	nextpc;		/* (x) next instruction to execute */
 };
 
 #define	vcpu_lock_initialized(v) mtx_initialized(&((v)->mtx))
@@ -107,8 +105,7 @@ struct vm {
 	cpuset_t	active_cpus;
 };
 
-
-static int vmm_initialized;
+static bool vmm_initialized;
 
 static struct vmm_ops *ops;
 #define	VMM_INIT(num)	(ops != NULL ? (*ops->init)(num) : 0)
@@ -218,14 +215,14 @@ vmm_handler(module_t mod, int what, void *arg)
 		vmmdev_init();
 		error = vmm_init();
 		if (error == 0)
-			vmm_initialized = 1;
+			vmm_initialized = true;
 		break;
 	case MOD_UNLOAD:
 		error = vmmdev_cleanup();
 		if (error == 0 && vmm_initialized) {
 			error = VMM_CLEANUP();
 			if (error)
-				vmm_initialized = 0;
+				vmm_initialized = false;
 		}
 		break;
 	default:
