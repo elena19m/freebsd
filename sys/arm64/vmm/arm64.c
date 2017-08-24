@@ -40,7 +40,6 @@
 #include <vm/vm_page.h>
 #include <vm/vm_param.h>
 #include <machine/vm.h>
-#include <machine/pte.h>
 #include <machine/cpufunc.h>
 #include <machine/cpu.h>
 #include <machine/vmm.h>
@@ -64,9 +63,6 @@ extern char hyp_code_end[];
 extern char hypervisor_stub_vect[];
 
 extern uint64_t hypmode_enabled;
-
-/* TODO delete me */
-lpae_pd_entry_t *hyp_l1pd;
 
 char *stack;
 pmap_t hyp_pmap;
@@ -105,88 +101,6 @@ out:
 	hyp->vttbr = BUILD_VTTBR((hyp->vmid_generation & VMID_GENERATION_MASK), hyp->l1pd_phys);
 }
 
-static void
-arm_hyp_pmap_init()
-{
-	hyp_pmap = malloc(sizeof(*hyp_pmap), M_HYP, M_WAITOK | M_ZERO);
-
-	mtx_init(&hyp_pmap->pm_mtx, "hyp_pmap_pm_mtx", NULL, MTX_DEF);
-	pmap_pinit(hyp_pmap);
-}
-
-static void
-arm_hyp_pmap_map(vm_offset_t kva_start, size_t len, vm_prot_t prot)
-{
-	vm_offset_t kva_end;
-	vm_page_t dummy_page;
-
-	dummy_page = malloc(sizeof(*dummy_page), M_HYP, M_WAITOK | M_ZERO);
-	dummy_page->oflags = VPO_UNMANAGED;
-	dummy_page->md.pv_memattr = VM_MEMATTR_DEFAULT;
-
-	/*
-	 * Add the physical pages which correspond to the specified virtual
-	 * addresses.The virtual addresses span contiguous virtual pages, but
-	 * they might not reside in contiguous physical pages.
-	 */
-	kva_end = kva_start + len - 1;
-	kva_start = trunc_page(kva_start);
-
-	printf("\n");
-	printf("ARM_HYP_PMAP_MAP:\n");
-	printf("kva_start = %016lx\n", kva_start);
-	printf("vtophys(kva_start) = %016lx\n", vtophys(kva_start));
-	printf("ktohyp(kva_start) = %016lx\n", ktohyp(kva_start));
-	printf("\n");
-
-	while (kva_start < kva_end) {
-		dummy_page->phys_addr = vtophys(kva_start);
-		pmap_enter(hyp_pmap, ktohyp(kva_start), dummy_page,
-				prot, PMAP_ENTER_WIRED, 0);
-		kva_start += PAGE_SIZE;
-	}
-
-	free(dummy_page, M_HYP);
-}
-
-/*
- * Add an identity mapping (VA == PA) to the hypervisor pmap.
- */
-static void
-arm_hyp_pmap_identity(vm_offset_t kva_start, size_t len, vm_prot_t prot)
-{
-	vm_offset_t kva_end;
-	vm_page_t dummy_page;
-
-	dummy_page = malloc(sizeof(*dummy_page), M_HYP, M_WAITOK | M_ZERO);
-	dummy_page->oflags = VPO_UNMANAGED;
-	dummy_page->md.pv_memattr = VM_MEMATTR_DEFAULT;
-
-	/*
-	 * The virtual addresses might span contiguous virtual pages, but they
-	 * might not reside in contiguous physical pages. For each virtual page
-	 * we get the physical page address and we use that for the mapping.
-	 */
-	kva_end = kva_start + len - 1;
-	kva_start = trunc_page(kva_start);
-
-	printf("\n");
-	printf("ARM_HYP_PMAP_MAP_FLAT:\n");
-	printf("kva_start = %016lx\n", kva_start);
-	printf("vtophys(kva_start) = %016lx\n", vtophys(kva_start));
-	printf("\n");
-
-	while (kva_start < kva_end) {
-		dummy_page->phys_addr = vtophys(kva_start);
-		pmap_enter(hyp_pmap, dummy_page->phys_addr, dummy_page,
-				prot, PMAP_ENTER_WIRED, 0);
-		kva_start += PAGE_SIZE;
-	}
-
-	free(dummy_page, M_HYP);
-}
-
-
 extern uint64_t hyp_debug1, hyp_debug2;
 extern char hyp_stub_vectors[];
 #include "hyp_assym.h"
@@ -200,17 +114,15 @@ arm_init(int ipinum)
 
 	printf("ARM_INIT:\n");
 
-	hyp_l1pd = malloc(2 * LPAE_L1_ENTRIES * sizeof(lpae_pd_entry_t),
-	    M_HYP, M_WAITOK | M_ZERO);
-
-	arm_hyp_pmap_init();
+	hyp_pmap = malloc(sizeof(*hyp_pmap), M_HYP, M_WAITOK | M_ZERO);
+	hypmap_init(hyp_pmap);
 
 	hyp_code_len = (size_t)hyp_code_end - (size_t)hyp_code_start;
-	arm_hyp_pmap_map((vm_offset_t)hyp_code_start, hyp_code_len,
+	hypmap_map(hyp_pmap, (vm_offset_t)hyp_code_start, hyp_code_len,
 			VM_PROT_EXECUTE);
 
 	/* We need an identity mapping for when we activate the MMU */
-	arm_hyp_pmap_identity((vm_offset_t)hyp_code_start, hyp_code_len,
+	hypmap_map_identity(hyp_pmap, (vm_offset_t)hyp_code_start, hyp_code_len,
 			VM_PROT_EXECUTE);
 
 	printf("\thyp_stub_vectors = %016lx (virtual)\n\n", (uint64_t)hyp_stub_vectors);
@@ -228,7 +140,8 @@ arm_init(int ipinum)
 	stack = malloc(PAGE_SIZE, M_HYP, M_WAITOK | M_ZERO);
 	stack_top = stack + PAGE_SIZE;
 
-	arm_hyp_pmap_map((vm_offset_t)stack, PAGE_SIZE, VM_PROT_ALL);
+	hypmap_map(hyp_pmap, (vm_offset_t)stack, PAGE_SIZE,
+			VM_PROT_READ | VM_PROT_WRITE);
 
 	/*
 	 * Install the temporary vectors which will be responsible for
@@ -259,8 +172,8 @@ arm_init(int ipinum)
 	struct hypctx hypctx;
 	bzero(&hypctx, sizeof(struct hypctx));
 
-	arm_hyp_pmap_map((vm_offset_t)&hypctx, sizeof(struct hypctx),
-			VM_PROT_ALL);
+	hypmap_map(hyp_pmap, (vm_offset_t)&hypctx, sizeof(struct hypctx),
+			VM_PROT_READ | VM_PROT_WRITE);
 
 	printf("vmm_call_hyp(vmm_enter_guest, &hypctx)\n");
 	vmm_call_hyp((void *)ktohyp(vmm_enter_guest), ktohyp(&hypctx));
@@ -269,6 +182,11 @@ arm_init(int ipinum)
 	printf("hypctx.regs[2] = %lu\n", hypctx.regs.x[2]);
 	printf("hypctx.regs[3] = %lu\n", hypctx.regs.x[3]);
 	printf("hypctx.regs[4] = %lu\n", hypctx.regs.x[4]);
+
+	printf("\n");
+	printf("vtophys(hyp_code_start) = 0x%016lx\n", vtophys(hyp_code_start));
+	printf("hyp_pmap_get(hyp_code_start) = 0x%016lx\n", hypmap_get(hyp_pmap, ktohyp(hyp_code_start)));
+	printf("\n");
 
 	/* Initialize VGIC infrastructure */
 	if (vgic_hyp_init()) {
@@ -284,26 +202,24 @@ static int
 arm_cleanup(void)
 {
 	/*
-	 * vmm_cleanup() will disable the MMU. Use the physical address of
-	 * vmm_cleanup() because we want the instructions following the MMU
-	 * disable to work with the MMU either disabled (the physical addresses
-	 * will be used), either enabled (the identity mapping from the page
-	 * tables will be used).
+	 * vmm_cleanup() will disable the MMU. For the next few instructions,
+	 * before the hardware disables the MMU, one of the following is
+	 * possible:
+	 *
+	 * a. The instruction addresses are fetched with the MMU disabled,
+	 * and they must represent the actual physical addresses. This will work
+	 * because we call the vmm_cleanup() function by its physical address.
+	 *
+	 * b. The instruction addresses are fetched using the old translation
+	 * tables. This will work because we have an identity mapping in place
+	 * in the translation tables.
 	 */
 	vmm_call_hyp((void *)vtophys(vmm_cleanup), vtophys(hyp_stub_vectors));
 
-	/* Remove ALL mappings from the hyp address space */
-	pmap_remove(hyp_pmap, HYP_VM_MIN_ADDRESS, HYP_VM_MAX_ADDRESS);
-
-	mtx_destroy(&hyp_pmap->pm_mtx);
-	pmap_release(hyp_pmap);
+	hypmap_cleanup(hyp_pmap);
 	free(hyp_pmap, M_HYP);
 
 	free(stack, M_HYP);
-
-	lpae_vmcleanup(NULL);
-
-	free(hyp_l1pd, M_HYP);
 
 	mtx_destroy(&vmid_generation_mtx);
 
@@ -335,7 +251,9 @@ arm_vminit(struct vm *vm, pmap_t pmap)
 
 	mtx_init(&hyp->vgic_distributor.distributor_lock, "Distributor Lock", "", MTX_SPIN);
 
+	/*
 	hyp->l1pd_phys = (lpae_pd_entry_t) vtophys(&hyp->l1pd[0]);
+	*/
 	set_vttbr(hyp);
 
 	for (i = 0; i < VM_MAXCPU; i++) {
@@ -369,11 +287,13 @@ arm_vminit(struct vm *vm, pmap_t pmap)
 		vtimer_cpu_init(hypctx);
 	}
 
+	/*
 	lpae_vmmmap_set(NULL,
 	    (lpae_vm_vaddr_t)hyp,
 	    (lpae_vm_paddr_t)vtophys(hyp),
 	    sizeof(struct hyp),
 	    VM_PROT_READ | VM_PROT_WRITE);
+	    */
 
 	vtimer_init(hyp);
 
@@ -532,7 +452,8 @@ static int hyp_handle_exception(struct hyp *hyp, int vcpu, struct vm_exit *vmexi
 			break;
 		case HSR_EC_DABT:
 			if (HSR_ISS_ISV(hsr_iss)) {
-				if (LPAE_TRANSLATION_FAULT(HSR_ISS_DFSC(hsr_iss))) {
+				//if (LPAE_TRANSLATION_FAULT(HSR_ISS_DFSC(hsr_iss))) {
+				if (0) {
 					/*
 					 * The page is not mapped and a possible MMIO access
 					 * Build the instruction info and return to user to emulate
@@ -674,6 +595,7 @@ arm_vmcleanup(void *arg)
 	struct hyp *hyp = arg;
 
 	/* Unmap from HYP-mode the hyp tructure */
+	/*
 	lpae_vmmmap_set(NULL,
 	    (lpae_vm_vaddr_t)hyp,
 	    (lpae_vm_paddr_t)vtophys(hyp),
@@ -681,6 +603,7 @@ arm_vmcleanup(void *arg)
 	    VM_PROT_NONE);
 
 	lpae_vmcleanup(&(hyp->l1pd[0]));
+	*/
 	free(hyp, M_HYP);
 }
 
@@ -815,8 +738,8 @@ struct vmm_ops vmm_ops_arm = {
 	arm_vminit,
 	arm_vmrun,
 	arm_vmcleanup,
-	lpae_vmmmap_set,
-	lpae_vmmmap_get,
+	hypmap_set,
+	hypmap_get,
 	arm_getreg,
 	arm_setreg,
 	NULL, 		/* vmi_get_cap_t */

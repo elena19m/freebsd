@@ -665,17 +665,10 @@ vm_malloc(struct vm *vm, uint64_t gpa, size_t len)
 			break;
 		}
 
-		error = VMMMAP_SET(vm->cookie, gpa + seg->len, hpa, PAGE_SIZE,
+		VMMMAP_SET(vm->cookie, gpa + seg->len, hpa, PAGE_SIZE,
 				   VM_PROT_ALL);
-		if (error)
-			break;
 
 		seg->len += PAGE_SIZE;
-	}
-
-	if (error) {
-		vm_free_mem_seg(vm, seg);
-		return (error);
 	}
 
 	vm->num_mem_segs++;

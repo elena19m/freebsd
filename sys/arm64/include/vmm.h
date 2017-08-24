@@ -27,6 +27,11 @@
 #ifndef _VMM_H_
 #define	_VMM_H_
 
+#include <sys/param.h>
+#include <vm/vm.h>
+#include <vm/pmap.h>
+#include <pte.h>
+#include <pmap.h>
 
 enum vm_suspend_how {
 	VM_SUSPEND_NONE,
@@ -109,10 +114,10 @@ typedef int	(*vmi_run_func_t)(void *vmi, int vcpu, register_t rip,
 				  struct pmap *pmap, void *rendezvous_cookie,
 				  void *suspend_cookie);
 typedef void	(*vmi_cleanup_func_t)(void *vmi);
-typedef int	(*vmi_mmap_set_func_t)(void *vmi, uint64_t gpa,
-				       uint64_t hpa, size_t length,
-				       int prot);
-typedef uint64_t (*vmi_mmap_get_func_t)(void *vmi, uint64_t ipa);
+typedef void	(*vmi_mmap_set_func_t)(pmap_t pmap, vm_offset_t va_start,
+				       vm_offset_t pa_start, size_t len,
+				       vm_prot_t prot);
+typedef vm_paddr_t (*vmi_mmap_get_func_t)(pmap_t pmap, vm_offset_t va);
 
 typedef int	(*vmi_get_register_t)(void *vmi, int vcpu, int num,
 				      uint64_t *retval);

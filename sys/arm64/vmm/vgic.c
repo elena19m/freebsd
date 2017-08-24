@@ -494,11 +494,8 @@ vgic_attach_to_vm(void *arg, uint64_t distributor_paddr, uint64_t cpu_int_paddr)
 	}
 
 	/* Map the CPU Interface over the Virtual CPU Interface */
-	lpae_vmmmap_set(arg,
-	    (lpae_vm_vaddr_t)cpu_int_paddr,
-	    (lpae_vm_paddr_t)virtual_cpu_int_paddr,
-	    virtual_cpu_int_size,
-	    VM_PROT_READ | VM_PROT_WRITE);
+	hypmap_set(arg, cpu_int_paddr, virtual_cpu_int_paddr,
+			virtual_cpu_int_size, VM_PROT_READ | VM_PROT_WRITE);
 
 	return (0);
 }
@@ -1052,6 +1049,9 @@ vgic_inject_irq(void *arg, unsigned int irq, bool level)
         return 0;
 }
 
+/*
+ * TODO: pass the hyp pmap as a parameter.
+ */
 int
 vgic_hyp_init(void)
 {
@@ -1079,11 +1079,13 @@ vgic_hyp_init(void)
 
 	lr_num = 0;
 
+	/*
 	lpae_vmmmap_set(NULL,
 	    (lpae_vm_vaddr_t)virtual_int_ctrl_vaddr,
 	    (lpae_vm_paddr_t)virtual_int_ctrl_paddr,
 	    virtual_int_ctrl_size,
 	    VM_PROT_READ | VM_PROT_WRITE);
+	    */
 
 	return (0);
 }

@@ -37,8 +37,6 @@
 #define EXCEPTION_FIQ		6
 #define EXCEPTION_IRQ		7
 
-
-
 #define	HSR_EC_SHIFT		26
 #define	HSR_IL_SHIFT		25
 #define	HSR_IL_MASK		(1 << HSR_IL_SHIFT)
