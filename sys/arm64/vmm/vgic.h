@@ -27,7 +27,6 @@
 #ifndef _VMM_VGIC_H_
 #define	_VMM_VGIC_H_
 
-
 #include <sys/cdefs.h>
 #include <sys/param.h>
 #include <sys/systm.h>
