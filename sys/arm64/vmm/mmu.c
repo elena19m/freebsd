@@ -35,6 +35,7 @@
 #include <vm/vm_page.h>
 #include <vm/vm_param.h>
 #include <machine/vm.h>
+#include <machine/vm_param.h>
 
 #include "mmu.h"
 
@@ -48,9 +49,9 @@ hypmap_init(pmap_t map)
 }
 
 void
-hypmap_map(pmap_t map, vm_offset_t va_start, size_t len, vm_prot_t prot)
+hypmap_map(pmap_t map, vm_offset_t va, size_t len, vm_prot_t prot)
 {
-	vm_offset_t va_end;
+	vm_offset_t va_end, hypva;
 	vm_page_t dummy_page;
 
 	dummy_page = malloc(sizeof(*dummy_page), M_HYP, M_WAITOK | M_ZERO);
@@ -62,20 +63,20 @@ hypmap_map(pmap_t map, vm_offset_t va_start, size_t len, vm_prot_t prot)
 	 * addresses.The virtual addresses span contiguous virtual pages, but
 	 * they might not reside in contiguous physical pages.
 	 */
-	va_end = va_start + len - 1;
-	va_start = trunc_page(va_start);
-	while (va_start < va_end) {
-		dummy_page->phys_addr = vtophys(va_start);
-		pmap_enter(map, ktohyp(va_start), dummy_page,
-				prot, PMAP_ENTER_WIRED, 0);
-		va_start += PAGE_SIZE;
+	va_end = va + len - 1;
+	va = trunc_page(va);
+	while (va < va_end) {
+		dummy_page->phys_addr = vtophys(va);
+		hypva = (va >= VM_MIN_KERNEL_ADDRESS ? ktohyp(va) : va);
+		pmap_enter(map, hypva, dummy_page, prot, PMAP_ENTER_WIRED, 0);
+		va += PAGE_SIZE;
 	}
 
 	free(dummy_page, M_HYP);
 }
 
 void
-hypmap_map_identity(pmap_t map, vm_offset_t va_start, size_t len,
+hypmap_map_identity(pmap_t map, vm_offset_t va, size_t len,
 		vm_prot_t prot)
 {
 	vm_offset_t va_end;
@@ -90,40 +91,40 @@ hypmap_map_identity(pmap_t map, vm_offset_t va_start, size_t len,
 	 * not reside in contiguous physical pages. For each virtual page we
 	 * get the physical page address and use that for the mapping.
 	 */
-	va_end = va_start + len - 1;
-	va_start = trunc_page(va_start);
-	while (va_start < va_end) {
-		dummy_page->phys_addr = vtophys(va_start);
+	va_end = va + len - 1;
+	va = trunc_page(va);
+	while (va < va_end) {
+		dummy_page->phys_addr = vtophys(va);
 		pmap_enter(map, dummy_page->phys_addr, dummy_page,
 				prot, PMAP_ENTER_WIRED, 0);
-		va_start += PAGE_SIZE;
+		va += PAGE_SIZE;
 	}
 
 	free(dummy_page, M_HYP);
 }
 
 /*
- * Map "len" bytes starting at virtual address "va_start" to "len" bytes
- * starting at physical address "pa_start".
+ * Map "len" bytes starting at virtual address "va" to "len" bytes
+ * starting at physical address "pa".
  */
 void
-hypmap_set(pmap_t map, vm_offset_t va_start, vm_offset_t pa_start,
-		size_t len, vm_prot_t prot)
+hypmap_set(pmap_t map, vm_offset_t va, vm_offset_t pa, size_t len,
+		vm_prot_t prot)
 {
-	vm_offset_t va_end;
+	vm_offset_t va_end, hypva;
 	vm_page_t dummy_page;
 
 	dummy_page = malloc(sizeof(*dummy_page), M_HYP, M_WAITOK | M_ZERO);
 	dummy_page->oflags = VPO_UNMANAGED;
 	dummy_page->md.pv_memattr = VM_MEMATTR_DEFAULT;
 
-	va_end = va_start + len - 1;
-	va_start = trunc_page(va_start);
-	dummy_page->phys_addr = trunc_page(pa_start);
-	while (va_start < va_end) {
-		pmap_enter(map, ktohyp(va_start), dummy_page,
-				prot, PMAP_ENTER_WIRED, 0);
-		va_start += PAGE_SIZE;
+	va_end = va + len - 1;
+	va = trunc_page(va);
+	dummy_page->phys_addr = trunc_page(pa);
+	while (va < va_end) {
+		hypva = (va >= VM_MIN_KERNEL_ADDRESS ? ktohyp(va) : va);
+		pmap_enter(map, hypva, dummy_page, prot, PMAP_ENTER_WIRED, 0);
+		va += PAGE_SIZE;
 		dummy_page->phys_addr += PAGE_SIZE;
 	}
 
