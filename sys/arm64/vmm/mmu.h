@@ -80,12 +80,12 @@
 					HYP_KVA_OFFSET)
 
 void 		hypmap_init(pmap_t map);
-void 		hypmap_map(pmap_t map, vm_offset_t va_start, size_t len,
+void 		hypmap_map(pmap_t map, vm_offset_t va, size_t len,
 			vm_prot_t prot);
-void 		hypmap_map_identity(pmap_t map, vm_offset_t va_start,
+void 		hypmap_map_identity(pmap_t map, vm_offset_t va, size_t len,
+			vm_prot_t prot);
+void 		hypmap_set(pmap_t map, vm_offset_t va, vm_offset_t pa,
 			size_t len, vm_prot_t prot);
-void 		hypmap_set(pmap_t map, vm_offset_t va_start,
-			vm_offset_t pa_start, size_t len, vm_prot_t prot);
 vm_paddr_t 	hypmap_get(pmap_t map, vm_offset_t va);
 void 		hypmap_cleanup(pmap_t map);
 
