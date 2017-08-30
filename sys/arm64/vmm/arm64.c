@@ -45,10 +45,10 @@
 #include <machine/vmm.h>
 #include <machine/vmm_dev.h>
 #include <machine/atomic.h>
+#include <machine/hypervisor.h>
 
 #include "mmu.h"
 #include "arm64.h"
-#include "hyp.h"
 #include "vgic.h"
 #include "vtimer.h"
 
@@ -95,13 +95,12 @@ static void set_vttbr(struct hyp *hyp)
 	hyp->vmid_generation = vmid_generation;
 	mtx_unlock(&vmid_generation_mtx);
 out:
-	hyp->vttbr = build_vttbr((hyp->vmid_generation & VMID_GENERATION_MASK),
-			(uint64_t)hyp->stage2_pmap->pm_l0);
+	hyp->vttbr = build_vttbr(hyp->vmid_generation,
+			vtophys(hyp->stage2_map->pm_l0));
 }
 
 extern uint64_t hyp_debug1, hyp_debug2;
 extern char hyp_stub_vectors[];
-#include "hyp_assym.h"
 
 static int
 arm_init(int ipinum)
@@ -181,9 +180,28 @@ arm_init(int ipinum)
 	printf("hypctx.regs[3] = %lu\n", hypctx.regs.x[3]);
 	printf("hypctx.regs[4] = %lu\n", hypctx.regs.x[4]);
 
+	struct hyp *hyp;
+	hyp = malloc(sizeof(struct hyp), M_HYP, M_WAITOK | M_ZERO);
+	hyp->stage2_map = hyp_pmap;
+
 	printf("\n");
 	printf("vtophys(hyp_code_start) = 0x%016lx\n", vtophys(hyp_code_start));
-	printf("hyp_pmap_get(hyp_code_start) = 0x%016lx\n", hypmap_get(hyp_pmap, ktohyp(hyp_code_start)));
+	printf("hyp_pmap_get(hyp_code_start) = 0x%016lx\n", hypmap_get(hyp, ktohyp(hyp_code_start)));
+	printf("\n");
+
+	hyp = malloc(sizeof(struct hyp), M_HYP, M_WAITOK | M_ZERO);
+	hyp->stage2_map = malloc(sizeof(*hyp->stage2_map), M_HYP, M_WAITOK | M_ZERO);
+	hypmap_init(hyp->stage2_map);
+	set_vttbr(hyp);
+
+	printf("\n");
+	printf("vttbr = 0x%016lx\n", hyp->vttbr);
+	printf("pm_l0 = 0x%016lx\n", (uint64_t)vtophys(hyp->stage2_map->pm_l0));
+
+	set_vttbr(hyp);
+	printf("\n");
+	printf("again, vttbr = 0x%016lx\n", hyp->vttbr);
+	printf("pm_l0 = 0x%016lx\n", (uint64_t)vtophys(hyp->stage2_map->pm_l0));
 	printf("\n");
 
 	/* Initialize VGIC infrastructure */
@@ -210,7 +228,8 @@ arm_cleanup(void)
 	 *
 	 * b. The instruction addresses are fetched using the old translation
 	 * tables. This will work because we have an identity mapping in place
-	 * in the translation tables.
+	 * in the translation tables and vmm_cleanup() is called by its physical
+	 * address.
 	 */
 	vmm_call_hyp((void *)vtophys(vmm_cleanup), vtophys(hyp_stub_vectors));
 
@@ -224,73 +243,56 @@ arm_cleanup(void)
 	return 0;
 }
 
-static void
-arm_restore(void)
-{
-
-	;
-}
-
 static void *
-arm_vminit(struct vm *vm, pmap_t pmap)
+arm_vminit(struct vm *vm)
 {
 	struct hyp *hyp;
 	struct hypctx *hypctx;
 	int i;
 
 	hyp = malloc(sizeof(struct hyp), M_HYP, M_WAITOK | M_ZERO);
-	if ((uintptr_t)hyp & PAGE_MASK) {
-		panic("malloc of struct hyp not aligned on %d byte boundary",
-		      PAGE_SIZE);
-	}
 	hyp->vm = vm;
-
 	hyp->vgic_attached = false;
 
-	mtx_init(&hyp->vgic_distributor.distributor_lock, "Distributor Lock", "", MTX_SPIN);
-
-	/* TODO: properly create a stage 2 mapping */
-	hyp->stage2_pmap = malloc(sizeof(*hyp->stage2_pmap), M_HYP, M_WAITOK | M_ZERO);
+	hyp->stage2_map = malloc(sizeof(*hyp->stage2_map), M_HYP,
+			M_WAITOK | M_ZERO);
+	hypmap_init(hyp->stage2_map);
 	set_vttbr(hyp);
+
+	mtx_init(&hyp->vgic_distributor.distributor_lock, "Distributor Lock",
+			"", MTX_SPIN);
 
 	for (i = 0; i < VM_MAXCPU; i++) {
 		hypctx = &hyp->ctx[i];
 		hypctx->vcpu = i;
 		hypctx->hyp = hyp;
-#if 0
-		hypctx->hcr = HCR_GUEST_MASK & ~HCR_TSW & ~HCR_TAC;
+		/* The VM will see the same CPU ID as the host */
+		hypctx->vpidr_el2 = get_midr();
 		/*
-		 * TODO - cpu_ident not implemented.
+		 * Set the Hypervisor Configuration Register:
+		 *
+		 * HCR_RW: use AArch64 for EL1
+		 * HCR_HCD: disable the HVC instruction from EL1
+		 * HCR_TSC: trap SMC (Secure Monitor Call) from EL1
+		 * HCR_BSU_IS: barrier instructions apply to the inner shareable
+		 * domain
+		 * HCR_AMO: route physical SError interrupts to EL2
+		 * HCR_IMO: route physical IRQ interrupts to EL2
+		 * HCR_FMO: route physical FIQ interrupts to EL2
+		 * HCR_VM: use stage 2 translation
 		 */
-		/*
-		hypctx->midr = cpu_ident();
-		*/
-		hypctx->midr = 0;
-		/*
-		 * TODO - cp15_mpidr_get() not implemented.
-		 */
-		/*
-		hypctx->mpidr = (cp15_mpidr_get() & MPIDR_SMP_MASK) |
-		    MPIDR_AFF1_LEVEL(i) |
-		    MPIDR_AFF0_LEVEL(i);
-		    */
-		hypctx->mpidr = 0;
-		/*
-		 * TODO - regs.r_cpsr does not exists on arm64.
-		 */
-		//hypctx->regs.r_cpsr = PSR_SVC32_MODE | PSR_A | PSR_I | PSR_F;
-#endif
+		hypctx->hcr_el2 = HCR_RW | HCR_HCD | HCR_TSC | HCR_BSU_IS | \
+				 HCR_AMO | HCR_IMO | HCR_FMO | HCR_VM;
+		/* The VM will detect a uniprocessor system */
+		hypctx->vmpidr_el2 = get_mpidr();
+		hypctx->vmpidr_el2 |= VMPIDR_EL2_U;
 		hypctx->regs.spsr = 0;
+
 		vtimer_cpu_init(hypctx);
 	}
 
-	/*
-	lpae_vmmmap_set(NULL,
-	    (lpae_vm_vaddr_t)hyp,
-	    (lpae_vm_paddr_t)vtophys(hyp),
-	    sizeof(struct hyp),
-	    VM_PROT_READ | VM_PROT_WRITE);
-	    */
+	hypmap_map(hyp_pmap, (vm_offset_t)hyp, sizeof(struct hyp),
+			VM_PROT_READ | VM_PROT_WRITE);
 
 	vtimer_init(hyp);
 
@@ -379,10 +381,11 @@ get_vm_reg_name(uint32_t reg_nr, uint32_t mode __attribute__((unused)))
 static int hyp_handle_exception(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 {
 	int handled;
-	int hsr_ec, hsr_il, hsr_iss;
-	struct hypctx *hypctx = &hyp->ctx[vcpu];
+	//int hsr_ec, hsr_il, hsr_iss;
+	//struct hypctx *hypctx = &hyp->ctx[vcpu];
 
 	handled = UNHANDLED;
+#if 0
 	hsr_ec = HSR_EC(vmexit->u.hyp.hsr);
 	hsr_il = HSR_IL(vmexit->u.hyp.hsr);
 	hsr_iss = HSR_ISS(vmexit->u.hyp.hsr);
@@ -480,6 +483,7 @@ static int hyp_handle_exception(struct hyp *hyp, int vcpu, struct vm_exit *vmexi
 			printf("%s:%d Unknown HSR_EC code: %x\n",__func__, __LINE__, hsr_ec);
 			break;
 	}
+#endif
 	return handled;
 }
 
@@ -493,6 +497,7 @@ hyp_exit_process(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 
 	handled = UNHANDLED;
 
+#if 0
 	vmexit->exitcode = VM_EXITCODE_BOGUS;
 
 	switch(vmexit->u.hyp.exception_nr) {
@@ -519,6 +524,7 @@ hyp_exit_process(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 		vmexit->exitcode = VM_EXITCODE_HYP;
 		break;
 	}
+#endif
 	return (handled);
 }
 
@@ -726,6 +732,12 @@ arm_setreg(void *arg, int vcpu, int reg, uint64_t val)
 		return (0);
 	} else
 		return (EINVAL);
+}
+
+static
+void arm_restore(void)
+{
+	;
 }
 
 struct vmm_ops vmm_ops_arm = {

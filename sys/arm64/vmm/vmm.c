@@ -51,9 +51,9 @@
 #include <machine/cpu.h>
 #include <machine/vm.h>
 #include <machine/pcb.h>
+#include <machine/param.h>
 #include <machine/smp.h>
 #include <machine/vmparam.h>
-
 #include <machine/vmm.h>
 #include <machine/vmm_dev.h>
 
@@ -63,7 +63,7 @@
 #include "arm64.h"
 #include "vgic.h"
 
-extern uint64_t hypmode_enabled;
+#define	BSP	0			/* the boostrap processor */
 
 struct vcpu {
 	int		flags;
@@ -85,18 +85,17 @@ struct vcpu {
 struct mem_seg {
 	uint64_t	gpa;
 	size_t		len;
-	boolean_t	wired;
+	bool		wired;
 	vm_object_t	object;
 };
 #define	VM_MAX_MEMORY_SEGMENTS	2
 
 struct vm {
-	void		*cookie;	/* processor-specific data */
+	void		*cookie;
 	struct vcpu	vcpu[VM_MAXCPU];
 	int		num_mem_segs;
 	struct vm_memory_segment mem_segs[VM_MAX_MEMORY_SEGMENTS];
 	char		name[VM_MAX_NAMELEN];
-
 	/*
 	 * Set of active vcpus.
 	 * An active vcpu is one that has been started implicitly (BSP) or
@@ -105,19 +104,22 @@ struct vm {
 	cpuset_t	active_cpus;
 };
 
-static bool vmm_initialized;
+extern uint64_t hypmode_enabled;
 
-static struct vmm_ops *ops;
+static bool vmm_initialized = false;
+
+static struct vmm_ops *ops = NULL;
+
 #define	VMM_INIT(num)	(ops != NULL ? (*ops->init)(num) : 0)
 #define	VMM_CLEANUP()	(ops != NULL ? (*ops->cleanup)() : 0)
 
-#define	VMINIT(vm) (ops != NULL ? (*ops->vminit)(vm, NULL): NULL)
+#define	VMINIT(vm) (ops != NULL ? (*ops->vminit)(vm): NULL)
 #define	VMRUN(vmi, vcpu, pc, pmap, rptr, sptr) \
 	(ops != NULL ? (*ops->vmrun)(vmi, vcpu, pc, pmap, rptr, sptr) : ENXIO)
 #define	VMCLEANUP(vmi)	(ops != NULL ? (*ops->vmcleanup)(vmi) : NULL)
-#define	VMMMAP_SET(vmi, gpa, hpa, len, prot)				\
+#define	VMMMAP_SET(vmi, ipa, pa, len, prot)				\
     	(ops != NULL ? 							\
-    	(*ops->vmmapset)(vmi, gpa, hpa, len, prot) : ENXIO)
+    	(*ops->vmmapset)(vmi, ipa, pa, len, prot) : ENXIO)
 #define	VMMMAP_GET(vmi, gpa) \
 	(ops != NULL ? (*ops->vmmapget)(vmi, gpa) : ENXIO)
 #define	VMGETREG(vmi, vcpu, num, retval)		\
@@ -135,7 +137,7 @@ static struct vmm_ops *ops;
 static int vm_handle_wfi(struct vm *vm, int vcpuid,
 			 struct vm_exit *vme, bool *retu);
 
-static MALLOC_DEFINE(M_VM, "vm", "vm");
+static MALLOC_DEFINE(M_VMM, "vmm", "vmm");
 
 /* statistics */
 static VMM_STAT(VCPU_TOTAL_RUNTIME, "vcpu total runtime");
@@ -164,8 +166,8 @@ static void
 vcpu_cleanup(struct vm *vm, int i, bool destroy)
 {
 //	struct vcpu *vcpu = &vm->vcpu[i];
-
 }
+
 static void
 vcpu_init(struct vm *vm, uint32_t vcpu_id)
 {
@@ -198,8 +200,6 @@ vmm_init(void)
 
 	return (VMM_INIT(0));
 }
-
-extern uint64_t hyp_stub_vectors[];
 
 static int
 vmm_handler(module_t mod, int what, void *arg)
@@ -250,11 +250,8 @@ MODULE_VERSION(vmm, 1);
 int
 vm_create(const char *name, struct vm **retvm)
 {
-	int i;
 	struct vm *vm;
-	uint64_t maxaddr;
-
-	const int BSP = 0;
+	int i;
 
 	/*
 	 * If vmm.ko could not be successfully initialized then don't attempt
@@ -266,19 +263,18 @@ vm_create(const char *name, struct vm **retvm)
 	if (name == NULL || strlen(name) >= VM_MAX_NAMELEN)
 		return (EINVAL);
 
-	vm = malloc(sizeof(struct vm), M_VM, M_WAITOK | M_ZERO);
+	vm = malloc(sizeof(struct vm), M_VMM, M_WAITOK | M_ZERO);
 	strcpy(vm->name, name);
 	vm->cookie = VMINIT(vm);
 
+#if 0
 	/* TEMP - PL804 timer mapping */
-	VMMMAP_SET(vm->cookie, 0x1c110000, 0x1c110000, PAGE_SIZE,
-				   VM_PROT_ALL);
+	VMMMAP_SET(vm->cookie, 0x1c110000, 0x1c110000, PAGE_SIZE, VM_PROT_ALL);
+#endif
 
-	for (i = 0; i < VM_MAXCPU; i++) {
+	for (i = 0; i < VM_MAXCPU; i++)
 		vcpu_init(vm, i);
-	}
 
-	maxaddr = vmm_mem_maxaddr();
 	vm_activate_cpu(vm, BSP);
 
 	*retvm = vm;
@@ -295,7 +291,7 @@ void
 vm_destroy(struct vm *vm)
 {
 	vm_cleanup(vm, true);
-	free(vm, M_VM);
+	free(vm, M_VMM);
 }
 
 const char *
@@ -463,7 +459,7 @@ vcpu_set_state_locked(struct vcpu *vcpu, enum vcpu_state newstate,
 
 int
 vcpu_set_state(struct vm *vm, int vcpuid, enum vcpu_state newstate,
-    bool from_idle)
+		bool from_idle)
 {
 	int error;
 	struct vcpu *vcpu;
@@ -505,7 +501,7 @@ vm_gpa2hpa(struct vm *vm, uint64_t gpa, size_t len)
 {
 	uint64_t nextpage;
 
-	nextpage = rounddown(gpa + PAGE_SIZE, PAGE_SIZE);
+	nextpage = trunc_page(gpa + PAGE_SIZE);
 	if (len > nextpage - gpa)
 		panic("vm_gpa2hpa: invalid gpa/len: 0x%016lx/%zu", gpa, len);
 
@@ -551,7 +547,7 @@ vm_set_register(struct vm *vm, int vcpuid, int reg, uint64_t val)
 
 	if (reg >= VM_REG_LAST)
 		return (EINVAL);
-	error = (VMSETREG(vm->cookie, vcpuid, reg, val));
+	error = VMSETREG(vm->cookie, vcpuid, reg, val);
 	if (error)
 		return (error);
 
@@ -589,85 +585,84 @@ vm_free_mem_seg(struct vm *vm, struct vm_memory_segment *seg)
 	bzero(seg, sizeof(struct vm_memory_segment));
 }
 
-
 /*
- * Returns TRUE if 'gpa' is available for allocation and FALSE otherwise
+ * Return true if 'gpa' is available for allocation, false otherwise
  */
-static boolean_t
-vm_gpa_available(struct vm *vm, uint64_t gpa)
+static bool
+vm_ipa_available(struct vm *vm, uint64_t ipa)
 {
+	uint64_t ipabase, ipalimit;
 	int i;
-	uint64_t gpabase, gpalimit;
 
-	if (gpa & PAGE_MASK)
-		panic("vm_gpa_available: gpa (0x%016lx) not page aligned", gpa);
+	if (!page_aligned(ipa))
+		panic("vm_ipa_available: ipa (0x%016lx) not page aligned", ipa);
 
 	for (i = 0; i < vm->num_mem_segs; i++) {
-		gpabase = vm->mem_segs[i].gpa;
-		gpalimit = gpabase + vm->mem_segs[i].len;
-		if (gpa >= gpabase && gpa < gpalimit)
-			return (FALSE);
+		ipabase = vm->mem_segs[i].gpa;
+		ipalimit = ipabase + vm->mem_segs[i].len;
+		if (ipa >= ipabase && ipa < ipalimit)
+			return (false);
 	}
 
-	return (TRUE);
+	return (true);
 }
 
+/*
+ * Allocate 'len' bytes for the virtual machine starting at address 'ipa'
+ */
 int
-vm_malloc(struct vm *vm, uint64_t gpa, size_t len)
+vm_malloc(struct vm *vm, uint64_t ipa, size_t len)
 {
-	int error, available, allocated;
 	struct vm_memory_segment *seg;
-	uint64_t g, hpa;
+	int error, available, allocated;
+	uint64_t ipa2;
+	vm_paddr_t pa;
 
-	if ((gpa & PAGE_MASK) || (len & PAGE_MASK) || len == 0)
+	if (!page_aligned(ipa) != 0 || !page_aligned(len) || len == 0)
 		return (EINVAL);
 
 	available = allocated = 0;
-	g = gpa;
-	while (g < gpa + len) {
-		if (vm_gpa_available(vm, g))
+	ipa2 = ipa;
+	while (ipa2 < ipa + len) {
+		if (vm_ipa_available(vm, ipa2))
 			available++;
 		else
 			allocated++;
-
-		g += PAGE_SIZE;
+		ipa2 += PAGE_SIZE;
 	}
 
 	/*
 	 * If there are some allocated and some available pages in the address
 	 * range then it is an error.
 	 */
-	if (allocated && available)
+	if (allocated != 0  && available != 0)
 		return (EINVAL);
 
 	/*
 	 * If the entire address range being requested has already been
 	 * allocated then there isn't anything more to do.
 	 */
-	if (allocated && available == 0)
+	if (allocated != 0 && available == 0)
 		return (0);
 
-	if (vm->num_mem_segs >= VM_MAX_MEMORY_SEGMENTS)
+	if (vm->num_mem_segs == VM_MAX_MEMORY_SEGMENTS)
 		return (E2BIG);
 
 	seg = &vm->mem_segs[vm->num_mem_segs];
-
 	error = 0;
-	seg->gpa = gpa;
+	seg->gpa = ipa;
 	seg->len = 0;
 	while (seg->len < len) {
-		hpa = vmm_mem_alloc(PAGE_SIZE);
-		if (hpa == 0) {
+		pa = vmm_mem_alloc(PAGE_SIZE);
+		if (pa == 0) {
 			error = ENOMEM;
 			break;
 		}
-
-		VMMMAP_SET(vm->cookie, gpa + seg->len, hpa, PAGE_SIZE,
-				   VM_PROT_ALL);
+		VMMMAP_SET(vm->cookie, ipa, pa, PAGE_SIZE, VM_PROT_ALL);
 
 		seg->len += PAGE_SIZE;
+		ipa += PAGE_SIZE;
 	}
-
 	vm->num_mem_segs++;
 
 	return (0);

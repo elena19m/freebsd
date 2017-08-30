@@ -32,6 +32,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <libgen.h>
 #include <unistd.h>
 #include <assert.h>
@@ -107,7 +108,7 @@ void *
 paddr_guest2host(struct vmctx *ctx, uintptr_t gaddr, size_t len)
 {
 
-	return (vm_map_gpa(ctx, gaddr, len));
+	return (vm_map_ipa(ctx, gaddr, len));
 }
 
 static void *
@@ -292,19 +293,20 @@ num_vcpus_allowed(struct vmctx *ctx)
 int
 main(int argc, char *argv[])
 {
-	int c, error, bvmcons;
+	int c, error;
+	bool bvmcons;
 	int max_vcpus;
 	struct vmctx *ctx;
 	uint64_t pc;
 
-	bvmcons = 0;
+	bvmcons = false;
 	progname = basename(argv[0]);
 	guest_ncpus = 1;
 
 	while ((c = getopt(argc, argv, "abehAHIPp:g:c:s:S:m:")) != -1) {
 		switch (c) {
 		case 'b':
-			bvmcons = 1;
+			bvmcons = true;
 			break;
 		case 'p':
 			pincpu = atoi(optarg);
@@ -344,7 +346,7 @@ main(int argc, char *argv[])
 	if (bvmcons)
 		init_bvmcons();
 
-	error = vm_get_register(ctx, BSP, VM_REG_GUEST_PC, &pc);
+	error = vm_get_register(ctx, BSP, VM_REG_GUEST_ELR, &pc);
 	assert(error == 0);
 	/*
 	 * Add CPU 0

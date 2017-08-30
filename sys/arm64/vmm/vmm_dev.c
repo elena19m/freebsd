@@ -25,7 +25,6 @@
  */
 
 #include <sys/cdefs.h>
-
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/queue.h>
@@ -153,8 +152,11 @@ vmmdev_ioctl(struct cdev *cdev, u_long cmd, caddr_t data, int fflag,
 		}
 
 		if (error) {
-			while (--vcpu >= 0)
+			vcpu--;
+			while (vcpu >= 0) {
 				vcpu_set_state(sc->vm, vcpu, VCPU_IDLE, false);
+				vcpu--;
+			}
 			goto done;
 		}
 
@@ -225,8 +227,8 @@ vmmdev_mmap(struct cdev *cdev, vm_ooffset_t offset, vm_paddr_t *paddr,
 	mtx_lock(&vmmdev_mtx);
 
 	sc = vmmdev_lookup2(cdev);
-	if (sc != NULL && (nprot & PROT_EXEC) == 0) {
-		*paddr = (vm_paddr_t) vm_gpa2hpa(sc->vm, (vm_paddr_t)offset, PAGE_SIZE);
+	if (sc != NULL && !(nprot & PROT_EXEC)) {
+		*paddr = (vm_paddr_t)vm_gpa2hpa(sc->vm, (vm_paddr_t)offset, PAGE_SIZE);
 		if (*paddr != (vm_paddr_t)-1)
 			error = 0;
 	}
@@ -282,7 +284,7 @@ sysctl_vmm_destroy(SYSCTL_HANDLER_ARGS)
 	 * goes down to 0 so we should not do it again in the callback.
 	 */
 	cdev = sc->cdev;
-	sc->cdev = NULL;		
+	sc->cdev = NULL;
 	mtx_unlock(&vmmdev_mtx);
 
 	/*

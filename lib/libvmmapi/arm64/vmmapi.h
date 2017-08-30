@@ -48,7 +48,7 @@ struct vmctx *vm_open(const char *name);
 void	vm_destroy(struct vmctx *ctx);
 int	vm_get_memory_seg(struct vmctx *ctx, uint64_t gpa, size_t *ret_len);
 int	vm_setup_memory(struct vmctx *ctx, uint64_t membase, size_t len, enum vm_mmap_style s);
-void	*vm_map_gpa(struct vmctx *ctx, uint64_t gaddr, size_t len);
+void	*vm_map_ipa(struct vmctx *ctx, uint64_t gaddr, size_t len);
 uint32_t vm_get_mem_limit(struct vmctx *ctx);
 void	vm_set_mem_limit(struct vmctx *ctx, uint32_t limit);
 int	vm_set_register(struct vmctx *ctx, int vcpu, int reg, uint64_t val);
