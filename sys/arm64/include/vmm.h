@@ -30,8 +30,9 @@
 #include <sys/param.h>
 #include <vm/vm.h>
 #include <vm/pmap.h>
-#include <pte.h>
-#include <pmap.h>
+
+#include "pte.h"
+#include "pmap.h"
 
 enum vm_suspend_how {
 	VM_SUSPEND_NONE,
@@ -75,7 +76,7 @@ enum vm_reg_name {
 	VM_REG_GUEST_X26,
 	VM_REG_GUEST_X27,
 	VM_REG_GUEST_X28,
-	VM_REG_GUEST_X29,	/* Frame Pointer */
+	VM_REG_GUEST_X29,
 	VM_REG_GUEST_LR,
 	VM_REG_GUEST_SP,
 	VM_REG_GUEST_ELR,
@@ -109,16 +110,15 @@ struct hypctx;
 typedef int	(*vmm_init_func_t)(int ipinum);
 typedef int	(*vmm_cleanup_func_t)(void);
 typedef void	(*vmm_resume_func_t)(void);
-typedef void *	(*vmi_init_func_t)(struct vm *vm, struct pmap *pmap);
+typedef void *	(*vmi_init_func_t)(struct vm *vm);
 typedef int	(*vmi_run_func_t)(void *vmi, int vcpu, register_t rip,
 				  struct pmap *pmap, void *rendezvous_cookie,
 				  void *suspend_cookie);
 typedef void	(*vmi_cleanup_func_t)(void *vmi);
-typedef void	(*vmi_mmap_set_func_t)(pmap_t pmap, vm_offset_t va_start,
-				       vm_offset_t pa_start, size_t len,
+typedef void	(*vmi_mmap_set_func_t)(void *arg, vm_offset_t va,
+				       vm_offset_t pa, size_t len,
 				       vm_prot_t prot);
-typedef vm_paddr_t (*vmi_mmap_get_func_t)(pmap_t pmap, vm_offset_t va);
-
+typedef vm_paddr_t (*vmi_mmap_get_func_t)(void *arg, vm_offset_t va);
 typedef int	(*vmi_get_register_t)(void *vmi, int vcpu, int num,
 				      uint64_t *retval);
 typedef int	(*vmi_set_register_t)(void *vmi, int vcpu, int num,
@@ -131,11 +131,12 @@ typedef struct vlapic * (*vmi_vlapic_init)(void *vmi, int vcpu);
 typedef void	(*vmi_vlapic_cleanup)(void *vmi, struct vlapic *vlapic);
 
 struct vmm_ops {
-	vmm_init_func_t		init;		/* module wide initialization */
+	/* Module-wide functions */
+	vmm_init_func_t		init;
 	vmm_cleanup_func_t	cleanup;
 	vmm_resume_func_t	resume;
-
-	vmi_init_func_t		vminit;		/* vm-specific initialization */
+	/* VM specific functions */
+	vmi_init_func_t		vminit;
 	vmi_run_func_t		vmrun;
 	vmi_cleanup_func_t	vmcleanup;
 	vmi_mmap_set_func_t	vmmapset;
@@ -276,9 +277,9 @@ struct vm_copyinfo {
 };
 
 int vcpu_trace_exceptions(struct vm *vm, int vcpuid);
-#endif	/* KERNEL */
+#endif	/* _KERNEL */
 
-#define	VM_MAXCPU	16			/* maximum virtual cpus */
+#define	VM_MAXCPU	1
 
 struct vie {
 	uint8_t access_size:4, sign_extend:1, dir:1, unused:2;

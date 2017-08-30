@@ -21,13 +21,13 @@
 #define	GB	(1024 * 1024 * 1024UL)
 
 struct vmctx {
-	int	fd;
-	uint32_t mem_limit;
+	int		fd;
+	uint32_t 	mem_limit;
 	enum vm_mmap_style vms;
-	size_t	mem_size;
-	uint64_t mem_base;
-	char	*mem_addr;
-	char	*name;
+	size_t		mem_size;
+	uint64_t 	mem_base;
+	char		*mem_addr;
+	char		*name;
 };
 
 #define	CREATE(x)  sysctlbyname("hw.vmm.create", NULL, NULL, (x), strlen((x)))
@@ -166,13 +166,13 @@ vm_setup_memory(struct vmctx *ctx, uint64_t membase, size_t memsize, enum vm_mma
 }
 
 void *
-vm_map_gpa(struct vmctx *ctx, uint64_t gaddr, size_t len)
+vm_map_ipa(struct vmctx *ctx, uint64_t iaddr, size_t len)
 {
 
 	/* XXX VM_MMAP_SPARSE not implemented yet */
 	assert(ctx->vms == VM_MMAP_ALL);
 
-	return ((void *)(ctx->mem_addr + gaddr));
+	return ((void *)(ctx->mem_addr + iaddr));
 }
 
 
@@ -337,5 +337,4 @@ vm_attach_vgic(struct vmctx *ctx, uint64_t distributor_paddr, uint64_t cpu_int_p
 
 	return (ioctl(ctx->fd, VM_ATTACH_VGIC, &vav));
 }
-
 

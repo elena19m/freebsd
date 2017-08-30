@@ -79,14 +79,16 @@
 #define ktohyp(kva)		(((vm_offset_t)(kva) & HYP_KVA_MASK) | \
 					HYP_KVA_OFFSET)
 
+#define page_aligned(x)		(((vm_offset_t)(x) & PAGE_MASK) == 0)
+
 void 		hypmap_init(pmap_t map);
 void 		hypmap_map(pmap_t map, vm_offset_t va, size_t len,
 			vm_prot_t prot);
 void 		hypmap_map_identity(pmap_t map, vm_offset_t va, size_t len,
 			vm_prot_t prot);
-void 		hypmap_set(pmap_t map, vm_offset_t va, vm_offset_t pa,
+void 		hypmap_set(void *arg, vm_offset_t va, vm_offset_t pa,
 			size_t len, vm_prot_t prot);
-vm_paddr_t 	hypmap_get(pmap_t map, vm_offset_t va);
+vm_paddr_t 	hypmap_get(void *arg, vm_offset_t va);
 void 		hypmap_cleanup(pmap_t map);
 
 #endif

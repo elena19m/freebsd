@@ -59,7 +59,6 @@
 static char *vmname, *progname;
 static struct vmctx *ctx;
 
-
 /*
  * Guest virtual machinee
  */
@@ -67,7 +66,7 @@ static int
 guest_copyin(const void *from, uint64_t to, size_t size)
 {
 	char *ptr;
-	ptr = vm_map_gpa(ctx, to, size);
+	ptr = vm_map_ipa(ctx, to, size);
 	if (ptr == NULL)
 		return (EFAULT);
 
@@ -80,7 +79,7 @@ guest_copyout(uint64_t from, void *to, size_t size)
 {
 	char *ptr;
 
-	ptr = vm_map_gpa(ctx, from, size);
+	ptr = vm_map_ipa(ctx, from, size);
 	if (ptr == NULL)
 		return (EFAULT);
 
@@ -102,7 +101,6 @@ guest_setreg(enum vm_reg_name vmreg, uint64_t v)
 static void
 usage(void)
 {
-
 	fprintf(stderr,
 	    "usage: %s [-k <kernel-image>] -l <kernel-load-address>, -b <memory-base-address>\n"
 	    "       %*s [-m mem-size] [-p periphbase] <vmname>\n",
@@ -126,9 +124,9 @@ main(int argc, char** argv)
 	progname = basename(argv[0]);
 
 	mem_size = 128 * MB;
-	kernel_load_address = 0xc0000000;
-	memory_base_address = 0xc0000000;
-	periphbase = 0x2c000000;
+	kernel_load_address = 0xc0000000UL;
+	memory_base_address = 0xc0000000UL;
+	periphbase = 0x2c000000UL;
 	strncpy(kernel_image_name, "kernel.bin", KERNEL_IMAGE_NAME_LEN);
 
 	while ((opt = getopt(argc, argv, "k:l:b:m:p")) != -1) {
@@ -196,7 +194,7 @@ main(int argc, char** argv)
 		exit(1);
 	}
 
-	if (guest_copyin(addr, kernel_load_address - memory_base_address, st.st_size)) {
+	if (guest_copyin(addr, kernel_load_address - memory_base_address, st.st_size) != 0) {
 		perror("guest_copyin");
 		exit(1);
 	}
@@ -206,6 +204,6 @@ main(int argc, char** argv)
 	}
 	munmap(addr, st.st_size);
 
-	guest_setreg(VM_REG_GUEST_PC, kernel_load_address);
+	guest_setreg(VM_REG_GUEST_ELR, kernel_load_address);
 	return 0;
 }

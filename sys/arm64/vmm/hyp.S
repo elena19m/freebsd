@@ -29,19 +29,13 @@
 
 #include "assym.s"
 #include <sys/syscall.h>
-#include <machine/asm.h>
 #include <machine/armreg.h>
+#include <machine/asm.h>
 #include <machine/hypervisor.h>
 #include <arm/arm/gic_common.h>
 
 #include "hyp_assym.h"
 #include "hyp_macros.h"
-
-/*
- * TODO
- * hypervisor.h might replace hyp.h
- *  #include "hyp.h"
- */
 
 	.text
 
@@ -53,11 +47,10 @@
 hyp_code_start:
 
 	.align 3
+
 	.globl _C_LABEL(hyp_debug1)
 _C_LABEL(hyp_debug1):
 	.zero 8
-
-	.align 3
 	.globl _C_LABEL(hyp_debug2)
 _C_LABEL(hyp_debug2):
 	.zero 8
@@ -103,7 +96,7 @@ hyp_init_vectors:
 
 /*
  * Initialize the hypervisor mode with a new exception vector table, translation
- * tables and stack.
+ * table and stack.
  *
  * Expecting:
  * x0 - the hypervisor exception vectors
@@ -159,29 +152,16 @@ ENTRY(handle_hyp_init)
 END(handle_hyp_init)
 
 	.align 3
+
 tcr:
 	/* 48 bits physical addresses */
 	.quad (TCR_EL2_RES1 | TCR_EL2_PS_48BITS)
-
 sctlr_el2_set:
 	/* Bits to set */
-	.quad (SCTLR_EL2_M | SCTLR_EL2_C | SCTLR_EL2_SA | SCTLR_I)
-
+	.quad (SCTLR_EL2_M | SCTLR_EL2_C | SCTLR_EL2_SA | SCTLR_EL2_I)
 sctlr_el2_clear:
 	/* Bits to clear */
 	.quad (SCTLR_EL2_WXN | SCTLR_EL2_A)
-
-hcr_el2_set:
-	/* Bits to set */
-	.quad (HCR_ID | HCR_CD)
-
-hcr_el2_clear:
-	/* Bits to clear */
-	.quad (HCR_TRVM | HCR_HCD | HCR_TDZ | HCR_TGE | HCR_TVM | HCR_TTLB | \
-		HCR_TPU | HCR_TPCP | HCR_TSW | HCR_TACR | HCR_TIDCP | \
-		HCR_TSC | HCR_TID3 | HCR_TID2 | HCR_TID1 | HCR_TID0 | \
-		HCR_TWE | HCR_TWI | HCR_AMO | HCR_IMO | HCR_FMO | HCR_PTW | \
-		HCR_VM)
 
 	.align 11
 
