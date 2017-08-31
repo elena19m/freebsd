@@ -188,6 +188,11 @@ main(int argc, char** argv)
 		exit(1);
 	}
 
+	if (st.st_size > mem_size) {
+		fprintf(stderr, "Kernel image larger than memory size\n");
+		exit(1);
+	}
+
 	addr = mmap(NULL, st.st_size, PROT_READ, MAP_SHARED, kernel_image_fd, 0);
 	if (addr == MAP_FAILED) {
 		perror("mmap kernel_image_fd");
