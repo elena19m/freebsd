@@ -18,6 +18,9 @@ __FBSDID("$FreeBSD$");
 #define	MMIO_EMUL_MEMBASE	0xD000000000UL
 #define	MMIO_EMUL_MEMLIMIT	0xFD00000000UL
 #define	MEM_ROUNDUP		(1 << 20)
+#ifndef max
+# define max(A, B) ((A) > (B) ? (A) : (B))
+#endif
 
 static uint64_t mmio_emul_membase;
 
@@ -28,8 +31,8 @@ static void mmio_lintr_route(struct mmio_devinst *mi);
 static void mmio_lintr_update(struct mmio_devinst *mi);
 
 static struct mmio_info {
-	size_t size;			/* address size */
-	uintptr_t baddr;		/* address */
+	uint64_t size;			/* address size */
+	uint64_t baddr;			/* address */
 	char *name;			/* device name */
 	char *arg;			/* device arguments */
 	struct mmio_info *next;		/* pointer for linked list */
@@ -56,7 +59,7 @@ static struct mmio_info {
 static void
 mmio_parse_opts_usage(const char *args)
 {
-	fprintf(stderr, "Invalid MMIO arguments \"%s\"\n", args);
+	fprintf(stderr, "Invalid MMIO arguments \"%s\"\r\n", args);
 }
 
 /*
@@ -64,7 +67,7 @@ mmio_parse_opts_usage(const char *args)
  * checks are not required if one of the pointers is null
  */
 static int
-mmio_mem_available(uintptr_t pa, size_t sa, uintptr_t pb, size_t sb)
+mmio_mem_available(uint64_t pa, uint64_t sa, uint64_t pb, uint64_t sb)
 {
 #define IN_INTERVAL(lower, value, upper)	\
 	(((lower) < (value)) && ((value) < (upper)))
@@ -85,8 +88,7 @@ int
 mmio_parse_opts(const char *args)
 {
 	char *emul, *config, *str;
-	size_t size;
-	uintptr_t baddr;
+	uint64_t size, baddr;
 	int error;
 	struct mmio_info *mmi;
 
@@ -99,9 +101,11 @@ mmio_parse_opts(const char *args)
 		*emul++ = '\0';
 
 		/* <size>@<base-addr> */
-		if (sscanf(str, "%u@%d", &size, &baddr) != 2) {
+		if (sscanf(str, "%llx@%llx", &size, &baddr) != 2 &&
+		    sscanf(str, "%llu@%llu", &size, &baddr) != 2) {
 			/* <size> */
-			if (sscanf(str, "%u", &size) != 1) {
+			if (sscanf(str, "%llx", &size) != 1 &&
+			    sscanf(str, "%llu", &size) != 1) {
 				mmio_parse_opts_usage(str);
 				goto parse_error;
 			}
@@ -126,8 +130,8 @@ mmio_parse_opts(const char *args)
 				break;
 
 		if (mmi != NULL) {
-			fprintf(stderr, "The requested address 0x%u is "
-				"already bound or overlapping\n", baddr);
+			fprintf(stderr, "The requested address 0x%llx is "
+				"already bound or overlapping\r\n", baddr);
 			goto parse_error;
 		}
 	}
@@ -249,15 +253,16 @@ mmio_emul_alloc_resource(uint64_t *baseptr, uint64_t limit, uint64_t size,
 }
 
 int
-mmio_emul_alloc_mem(struct mmio_devinst *mi, uint64_t size)
+mmio_emul_alloc_mem(struct mmio_devinst *mi)
 {
 	int error;
-	uint64_t *baseptr, limit, addr, mask;
+	uint64_t *baseptr, limit, addr, mask, size;
 
 	if ((size & (size - 1)) != 0)
 		size = 1UL << flsl(size); /* round up to a power of 2 */
 
-	baseptr = &mmio_emul_membase;
+	baseptr = &mi->addr.baddr;
+	size = mi->addr.size;
 	limit = MMIO_EMUL_MEMLIMIT;
 	/* XXX: a define for this might be useful.
 	 * Value basen on PCIM_BAR_MEM_BASE
@@ -269,7 +274,6 @@ mmio_emul_alloc_mem(struct mmio_devinst *mi, uint64_t size)
 		return (error);
 
 	mi->addr.baddr = addr;
-	mi->addr.size = size;
 
 	register_mmio(mi);
 
@@ -300,8 +304,7 @@ mmio_emul_init(struct vmctx *ctx, struct mmio_devemu *me, struct mmio_info *mmi)
 	if (mi == NULL)
 		return (ENOMEM);
 
-	mi->mi_cfgregs = calloc(MMIO_REGNUM /* + TODO cfg space */,
-				sizeof(u_char));
+	mi->mi_cfgregs = calloc(max(mmi->size, MMIO_REGNUM), sizeof(u_char));
 	if (mi->mi_cfgregs == NULL) {
 		free(mi);
 		return (ENOMEM);
@@ -334,12 +337,12 @@ init_mmio_error(const char *name)
 {
 	struct mmio_devemu **mdpp, *mdp;
 
-	fprintf(stderr, "Device %s does not exist\n", name);
-	fprintf(stderr, "The following devices are available:\n");
+	fprintf(stderr, "Device \"%s\" does not exist\r\n", name);
+	fprintf(stderr, "The following devices are available:\r\n");
 
 	SET_FOREACH(mdpp, mmio_devemu_set) {
 		mdp = *mdpp;
-		fprintf(stderr, "\t%s\n", mdp->me_emu);
+		fprintf(stderr, "\t%s\r\n", mdp->me_emu);
 	}
 }
 
@@ -358,7 +361,7 @@ int init_mmio(struct vmctx *ctx)
 		me = mmio_emul_finddev(mmi->name);
 		if (me == NULL) {
 			init_mmio_error(mmi->name);
-			assert(0);
+			return (1);
 		}
 
 		error = mmio_emul_init(ctx, me, mmi);

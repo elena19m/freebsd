@@ -46,7 +46,7 @@ static void mmio_vtrnd_notify(void *, struct vqueue_info *);
 static struct virtio_consts vtrnd_vi_consts = {
 	"vtrnd",		/* device name */
 	1,			/* support for 1 virtqueue */
-	0,			/* config reg size */
+	0,			/* config space size */
 	mmio_vtrnd_reset,	/* reset handler */
 	mmio_vtrnd_notify,	/* device-wide qnotify handler */
 	NULL,			/* no read virtio handler */
@@ -137,7 +137,8 @@ mmio_vtrnd_init(struct vmctx *ctx, struct mmio_devinst *mi, char *opts)
 
 	if (vi_intr_init(&sc->vrsc_vs))
 		return (1);
-	/* TODO: check if set_io_bar equivalent is needed */
+
+	vi_set_mmio_mem(&sc->vrsc_vs);
 
 	return (0);
 }

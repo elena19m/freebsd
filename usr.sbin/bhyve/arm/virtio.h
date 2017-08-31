@@ -216,24 +216,9 @@ struct vring_used {
 #define	VIRTIO_MMIO_VERSION_NUM	0x2
 
 /*
- * PCI config space constants.
- *
- * If MSI-X is enabled, the ISR register is generally not used,
- * and the configuration vector and queue vector appear at offsets
- * 20 and 22 with the remaining configuration registers at 24.
- * If MSI-X is not enabled, those two registers disappear and
- * the remaining configuration registers start at offset 20.
+ * MMIO config space constants.
  */
-#define VTCFG_R_HOSTCAP		0
-#define VTCFG_R_GUESTCAP	4
-#define VTCFG_R_PFN		8
-#define VTCFG_R_QNUM		12
-#define VTCFG_R_QSEL		14
-#define VTCFG_R_QNOTIFY		16
-#define VTCFG_R_STATUS		18
-#define VTCFG_R_ISR		19
-#define VTCFG_R_CFGVEC		20
-#define VTCFG_R_QVEC		22
+#define VTCFG_R_CFG		0x100
 
 /*
  * Bits in VTCFG_R_STATUS.  Guests need not actually set any of these,
@@ -387,7 +372,6 @@ struct vqueue_info {
 	uint16_t vq_flags;	/* flags (see above) */
 	uint16_t vq_last_avail;	/* a recent value of vq_avail->va_idx */
 	uint16_t vq_save_used;	/* saved vq_used->vu_idx; see vq_endchains */
-	uint16_t vq_msix_idx;	/* MSI-X index, or VIRTIO_MSI_NO_VECTOR */
 
 	uint32_t vq_pfn;	/* PFN of virt queue (not shifted!) */
 
@@ -408,7 +392,6 @@ struct vqueue_info {
 static inline int
 vq_ring_ready(struct vqueue_info *vq)
 {
-
 	return (vq->vq_flags & VQ_ALLOC);
 }
 
@@ -419,7 +402,6 @@ vq_ring_ready(struct vqueue_info *vq)
 static inline int
 vq_has_descs(struct vqueue_info *vq)
 {
-
 	return (vq_ring_ready(vq) && vq->vq_last_avail !=
 	    vq->vq_avail->va_idx);
 }
@@ -451,7 +433,7 @@ void	vi_softc_linkup(struct virtio_softc *vs, struct virtio_consts *vc,
 			struct vqueue_info *queues);
 int	vi_intr_init(struct virtio_softc *vs);
 void	vi_reset_dev(struct virtio_softc *);
-void	vi_set_io_bar(struct virtio_softc *, int);
+void	vi_set_mmio_mem(struct virtio_softc *);
 
 int	vq_getchain(struct vqueue_info *vq, uint16_t *pidx,
 		    struct iovec *iov, int n_iov, uint16_t *flags);
