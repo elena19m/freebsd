@@ -232,7 +232,6 @@ vgic_dist_mmio_read(void *vm, int vcpuid, uint64_t gpa, uint64_t *rval, int size
 
 	}
 
-	printf("%s on cpu: %d with gpa: %llx size: %x\n", __func__, vcpuid, gpa, size);
 	return (0);
 }
 
@@ -369,7 +368,6 @@ vgic_dist_mmio_write(void *vm, int vcpuid, uint64_t gpa, uint64_t val, int size,
 end:
 	vgic_update_state(hyp);
 
-	printf("%s on cpu: %d with gpa: %llx size: %x with val: %llx\n", __func__, vcpuid, gpa, size, val);
 	return (0);
 }
 
