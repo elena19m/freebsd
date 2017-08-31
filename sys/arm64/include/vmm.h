@@ -81,6 +81,7 @@ enum vm_reg_name {
 	VM_REG_GUEST_SP,
 	VM_REG_GUEST_ELR,
 	VM_REG_GUEST_SPSR,
+	VM_REG_ELR_EL2,
 	VM_REG_LAST
 };
 
