@@ -63,7 +63,7 @@ struct mmio_devinst {
 };
 
 int mmio_parse_opts(const char *args);
-int mmio_emul_alloc_mem(struct mmio_devinst *mi, uint64_t size);
+int mmio_emul_alloc_mem(struct mmio_devinst *mi);
 int init_mmio(struct vmctx *ctx);
 void mmio_lintr_request(struct mmio_devinst *mi);
 void mmio_lintr_assert(struct mmio_devinst *mi);
