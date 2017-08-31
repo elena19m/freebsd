@@ -196,6 +196,10 @@ vmmdev_ioctl(struct cdev *cdev, u_long cmd, caddr_t data, int fflag,
 		vav = (struct vm_attach_vgic *)data;
 		error = vm_attach_vgic(sc->vm, vav->distributor_paddr,
 					vav->cpu_int_paddr);
+	case VM_ASSERT_IRQ:
+	case VM_DEASSERT_IRQ:
+		/* TODO */
+		break;
 	default:
 		error = ENOTTY;
 		break;
