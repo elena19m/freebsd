@@ -172,7 +172,10 @@ vm_map_gpa(struct vmctx *ctx, uint64_t gaddr, size_t len)
 	/* XXX VM_MMAP_SPARSE not implemented yet */
 	assert(ctx->vms == VM_MMAP_ALL);
 
-	return ((void *)(ctx->mem_addr + gaddr));
+	if (gaddr < ctx->mem_base)
+		return ((void *)(ctx->mem_addr + gaddr));
+	else
+		return ((void *)(ctx->mem_addr + (gaddr - ctx->mem_base)));
 }
 
 
