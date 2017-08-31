@@ -371,6 +371,8 @@ get_vm_reg_name(uint32_t reg_nr, uint32_t mode __attribute__((unused)))
 			return VM_REG_GUEST_ELR;
 		case 33:
 			return VM_REG_GUEST_SPSR;
+		case 34:
+			return VM_REG_ELR_EL2;
 		default:
 			break;
 	}
@@ -597,16 +599,11 @@ arm_vmcleanup(void *arg)
 {
 	struct hyp *hyp = arg;
 
-	/* Unmap from HYP-mode the hyp tructure */
-	/*
-	lpae_vmmmap_set(NULL,
-	    (lpae_vm_vaddr_t)hyp,
-	    (lpae_vm_paddr_t)vtophys(hyp),
-	    sizeof(struct hyp),
-	    VM_PROT_NONE);
+	/* Unmap the VM hyp struct from the hyp mode translation table */
+	hypmap_map(hyp_pmap, (vm_offset_t)hyp, sizeof(struct hyp), VM_PROT_NONE);
+	hypmap_cleanup(hyp->stage2_map);
+	free(hyp->stage2_map, M_HYP);
 
-	lpae_vmcleanup(&(hyp->l1pd[0]));
-	*/
 	free(hyp, M_HYP);
 }
 
@@ -686,6 +683,8 @@ hypctx_regptr(struct hypctx *hypctx, int reg)
 		return (&hypctx->regs.elr);
 	case VM_REG_GUEST_SPSR:
 		return (&hypctx->regs.spsr);
+	case VM_REG_ELR_EL2:
+		return (&hypctx->elr_el2);
 	default:
 		break;
 	}

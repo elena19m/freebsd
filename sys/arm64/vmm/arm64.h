@@ -60,6 +60,7 @@ struct hypctx {
 	uint32_t	spsr_el1;	/* Saved Program Status Register */
 
 	/* EL2 constrol registers */
+	uint64_t	elr_el2;	/* Exception Link Register */
 	uint64_t	hcr_el2;	/* Hypervisor Configuration Register */
 	uint64_t	vpidr_el2;	/* Virtualization Processor ID Register */
 	uint64_t	vmpidr_el2;	/* Virtualization Multiprocessor ID Register */
