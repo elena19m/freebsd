@@ -49,7 +49,7 @@ options		KTRACE
 
 #options 	ROOTDEVNAME=\"ufs:/dev/da0\"
 options                MD_ROOT
-makeoptions            MFS_IMAGE=/root/bhyvearm/ramdisk/ramdisk-guest.img
+makeoptions            MFS_IMAGE=/root/bhyvearm-utils/ramdisk/ramdisk-guest.img
 options                ROOTDEVNAME=\"ufs:/dev/md0\"
 
 
@@ -72,6 +72,10 @@ options 	INTRNG
 # GPIO
 #device		gpio
 
+# VirtIO
+device		virtio
+device		virtio_mmio
+device		virtio_random
 
 # Flattened Device Tree
 options 	FDT			# Configure using FDT/DTB data
