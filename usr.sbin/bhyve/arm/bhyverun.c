@@ -158,7 +158,7 @@ fbsdrun_addcpu(struct vmctx *ctx, int vcpu, uint64_t pc)
 	if (vcpu == BSP) {
 		mt_vmm_info[vcpu].mt_ctx = ctx;
 		mt_vmm_info[vcpu].mt_vcpu = vcpu;
-	
+
 		error = pthread_create(&mt_vmm_info[vcpu].mt_thr, NULL,
 				fbsdrun_start_thread, &mt_vmm_info[vcpu]);
 		assert(error == 0);
@@ -303,6 +303,10 @@ main(int argc, char *argv[])
 	int max_vcpus;
 	struct vmctx *ctx;
 	uint64_t pc;
+	uint64_t memory_base_address, mem_size;
+
+	mem_size = 128 * MB;
+	memory_base_address = 0xc0000000;
 
 	bvmcons = 0;
 	progname = basename(argv[0]);
@@ -347,6 +351,12 @@ main(int argc, char *argv[])
 	if (guest_ncpus > max_vcpus) {
 		fprintf(stderr, "%d vCPUs requested but only %d available\n",
 			guest_ncpus, max_vcpus);
+		exit(1);
+	}
+
+	error = vm_setup_memory(ctx, memory_base_address, mem_size, VM_MMAP_ALL);
+	if (error != 0) {
+		fprintf(stderr, "Unable to setup memory (%d)\n", error);
 		exit(1);
 	}
 
