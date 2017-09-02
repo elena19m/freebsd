@@ -62,7 +62,9 @@ END(vmm_call_hyp)
 
 .macro vempty
 	.align 7
-	1: b 	1b
+	//1: b 	1b
+	mov x0, #-1
+	eret
 .endm
 
 .macro vector name
@@ -110,7 +112,7 @@ ENTRY(handle_hyp_init)
 	/* Set the stack top address */
 	mov	sp, x2
 
-	/* Set the host VMID */
+	/* Use the host VTTBR_EL2 to tell the host and the guests apart */
 	mov	x2, #VTTBR_HOST
 	msr	vttbr_el2, x2
 
@@ -147,6 +149,9 @@ ENTRY(handle_hyp_init)
 	orr	x3, x3, x4
 	msr	sctlr_el2, x3
 
+	/* Return success */
+	mov	x0, #0
+
 	/* MMU is up and running */
 	eret
 END(handle_hyp_init)
@@ -167,41 +172,60 @@ sctlr_el2_clear:
 
 	.globl	hyp_vectors
 hyp_vectors:
-	vempty		/* Synchronous EL2t */
-	vempty		/* IRQ EL2t */
-	vempty		/* FIQ EL2t */
-	vempty		/* Error EL2t */
+	vempty			/* Synchronous EL2t */
+	vempty			/* IRQ EL2t */
+	vempty			/* FIQ EL2t */
+	vempty			/* Error EL2t */
 
-	vempty		/* Synchronous EL2h */
-	vempty		/* IRQ EL2h */
-	vempty		/* FIQ EL2h */
-	vempty		/* Error EL2h */
+	vempty			/* Synchronous EL2h */
+	vempty			/* IRQ EL2h */
+	vempty			/* FIQ EL2h */
+	vempty			/* Error EL2h */
 
-	vector hyp_hvc	/* Synchronous 64-bit EL1 */
-	vempty		/* IRQ 64-bit EL1 */
-	vempty		/* FIQ 64-bit EL1 */
-	vempty		/* Error 64-bit EL1 */
+	vector el1_sync		/* Synchronous 64-bit EL1 */
+	vector el1_irq		/* IRQ 64-bit EL1 */
+	vector el1_fiq		/* FIQ 64-bit EL1 */
+	vector el1_error	/* Error 64-bit EL1 */
 
 	vempty		/* Synchronous 32-bit EL1 */
 	vempty		/* IRQ 32-bit EL1 */
 	vempty		/* FIQ 32-bit EL1 */
 	vempty		/* Error 32-bit EL1 */
 
-ENTRY(handle_hyp_hvc)
+.macro ktohyp reg
+	ldr	x7, kva_mask
+	and	\reg, \reg, x7
+	ldr	x7, kva_off
+	orr	\reg, \reg, x7
+.endm
+
+kva_mask:
+	.quad 0x0000ffffffffffff
+
+kva_off:
+	.quad 0x0000800000000000
+
+ENTRY(handle_el1_sync)
 	/* Check for host hypervisor call */
 	mrs	x9, vttbr_el2
 	cmp	x9, #VTTBR_HOST
-	bne	9f
+	beq	1f
 
+	/* Guest exception taken to EL2 */
+	mov	x0, #1
+	b	exit
+
+1:
 	/* Return the vector table base address if is argument is -1 */
 	cmp 	x0, #-1
-	b.ne	1f
+	b.ne	2f
 	mrs	x0, vbar_el2
-	b	9f
-1:
+	b	exit
+2:
 	/*
-	 * Call function in EL2 context.
+	 * Call function in EL2 context
 	 */
+
 	/* Push the vmm_call_hyp() return address on the stack */
 	str	lr, [sp, #-16]!
 
@@ -222,33 +246,24 @@ ENTRY(handle_hyp_hvc)
 
 	/* Pop the vmm_call_hyp() return address from the stack */
 	ldr	lr, [sp], #16;
-9:
+	/* Return success */
+	mov	x0, #0
+	b	exit
+exit:
 	eret
 END(handle_hyp_hvc)
 
-/*
- * Usage:
- * void vmm_cleanup(void *hyp_stub_vectors)
- *
- * Expecting:
- * x0 - physical address of hyp_stub_vectors
- */
-ENTRY(vmm_cleanup)
-	/* Pop vmm_call_hyp() return address */
-	ldr	lr, [sp], #16
+ENTRY(handle_el1_irq)
+	b 	vmm_enter_host
+END(handle_el1_irq)
 
-	/* Restore the stub vectors */
-	msr	vbar_el2, x0
+ENTRY(handle_el1_fiq)
+	b 	vmm_enter_host
+END(handle_el1_fiq)
 
-	/* Disable the MMU */
-	dsb	sy
-	mrs	x2, sctlr_el2
-	bic	x2, x2, #SCTLR_EL2_M
-	msr	sctlr_el2, x2
-
-	/* Return here from the exception */
-	eret
-END(vmm_cleanup)
+ENTRY(handle_el1_error)
+	b 	vmm_enter_host
+END(handle_el1_error)
 
 /*
  * Usage:
@@ -261,30 +276,55 @@ ENTRY(vmm_enter_guest)
 	/* Pop vmm_call_hyp() return address */
 	ldr	lr, [sp], #16
 
-	/*
-	 * SAVE_GUEST_REGS() will be called when the guest traps to hyp mode and
-	 * the hypervisor expects to find the hypctx address in tpidr_el2.
-	 */
+	/* Save hypctx address */
 	msr	tpidr_el2, x0
 
-	/* These are the arm_init() original hypctx values */
-	mov	x0, #42
-	mov	x1, #42
-	mov	x2, #42
-	mov	x3, #42
-	mov	x4, #42
-
-	SAVE_GUEST_REGS()
-
-	mov	x1, xzr
-	mov	x2, xzr
-	mov	x3, xzr
-	mov	x4, xzr
-
+	SAVE_HOST_REGS()
 	LOAD_GUEST_REGS()
 
-	/* Return from exception */
+#if 0
+	SAVE_HOST_REGS()
+	LOAD_HOST_REGS()
+#endif
+
+	/* TODO: delete me */
+	//mov	x0, #42
+	b 	vmm_enter_host
+
+	/* Enter guest */
 	eret
 END(vmm_enter_guest)
+
+ENTRY(vmm_enter_host)
+	SAVE_GUEST_REGS()
+	LOAD_HOST_REGS()
+	SAVE_EXIT_INFO()
+
+	/* TODO: delete me */
+	mov	x0, #42
+
+	/* Enter host */
+	eret
+END(vmm_enter_host)
+
+/*
+ * Usage:
+ * void vmm_cleanup(void *hyp_stub_vectors)
+ *
+ * Expecting:
+ * x0 - physical address of hyp_stub_vectors
+ */
+ENTRY(vmm_cleanup)
+	/* Restore the stub vectors */
+	msr	vbar_el2, x0
+
+	/* Disable the MMU */
+	dsb	sy
+	mrs	x2, sctlr_el2
+	bic	x2, x2, #SCTLR_EL2_M
+	msr	sctlr_el2, x2
+
+	ret
+END(vmm_cleanup)
 
 hyp_code_end:

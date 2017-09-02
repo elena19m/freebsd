@@ -24,11 +24,10 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <sys/time.h>
+#include <machine/vmm.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,8 +38,6 @@
 #include <errno.h>
 #include <pthread.h>
 #include <pthread_np.h>
-
-#include <machine/vmm.h>
 #include <vmmapi.h>
 
 #include "bhyverun.h"
@@ -105,10 +102,10 @@ usage(int code)
 }
 
 void *
-paddr_guest2host(struct vmctx *ctx, uintptr_t gaddr, size_t len)
+paddr_guest2host(struct vmctx *ctx, uintptr_t iaddr, size_t len)
 {
 
-	return (vm_map_ipa(ctx, gaddr, len));
+	return (vm_map_ipa(ctx, iaddr, len));
 }
 
 static void *
@@ -286,8 +283,7 @@ vm_loop(struct vmctx *ctx, int vcpu, uint64_t pc)
 static int
 num_vcpus_allowed(struct vmctx *ctx)
 {
-	/* Max one VCPU */
-	return (1);
+	return (VM_MAXCPU);
 }
 
 int
@@ -303,7 +299,7 @@ main(int argc, char *argv[])
 	progname = basename(argv[0]);
 	guest_ncpus = 1;
 
-	while ((c = getopt(argc, argv, "abehAHIPp:g:c:s:S:m:")) != -1) {
+	while ((c = getopt(argc, argv, "bhp:c:")) != -1) {
 		switch (c) {
 		case 'b':
 			bvmcons = true;
@@ -346,7 +342,7 @@ main(int argc, char *argv[])
 	if (bvmcons)
 		init_bvmcons();
 
-	error = vm_get_register(ctx, BSP, VM_REG_GUEST_ELR, &pc);
+	error = vm_get_register(ctx, BSP, VM_REG_ELR_EL2, &pc);
 	assert(error == 0);
 	/*
 	 * Add CPU 0

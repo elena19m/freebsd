@@ -330,11 +330,9 @@ struct vm_exit {
 		 */
 		struct {
 			uint32_t	exception_nr;
-			uint32_t	hsr;	/* Hyp Syndrome Register */
-			uint32_t	hdfar;	/* VA at a Data Abort exception */
-			uint32_t	hifar;	/* VA at a Prefetch Abort exception */
-			uint32_t	hpfar;	/* IPA[39:12] at aborts on stage 2 address translations */
-			uint32_t	mode;
+			uint32_t	esr_el2;	/* Exception Syndrome Register */
+			uint32_t	far_el2;	/* Fault Address Register */
+			uint32_t	hpfar_el2;	/* Hypervisor IPA Fault Address Register */
 		} hyp;
 
 		struct {
