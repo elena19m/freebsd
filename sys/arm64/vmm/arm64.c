@@ -61,9 +61,11 @@ extern char hyp_init_vectors[];
 extern char hyp_vectors[];
 extern char hyp_code_start[];
 extern char hyp_code_end[];
-extern char hypervisor_stub_vect[];
+extern char hyp_stub_vectors[];
 
 extern uint64_t hypmode_enabled;
+
+extern uint64_t hyp_debug1, hyp_debug2;
 
 char *stack;
 pmap_t hyp_pmap;
@@ -99,33 +101,13 @@ out:
 			vtophys(hyp->stage2_map->pm_l0));
 }
 
-extern uint64_t hyp_debug1, hyp_debug2;
-extern char hyp_stub_vectors[];
-
 static int
 arm_init(int ipinum)
 {
 	char *stack_top;
 	size_t hyp_code_len;
-	uint64_t current_vectors;
 
 	printf("ARM_INIT:\n");
-
-	hyp_pmap = malloc(sizeof(*hyp_pmap), M_HYP, M_WAITOK | M_ZERO);
-	hypmap_init(hyp_pmap);
-
-	hyp_code_len = (size_t)hyp_code_end - (size_t)hyp_code_start;
-	hypmap_map(hyp_pmap, (vm_offset_t)hyp_code_start, hyp_code_len,
-			VM_PROT_EXECUTE);
-
-	/* We need an identity mapping for when we activate the MMU */
-	hypmap_map_identity(hyp_pmap, (vm_offset_t)hyp_code_start, hyp_code_len,
-			VM_PROT_EXECUTE);
-
-	printf("\thyp_stub_vectors = %016lx (virtual)\n\n", (uint64_t)hyp_stub_vectors);
-	printf("\thyp_stub_vectors = %016lx\n", vtophys(hyp_stub_vectors));
-	printf("\thyp_init_vectors = %016lx\n", vtophys(hyp_init_vectors));
-	printf("\thyp_vectors = %016lx\n", vtophys(hyp_vectors));
 
 	if (!hypmode_enabled) {
 		printf("arm_init: processor didn't boot in EL2 (no support)\n");
@@ -134,80 +116,47 @@ arm_init(int ipinum)
 
 	mtx_init(&vmid_generation_mtx, "vmid_generation_mtx", NULL, MTX_DEF);
 
-	stack = malloc(PAGE_SIZE, M_HYP, M_WAITOK | M_ZERO);
-	stack_top = stack + PAGE_SIZE;
-
-	hypmap_map(hyp_pmap, (vm_offset_t)stack, PAGE_SIZE,
-			VM_PROT_READ | VM_PROT_WRITE);
-
 	/*
 	 * Install the temporary vectors which will be responsible for
 	 * initializing the VMM when we next trap into EL2.
 	 */
-	printf("vmm_call_hyp(hyp_init_vectors)\n");
+	printf("\tBefore vmm_call_hyp(hyp_init_vectors)\n");
 	vmm_call_hyp((void *)vtophys(hyp_init_vectors));
 
 	/*
-	 * Special init call to activate the MMU
-	 * and change the exception vector.
-	 * - r0 - first parameter unused
-	 * - r1 - stack pointer
-	 * - r2 - lower 32 bits for the HTTBR
-	 * - r3 - upper 32 bits for the HTTBR
+	 * Create the necessary mappings for the hypervisor translation table
 	 */
-	printf("vmm_call_hyp(hyp_vectors, pm_l0, stack_top)\n");
-	vmm_call_hyp((void *)vtophys(hyp_vectors), vtophys(hyp_pmap->pm_l0),
-			ktohyp(stack_top));
+	hyp_pmap = malloc(sizeof(*hyp_pmap), M_HYP, M_WAITOK | M_ZERO);
+	hypmap_init(hyp_pmap);
+	hyp_code_len = (size_t)hyp_code_end - (size_t)hyp_code_start;
+	printf("\tBefore hypmap_map(hyp_pmap)\n");
+	hypmap_map(hyp_pmap, (vm_offset_t)hyp_code_start, hyp_code_len, VM_PROT_EXECUTE);
 
-	printf("TCR_EL1 = 0x%016lx\n", hyp_debug1);
-	printf("TCR_EL2 = 0x%016lx\n", hyp_debug2);
+	/* We need an identity mapping for when we activate the MMU */
+	printf("\tBefore hypmap_map_identity(hyp_pmap)\n");
+	hypmap_map_identity(hyp_pmap, (vm_offset_t)hyp_code_start, hyp_code_len, VM_PROT_EXECUTE);
 
-	printf("vmm_call_hyp(-1)\n");
-	current_vectors = vmm_call_hyp((void *)-1);
-	printf("\tcurrent_vectors = %016lx\n", current_vectors);
+	/* Create and map the hypevisor stack */
+	stack = malloc(PAGE_SIZE, M_HYP, M_WAITOK | M_ZERO);
+	stack_top = stack + PAGE_SIZE;
+	printf("\tBefore hypmap_map(stack)\n");
+	hypmap_map(hyp_pmap, (vm_offset_t)stack, PAGE_SIZE, VM_PROT_READ | VM_PROT_WRITE);
 
-	struct hypctx hypctx;
-	bzero(&hypctx, sizeof(struct hypctx));
-
-	hypmap_map(hyp_pmap, (vm_offset_t)&hypctx, sizeof(struct hypctx),
-			VM_PROT_READ | VM_PROT_WRITE);
-
-	printf("vmm_call_hyp(vmm_enter_guest, &hypctx)\n");
-	vmm_call_hyp((void *)ktohyp(vmm_enter_guest), ktohyp(&hypctx));
-	printf("hypctx.regs[0] = %lu\n", hypctx.regs.x[0]);
-	printf("hypctx.regs[1] = %lu\n", hypctx.regs.x[1]);
-	printf("hypctx.regs[2] = %lu\n", hypctx.regs.x[2]);
-	printf("hypctx.regs[3] = %lu\n", hypctx.regs.x[3]);
-	printf("hypctx.regs[4] = %lu\n", hypctx.regs.x[4]);
-
-	struct hyp *hyp;
-	hyp = malloc(sizeof(struct hyp), M_HYP, M_WAITOK | M_ZERO);
-	hyp->stage2_map = hyp_pmap;
-
-	printf("\n");
-	printf("vtophys(hyp_code_start) = 0x%016lx\n", vtophys(hyp_code_start));
-	printf("hyp_pmap_get(hyp_code_start) = 0x%016lx\n", hypmap_get(hyp, ktohyp(hyp_code_start)));
-	printf("\n");
-
-	hyp = malloc(sizeof(struct hyp), M_HYP, M_WAITOK | M_ZERO);
-	hyp->stage2_map = malloc(sizeof(*hyp->stage2_map), M_HYP, M_WAITOK | M_ZERO);
-	hypmap_init(hyp->stage2_map);
-	set_vttbr(hyp);
-
-	printf("\n");
-	printf("vttbr = 0x%016lx\n", hyp->vttbr);
-	printf("pm_l0 = 0x%016lx\n", (uint64_t)vtophys(hyp->stage2_map->pm_l0));
-
-	set_vttbr(hyp);
-	printf("\n");
-	printf("again, vttbr = 0x%016lx\n", hyp->vttbr);
-	printf("pm_l0 = 0x%016lx\n", (uint64_t)vtophys(hyp->stage2_map->pm_l0));
-	printf("\n");
+	/*
+	 * Special init call to activate the MMU and change the exception
+	 * vector.
+	 * x0 - the new exception vector table
+	 * x1 - the physical address of the hypervisor translation table
+	 * x2 - stack top address
+	 */
+	printf("\tBefore vmm_call_hyp(hyp_vectors, hyp_pmap, stack_top)\n");
+	uint64_t rc;
+	rc = vmm_call_hyp((void *)vtophys(hyp_vectors), vtophys(hyp_pmap->pm_l0), ktohyp(stack_top));
+	printf("\trc = %lu\n", rc);
 
 	/* Initialize VGIC infrastructure */
-	if (vgic_hyp_init()) {
+	if (vgic_hyp_init())
 		return (ENXIO);
-	}
 
 	vtimer_hyp_init();
 
@@ -254,13 +203,11 @@ arm_vminit(struct vm *vm)
 	hyp->vm = vm;
 	hyp->vgic_attached = false;
 
-	hyp->stage2_map = malloc(sizeof(*hyp->stage2_map), M_HYP,
-			M_WAITOK | M_ZERO);
+	hyp->stage2_map = malloc(sizeof(*hyp->stage2_map), M_HYP, M_WAITOK | M_ZERO);
 	hypmap_init(hyp->stage2_map);
 	set_vttbr(hyp);
 
-	mtx_init(&hyp->vgic_distributor.distributor_lock, "Distributor Lock",
-			"", MTX_SPIN);
+	mtx_init(&hyp->vgic_distributor.distributor_lock, "Distributor Lock", "", MTX_SPIN);
 
 	for (i = 0; i < VM_MAXCPU; i++) {
 		hypctx = &hyp->ctx[i];
@@ -493,48 +440,43 @@ static int
 hyp_exit_process(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 {
 	int handled;
-	struct hypctx *hypctx;
-
-	hypctx = &hyp->ctx[vcpu];
 
 	handled = UNHANDLED;
 
-#if 0
 	vmexit->exitcode = VM_EXITCODE_BOGUS;
-
 	switch(vmexit->u.hyp.exception_nr) {
-	case EXCEPTION_UNDEF:
+	case EXCP_UNKNOWN:
 		panic("%s undefined exception\n", __func__);
 		break;
-	case EXCEPTION_SVC:
+	case EXCP_SVC:
 		panic("%s take SVC exception to hyp mode\n", __func__);
 		break;
 	/* The following are in the same category and are distinguished using HSR */
-	case EXCEPTION_PABT:
-	case EXCEPTION_DABT:
-	case EXCEPTION_HVC:
+	//case EXCEPTION_PABT:
+	//case EXCEPTION_DABT:
+	/* HVC instr disabled for now in arm_vminit() */
+	case EXCP_HVC:
 		vmexit->exitcode = VM_EXITCODE_HYP;
 		handled = hyp_handle_exception(hyp, vcpu, vmexit);
-
 		break;
-	case EXCEPTION_FIQ:
-	case EXCEPTION_IRQ:
-		handled = HANDLED;
-		break;
+	//case EXCEPTION_FIQ:
+	//case EXCEPTION_IRQ:
+	//	handled = HANDLED;
+	//	break;
 	default:
 		printf("%s unknown exception: %d\n",__func__, vmexit->u.hyp.exception_nr);
 		vmexit->exitcode = VM_EXITCODE_HYP;
 		break;
 	}
-#endif
+
 	return (handled);
 }
 
 static int
 arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
-	void *rend_cookie, void *suspended_cookie)
+	void *rendezvous_cookie, void *suspend_cookie)
 {
-	int rc;
+	uint64_t rc;
 	int handled;
 	register_t regs;
 	struct hyp *hyp;
@@ -543,54 +485,44 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	struct vm_exit *vmexit;
 
 	hyp = arg;
-	hypctx = &hyp->ctx[vcpu];
 	vm = hyp->vm;
 	vmexit = vm_exitinfo(vm, vcpu);
 
-#if 0
-	hypctx->regs.r_pc = (uint32_t) pc;
-	hypctx->regs.elr = (uint32_t) pc;
-#endif
+	hypctx = &hyp->ctx[vcpu];
+	hypctx->elr_el2 = (uint64_t)pc;
 
 	do {
 		handled = UNHANDLED;
 
 		regs = intr_disable();
+		//vgic_flush_hwstate(hypctx);
+		//vtimer_flush_hwstate(hypctx);
 
-		vgic_flush_hwstate(hypctx);
-		vtimer_flush_hwstate(hypctx);
+		printf("before vmm_call_hyp\n");
 
-		//rc = vmm_call_hyp((void *)hyp_enter_guest, hypctx);
-		rc = 0;
+		rc = vmm_call_hyp((void *)ktohyp(vmm_enter_guest), ktohyp(hypctx));
 
-		/*
-		 * TODO
-		 *
-		 * Use the correct register names.
-		 */
-#if 0
-		vmexit->pc = hypctx->regs.r_pc;
-		vmexit->pc = hypctx->regs.elr;
+		printf("after vmm_call_hyp\n");
+		printf("rc = %lu\n", rc);
+
+		vmexit->pc = hypctx->elr_el2;
 
 		vmexit->u.hyp.exception_nr = rc;
-		vmexit->inst_length = HSR_IL(hypctx->exit_info.hsr) ? 4 : 2;
+		vmexit->u.hyp.esr_el2 = hypctx->exit_info.esr_el2;
+		vmexit->u.hyp.far_el2 = hypctx->exit_info.far_el2;
+		vmexit->u.hyp.hpfar_el2 = hypctx->exit_info.hpfar_el2;
 
-		vmexit->u.hyp.hsr = hypctx->exit_info.hsr;
-		vmexit->u.hyp.hifar = hypctx->exit_info.hifar;
-		vmexit->u.hyp.hdfar = hypctx->exit_info.hdfar;
-		vmexit->u.hyp.hpfar = hypctx->exit_info.hpfar;
-		vmexit->u.hyp.mode = hypctx->regs.r_cpsr & PSR_MODE;
-		vmexit->u.hyp.mode = hypctx->regs.spsr;
-#endif
+		vmexit->inst_length = 4;
 
 		intr_restore(regs);
 
 		handled = hyp_exit_process(hyp, vcpu, vmexit);
 
-		vtimer_sync_hwstate(hypctx);
-		vgic_sync_hwstate(hypctx);
+		//vtimer_sync_hwstate(hypctx);
+		//vgic_sync_hwstate(hypctx);
 
-	} while(handled);
+	} while (handled == HANDLED);
+
 	return 0;
 }
 

@@ -1,5 +1,6 @@
-#include <stdio.h>
 #include <sys/types.h>
+
+#include <stdio.h>
 
 #include "mem.h"
 #include "reset.h"

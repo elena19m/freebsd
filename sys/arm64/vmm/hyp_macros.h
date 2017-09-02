@@ -37,16 +37,18 @@
 	msr	reg1, x2;				\
 	msr	reg0, x1;
 
+#define PUSH_SYSTEM_REG(reg)				\
+	mrs 	x1, reg;				\
+	str	x1, [sp, #-16]!;
+
+#define POP_SYSTEM_REG(reg)				\
+	ldr	x1, [sp], #16;				\
+	msr	reg, x1;
+
 /*
- * Push all the host registers before returning to the guest.
- *
- * Expecting:
- * x0 - struct hypctx address
+ * Push all the host registers before entering the guest.
  */
-#define PUSH_HOST_REGS()				\
-	/* Save struct hypctx address in TPIDR_EL2 */	\
-	msr	tpidr_el2, x0;				\
-							\
+#define SAVE_HOST_REGS()				\
 	/* Save the regular registers */		\
 	stp	x0, x1, [sp, #-16]!;			\
 	stp	x2, x3, [sp, #-16]!;			\
@@ -63,6 +65,7 @@
 	stp	x24, x25, [sp, #-16]!;			\
 	stp	x26, x27, [sp, #-16]!;			\
 	stp	x28, x29, [sp, #-16]!;			\
+	str	x30, [sp, #-16]!;			\
 							\
 	/* Push the system registers */			\
 	PUSH_SYSTEM_REG_PAIR(ACTLR_EL1, AMAIR_EL1);	\
@@ -75,16 +78,21 @@
 	PUSH_SYSTEM_REG_PAIR(CONTEXTIDR_EL1, CPACR_EL1);\
 	PUSH_SYSTEM_REG_PAIR(ESR_EL1, FAR_EL1);		\
 	PUSH_SYSTEM_REG_PAIR(SCTLR_EL1, SPSR_EL1);	\
+	PUSH_SYSTEM_REG_PAIR(ELR_EL2, HCR_EL2);		\
+	PUSH_SYSTEM_REG_PAIR(VPIDR_EL2, VMPIDR_EL2);	\
+	PUSH_SYSTEM_REG_PAIR(CPTR_EL2, VTTBR_EL2);	\
+	PUSH_SYSTEM_REG(VTTBR_EL2);
 
 /*
- * Restore all the host registers after returning from the guest.
- *
- * After call:
- * x0 - struct hypctx address
+ * Restore all the host registers before entering the host.
  */
-#define POP_HOST_REGS()					\
+#define LOAD_HOST_REGS()				\
 	/* Pop the system registers first */		\
-	POP_SYSTEM_REG_PAIR(ESR_EL1, FAR_EL1);		\
+	POP_SYSTEM_REG(VTTBR_EL2);			\
+	POP_SYSTEM_REG_PAIR(CPTR_EL2, VTTBR_EL2);	\
+	POP_SYSTEM_REG_PAIR(VPIDR_EL2, VMPIDR_EL2);	\
+	POP_SYSTEM_REG_PAIR(ELR_EL2, HCR_EL2);		\
+	POP_SYSTEM_REG_PAIR(SCTLR_EL1, SPSR_EL1);	\
 	POP_SYSTEM_REG_PAIR(ESR_EL1, FAR_EL1);		\
 	POP_SYSTEM_REG_PAIR(CONTEXTIDR_EL1, CPACR_EL1);	\
 	POP_SYSTEM_REG_PAIR(AFSR0_EL1, AFSR1_EL1);	\
@@ -96,6 +104,7 @@
 	POP_SYSTEM_REG_PAIR(ACTLR_EL1, AMAIR_EL1);	\
 							\
 	/* Pop the regular registers */			\
+	ldr	x30, [sp], #16;				\
 	ldp	x28, x29, [sp], #16;			\
 	ldp	x26, x27, [sp], #16;			\
 	ldp	x24, x25, [sp], #16;			\
@@ -111,9 +120,6 @@
 	ldp	x4, x5, [sp], #16;			\
 	ldp	x2, x3, [sp], #16;			\
 	ldp	x0, x1, [sp], #16;			\
-							\
-	/* Restore hypctx address from TPIDR_EL2 */	\
-	mrs	x0, tpidr_el2;
 
 #define	SAVE_REG(reg)					\
 	mov	x1, #HYPCTX_REGS_##reg;			\
@@ -195,15 +201,15 @@
 	mov	x2, #HYPCTX_##reg;			\
 	str	w1, [x0, x2];
 
-#define	SAVE_SYSTEM_REG64(reg)				\
-	mrs	x1, reg;				\
-	mov	x2, #HYPCTX_##reg;			\
-	str	x1, [x0, x2];
-
 #define LOAD_SYSTEM_REG32(reg)				\
 	mov	x1, #HYPCTX_##reg;			\
 	ldr	w2, [x0, x1];				\
 	msr	reg, x2;
+
+#define	SAVE_SYSTEM_REG64(reg)				\
+	mrs	x1, reg;				\
+	mov	x2, #HYPCTX_##reg;			\
+	str	x1, [x0, x2];
 
 #define LOAD_SYSTEM_REG64(reg)				\
 	mov	x1, #HYPCTX_##reg;			\
@@ -217,6 +223,9 @@
  *
  * Expecting:
  * TPIDR_EL2 - struct hypctx address
+ *
+ * After call:
+ * x0 - struct hypctx address
  */
 #define	SAVE_GUEST_REGS()				\
 	SAVE_GUEST_X_REGS();				\
@@ -241,7 +250,13 @@
 	SAVE_SYSTEM_REG32(ESR_EL1);			\
 	SAVE_SYSTEM_REG32(FAR_EL1);			\
 	SAVE_SYSTEM_REG32(SCTLR_EL1);			\
-	SAVE_SYSTEM_REG32(SPSR_EL1);
+	SAVE_SYSTEM_REG32(SPSR_EL1);			\
+							\
+	SAVE_SYSTEM_REG64(ELR_EL2);			\
+	SAVE_SYSTEM_REG64(HCR_EL2);			\
+	SAVE_SYSTEM_REG64(VPIDR_EL2);			\
+	SAVE_SYSTEM_REG64(VMPIDR_EL2);			\
+	SAVE_SYSTEM_REG32(CPTR_EL2);
 
 /*
  * We use x1 as a temporary register to store the hypctx member offset and x0
@@ -310,6 +325,38 @@
 	LOAD_SYSTEM_REG32(SCTLR_EL1);			\
 	LOAD_SYSTEM_REG32(SPSR_EL1);			\
 							\
+	LOAD_SYSTEM_REG64(ELR_EL2);			\
+	LOAD_SYSTEM_REG64(HCR_EL2);			\
+	LOAD_SYSTEM_REG64(VPIDR_EL2);			\
+	LOAD_SYSTEM_REG64(VMPIDR_EL2);			\
+	LOAD_SYSTEM_REG32(CPTR_EL2);			\
+							\
+	mov	x1, #HYPCTX_HYP;			\
+	add	x1, x1, x0;				\
+	mov	x2, #HYP_VTTBR;				\
+	add	x1, x1, x2;				\
+	ldr	x2, [x1];				\
+	msr	vttbr_el2, x2;				\
+							\
 	LOAD_GUEST_X_REGS();
+
+/*
+ * Save exit information
+ *
+ * Expecting:
+ * x0 - struct hypctx address
+ */
+#define	SAVE_EXIT_INFO()				\
+	mrs	x1, esr_el2;				\
+	mov	x2, #HYPCTX_EXIT_INFO_ESR_EL2;		\
+	str	w1, [x0, x2];				\
+							\
+	mrs	x1, far_el2;				\
+	mov	x2, #HYPCTX_EXIT_INFO_FAR_EL2;		\
+	str	w1, [x0, x2];				\
+							\
+	mrs	x1, hpfar_el2;				\
+	mov	x2, #HYPCTX_EXIT_INFO_HPFAR_EL2;	\
+	str	w1, [x0, x2];				\
 
 #endif /* !_VMM_HYP_MACROS_H_ */

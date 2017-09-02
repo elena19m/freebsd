@@ -114,8 +114,8 @@ static struct vmm_ops *ops = NULL;
 #define	VMM_CLEANUP()	(ops != NULL ? (*ops->cleanup)() : 0)
 
 #define	VMINIT(vm) (ops != NULL ? (*ops->vminit)(vm): NULL)
-#define	VMRUN(vmi, vcpu, pc, pmap, rptr, sptr) \
-	(ops != NULL ? (*ops->vmrun)(vmi, vcpu, pc, pmap, rptr, sptr) : ENXIO)
+#define	VMRUN(vmi, vcpu, pc, pmap, rvc, sc) \
+	(ops != NULL ? (*ops->vmrun)(vmi, vcpu, pc, pmap, rvc, sc) : ENXIO)
 #define	VMCLEANUP(vmi)	(ops != NULL ? (*ops->vmcleanup)(vmi) : NULL)
 #define	VMMMAP_SET(vmi, ipa, pa, len, prot)				\
     	(ops != NULL ? 							\
@@ -308,7 +308,7 @@ vm_run(struct vm *vm, struct vm_run *vmrun)
 	struct vcpu *vcpu;
 	struct vm_exit *vme;
 	bool retu;
-	void *rptr = NULL, *sptr = NULL;
+	void *rvc, *sc;
 
 	vcpuid = vmrun->cpuid;
 	pc = vmrun->pc;
@@ -322,22 +322,16 @@ vm_run(struct vm *vm, struct vm_run *vmrun)
 	vcpu = &vm->vcpu[vcpuid];
 	vme = &vcpu->exitinfo;
 
-//	printf("%s vcpuid: %d, nextpc: %x\n",__func__, vcpuid, pc);
-
+	rvc = sc = NULL;
 restart:
 	critical_enter();
-
-	error = VMRUN(vm->cookie, vcpuid, pc, NULL, rptr, sptr);
-
-//	printf("%s VMRUN error: %d\n",__func__, error);
-
+	error = VMRUN(vm->cookie, vcpuid, pc, NULL, rvc, sc);
 	critical_exit();
 
 	if (error == 0) {
 		switch (vme->exitcode) {
 		case VM_EXITCODE_INST_EMUL:
 			/* Check if we need to do in-kernel emulation */
-
 			pc = vme->pc + vme->inst_length;
 			retu = true;
 			error = vgic_emulate_distributor(vm->cookie, vcpuid, vme, &retu);
@@ -346,6 +340,7 @@ restart:
 		case VM_EXITCODE_WFI:
 			pc = vme->pc + vme->inst_length;
 			retu = true;
+			/* vm_handle_wfi always sets retu to false... */
 			error = vm_handle_wfi(vm, vcpuid, vme, &retu);
 			break;
 
@@ -683,12 +678,10 @@ vm_handle_wfi(struct vm *vm, int vcpuid, struct vm_exit *vme, bool *retu)
 
 	vcpu = &vm->vcpu[vcpuid];
 	hypctx = vme->u.wfi.hypctx;
-	//intr_disabled = !(hypctx->regs.r_cpsr & PSR_I);
 	intr_disabled = !(hypctx->regs.spsr & PSR_I);
 
 	vcpu_lock(vcpu);
 	while (1) {
-
 		if (!intr_disabled && vgic_vcpu_pending_irq(hypctx))
 			break;
 
@@ -704,4 +697,3 @@ vm_handle_wfi(struct vm *vm, int vcpuid, struct vm_exit *vme, bool *retu)
 	*retu = false;
 	return (0);
 }
-

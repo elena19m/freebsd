@@ -265,7 +265,6 @@ unregister_mem(struct mem_range *memp)
 void
 init_mem(void)
 {
-
 	RB_INIT(&mmio_rb_root);
 	RB_INIT(&mmio_rb_fallback);
 	pthread_rwlock_init(&mmio_rwlock, NULL);

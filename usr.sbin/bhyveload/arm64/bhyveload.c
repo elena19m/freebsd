@@ -188,7 +188,7 @@ main(int argc, char** argv)
 		exit(1);
 	}
 
-	if (st.st_size > mem_size) {
+	if ((uint64_t)st.st_size > mem_size) {
 		fprintf(stderr, "Kernel image larger than memory size\n");
 		exit(1);
 	}
@@ -209,6 +209,7 @@ main(int argc, char** argv)
 	}
 	munmap(addr, st.st_size);
 
-	guest_setreg(VM_REG_GUEST_ELR, kernel_load_address);
+	/* The VM will start execution from the kernel load address */
+	guest_setreg(VM_REG_ELR_EL2, kernel_load_address);
 	return 0;
 }
