@@ -233,7 +233,8 @@ arm_vminit(struct vm *vm)
 		/* The VM will detect a uniprocessor system */
 		hypctx->vmpidr_el2 = get_mpidr();
 		hypctx->vmpidr_el2 |= VMPIDR_EL2_U;
-		hypctx->regs.spsr = 0;
+		/* The VM will start with the MMU disabled */
+		hypctx->sctlr_el1 &= ~SCTLR_M;
 
 		vtimer_cpu_init(hypctx);
 	}

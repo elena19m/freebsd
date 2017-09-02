@@ -187,10 +187,10 @@ hyp_vectors:
 	vector el1_fiq		/* FIQ 64-bit EL1 */
 	vector el1_error	/* Error 64-bit EL1 */
 
-	vempty		/* Synchronous 32-bit EL1 */
-	vempty		/* IRQ 32-bit EL1 */
-	vempty		/* FIQ 32-bit EL1 */
-	vempty		/* Error 32-bit EL1 */
+	vempty			/* Synchronous 32-bit EL1 */
+	vempty			/* IRQ 32-bit EL1 */
+	vempty			/* FIQ 32-bit EL1 */
+	vempty			/* Error 32-bit EL1 */
 
 .macro ktohyp reg
 	ldr	x7, kva_mask
@@ -226,9 +226,6 @@ ENTRY(handle_el1_sync)
 	 * Call function in EL2 context
 	 */
 
-	/* Push the vmm_call_hyp() return address on the stack */
-	str	lr, [sp, #-16]!
-
 	/* Save function address */
 	mov	x9, x0
 
@@ -242,16 +239,11 @@ ENTRY(handle_el1_sync)
 	mov 	x6, x7
 
 	/* Call function */
-	blr 	x9
-
-	/* Pop the vmm_call_hyp() return address from the stack */
-	ldr	lr, [sp], #16;
-	/* Return success */
-	mov	x0, #0
-	b	exit
+	br 	x9
+	/* UNREACHABLE */
 exit:
 	eret
-END(handle_hyp_hvc)
+END(handle_el1_sync)
 
 ENTRY(handle_el1_irq)
 	b 	vmm_enter_host
@@ -273,23 +265,13 @@ END(handle_el1_error)
  * x0 - hypctx address
  */
 ENTRY(vmm_enter_guest)
-	/* Pop vmm_call_hyp() return address */
-	ldr	lr, [sp], #16
-
 	/* Save hypctx address */
 	msr	tpidr_el2, x0
 
 	SAVE_HOST_REGS()
 	LOAD_GUEST_REGS()
 
-#if 0
-	SAVE_HOST_REGS()
-	LOAD_HOST_REGS()
-#endif
-
-	/* TODO: delete me */
-	//mov	x0, #42
-	b 	vmm_enter_host
+	b	vmm_enter_host
 
 	/* Enter guest */
 	eret
@@ -324,7 +306,7 @@ ENTRY(vmm_cleanup)
 	bic	x2, x2, #SCTLR_EL2_M
 	msr	sctlr_el2, x2
 
-	ret
+	eret
 END(vmm_cleanup)
 
 hyp_code_end:
