@@ -271,8 +271,6 @@ ENTRY(vmm_enter_guest)
 	SAVE_HOST_REGS()
 	LOAD_GUEST_REGS()
 
-	b	vmm_enter_host
-
 	/* Enter guest */
 	eret
 END(vmm_enter_guest)
