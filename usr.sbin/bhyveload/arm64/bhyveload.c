@@ -124,8 +124,8 @@ main(int argc, char** argv)
 	progname = basename(argv[0]);
 
 	mem_size = 128 * MB;
-	kernel_load_address = 0xc0000000UL;
-	memory_base_address = 0xc0000000UL;
+	kernel_load_address = 0x80000000UL;
+	memory_base_address = 0x80000000UL;
 	periphbase = 0x2c000000UL;
 	strncpy(kernel_image_name, "kernel.bin", KERNEL_IMAGE_NAME_LEN);
 
