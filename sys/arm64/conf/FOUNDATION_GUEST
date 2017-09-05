@@ -22,15 +22,17 @@ cpu		ARM64
 ident		FOUNDATION_GUEST
 
 makeoptions	DEBUG=-g		# Build kernel with gdb(1) debug symbols
-#makeoptions	WITH_CTF=1		# Run ctfconvert(1) for DTrace support
+
+options 	MD_ROOT			# MD is a potential root device
+makeoptions	MFS_IMAGE=/usr/home/alex/arm64-workspace/ramdisk/ramdisk-guest.img
 
 options 	SCHED_ULE		# ULE scheduler
 options 	PREEMPTION		# Enable kernel thread preemption
-options 	INET			# InterNETworking
-options 	INET6			# IPv6 communications protocols
-options 	IPSEC			# IP (v4/v6) security
-options 	TCP_HHOOK		# hhook(9) framework for TCP
-options 	TCP_OFFLOAD		# TCP offload
+#options 	INET			# InterNETworking
+#options 	INET6			# IPv6 communications protocols
+#options 	IPSEC			# IP (v4/v6) security
+#options 	TCP_HHOOK		# hhook(9) framework for TCP
+#options 	TCP_OFFLOAD		# TCP offload
 options 	SCTP			# Stream Control Transmission Protocol
 options 	FFS			# Berkeley Fast Filesystem
 options 	SOFTUPDATES		# Enable FFS soft updates support
@@ -38,13 +40,12 @@ options 	UFS_ACL			# Support for access control lists
 options 	UFS_DIRHASH		# Improve performance on big directories
 options 	UFS_GJOURNAL		# Enable gjournal-based UFS journaling
 options 	QUOTA			# Enable disk quotas for UFS
-options 	MD_ROOT			# MD is a potential root device
-options 	NFSCL			# Network Filesystem Client
-options 	NFSD			# Network Filesystem Server
-options 	NFSLOCKD		# Network Lock Manager
-options 	NFS_ROOT		# NFS usable as /, requires NFSCL
-options 	MSDOSFS			# MSDOS Filesystem
-options 	CD9660			# ISO 9660 Filesystem
+#options 	NFSCL			# Network Filesystem Client
+#options 	NFSD			# Network Filesystem Server
+#options 	NFSLOCKD		# Network Lock Manager
+#options 	NFS_ROOT		# NFS usable as /, requires NFSCL
+#options 	MSDOSFS			# MSDOS Filesystem
+#options 	CD9660			# ISO 9660 Filesystem
 options 	PROCFS			# Process filesystem (requires PSEUDOFS)
 options 	PSEUDOFS		# Pseudo-filesystem framework
 options 	GEOM_PART_GPT		# GUID Partition Tables.
@@ -101,14 +102,14 @@ device		al_serdes		# Serializer/Deserializer
 device		al_udma			# Universal DMA
 
 # VirtIO support
-device		virtio
-device		virtio_pci
-device		virtio_mmio
-device		virtio_blk
-device		vtnet
+#device		virtio
+#device		virtio_pci
+#device		virtio_mmio
+#device		virtio_blk
+#device		vtnet
 
 # CPU frequency control
-#device		cpufreq
+device		cpufreq
 
 # Bus drivers
 device		pci
@@ -117,16 +118,16 @@ options 	PCI_HP			# PCI-Express native HotPlug
 options 	PCI_IOV		# PCI SR-IOV support
 
 # Ethernet NICs
-device		mii
-device		miibus		# MII bus support
-device		awg		# Allwinner EMAC Gigabit Ethernet
-device		axgbe		# AMD Opteron A1100 integrated NIC
-device		em		# Intel PRO/1000 Gigabit Ethernet Family
-device		ix		# Intel 10Gb Ethernet Family
-device		msk		# Marvell/SysKonnect Yukon II Gigabit Ethernet
-device  	smc		# SMSC LAN91C111
-device		vnic		# Cavium ThunderX NIC
-device		al_eth		# Annapurna Alpine Ethernet NIC
+#device		mii
+#device		miibus		# MII bus support
+#device		awg		# Allwinner EMAC Gigabit Ethernet
+#device		axgbe		# AMD Opteron A1100 integrated NIC
+#device		em		# Intel PRO/1000 Gigabit Ethernet Family
+#device		ix		# Intel 10Gb Ethernet Family
+#device		msk		# Marvell/SysKonnect Yukon II Gigabit Ethernet
+#device  	smc		# SMSC LAN91C111
+#device		vnic		# Cavium ThunderX NIC
+#device		al_eth		# Annapurna Alpine Ethernet NIC
 
 # Block devices
 device		ahci
@@ -166,10 +167,10 @@ device		pl011
 #device		smsc
 
 # GPIO
-#device		aw_gpio		# Allwinner GPIO controller
-#device		gpio
-#device		gpioled
-#device		fdt_pinctrl
+device		aw_gpio		# Allwinner GPIO controller
+device		gpio
+device		gpioled
+device		fdt_pinctrl
 
 # I2C
 #device		aw_rsb		# Allwinner Reduced Serial Bus
@@ -200,7 +201,7 @@ device		pl011
 #device		aw_thermal	# Allwinner Thermal Sensor Controller
 
 # SPI
-#device		spibus
+device		spibus
 #device		bcm2835_spi	# Broadcom BCM283x SPI bus
 
 # Console
@@ -208,12 +209,14 @@ device		vt
 device		kbdmux
 
 # Pseudo devices.
-#device		loop		# Network loopback
-#device		random		# Entropy device
-#device		ether		# Ethernet support
+device		loop		# Network loopback
+device		random		# Entropy device
+device		ether		# Ethernet support
+device		pty
+device		md		# Memory "disks"
+
 #device		vlan		# 802.1Q VLAN support
 #device		tun		# Packet tunnel.
-#device		md		# Memory "disks"
 #device		gif		# IPv6 and IPv4 tunneling
 #device		firmware	# firmware assist module
 #device		psci		# Support for ARM PSCI
@@ -228,7 +231,7 @@ device		regulator
 # The `bpf' device enables the Berkeley Packet Filter.
 # Be aware of the administrative consequences of enabling this!
 # Note that 'bpf' is required for DHCP.
-#device		bpf		# Berkeley packet filter
+device		bpf		# Berkeley packet filter
 device		bvmconsole
 
 # Chip-specific errata

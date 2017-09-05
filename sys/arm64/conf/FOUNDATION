@@ -1,5 +1,6 @@
 #
-# GENERIC -- Generic kernel configuration file for FreeBSD/arm64
+# FOUNDATION -- Kernel configuration file for FreeBSD/arm64 to run on the
+# Foundation emulator
 #
 # For more information on this file, please read the config(5) manual page,
 # and/or the handbook section on Kernel Configuration Files:

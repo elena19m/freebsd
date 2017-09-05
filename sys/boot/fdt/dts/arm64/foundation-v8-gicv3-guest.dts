@@ -6,12 +6,6 @@
 
 /dts-v1/;
 
-/*
- * Reserve 64KB at the bottom of the memory for the DTB memory reservation
- * table.
- */
-///memreserve/ 0x80000000 0x00010000;
-
 / {
 	model = "Foundation-v8A";
 	compatible = "arm,foundation-aarch64", "arm,vexpress";
