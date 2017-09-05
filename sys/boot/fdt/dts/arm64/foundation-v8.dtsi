@@ -6,8 +6,6 @@
 
 /dts-v1/;
 
-///memreserve/ 0x80000000 0x00010000;
-
 / {
 	model = "Foundation-v8A";
 	compatible = "arm,foundation-aarch64", "arm,vexpress";
@@ -32,8 +30,6 @@
 			device_type = "cpu";
 			compatible = "arm,armv8";
 			reg = <0x0 0x0>;
-			enable-method = "spin-table";
-			cpu-release-addr = <0x0 0x8000fff8>;
 			next-level-cache = <&L2_0>;
 		};
 

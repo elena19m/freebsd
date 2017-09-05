@@ -73,8 +73,10 @@ static int			alt_break_state;
 
 #if defined(__i386__) || defined(__amd64__)
 #define	BVM_CONS_PORT	0x220
-#elif defined(__arm__) || defined(__aarch64__)
+#elif defined(__arm__)
 #define	BVM_CONS_PORT	0x1c090000
+#elif defined(__aarch64__)
+#define	BVM_CONS_PORT	0x090000
 #endif
 
 static int bvm_cons_port = BVM_CONS_PORT;
