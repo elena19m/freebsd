@@ -40,7 +40,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/reboot.h>
 #include <sys/bus.h>
 
-#if defined(__arm__)
+#if defined(__arm__) || defined(__aarch64__)
 #include <vm/vm.h>
 #include <vm/pmap.h>
 #endif
@@ -73,7 +73,7 @@ static int			alt_break_state;
 
 #if defined(__i386__) || defined(__amd64__)
 #define	BVM_CONS_PORT	0x220
-#elif defined(__arm__)
+#elif defined(__arm__) || defined(__aarch64__)
 #define	BVM_CONS_PORT	0x1c090000
 #endif
 
@@ -100,8 +100,8 @@ bvm_rcons(u_char *ch)
 
 #if defined(__i386__) || defined(__amd64__)
 	c = inl(bvm_cons_port);
-#elif defined(__arm__)
-	c = (*(int *)bvm_cons_port);
+#elif defined(__arm__) || defined(__aarch64__)
+	c = (*(int *)(size_t)bvm_cons_port);
 #endif
 
 	if (c != -1) {
@@ -116,8 +116,8 @@ bvm_wcons(u_char ch)
 {
 #if defined(__i386__) || defined(__amd64__)
 	outl(bvm_cons_port, ch);
-#elif defined(__arm__)
-	(*(int *)bvm_cons_port) = ch;
+#elif defined(__arm__) || defined(__aarch64__)
+	(*(int *)(size_t)bvm_cons_port) = ch;
 #endif
 }
 
@@ -204,9 +204,9 @@ bvm_cnprobe(struct consdev *cp)
 			bvm_cons_port = port;
 
 		if (inw(bvm_cons_port) == BVM_CONS_SIG)
-#elif defined(__arm__)
+#elif defined(__arm__) || defined(__aarch64__)
 		bvm_cons_port = (int) pmap_mapdev(bvm_cons_port, 0x1000);
-		if ((*(short *)bvm_cons_port) == BVM_CONS_SIG)
+		if ((*(short *)(size_t)bvm_cons_port) == BVM_CONS_SIG)
 #endif
 			cp->cn_pri = CN_REMOTE;
 		}
