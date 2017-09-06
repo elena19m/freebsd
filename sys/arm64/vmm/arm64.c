@@ -51,6 +51,7 @@
 #include "arm64.h"
 #include "vgic.h"
 #include "vtimer.h"
+#include "hyp.h"
 
 #define	HANDLED		1
 #define	UNHANDLED	0
@@ -180,13 +181,20 @@ arm_cleanup(void)
 	 * in the translation tables and vmm_cleanup() is called by its physical
 	 * address.
 	 */
-	vmm_call_hyp((void *)vtophys(vmm_cleanup), vtophys(hyp_stub_vectors));
+	uint64_t rc;
+	printf("before vmm_call_hyp(vmm_cleanup, hyp_stub_vectors)\n");
+	rc = vmm_call_hyp((void *)vtophys(vmm_cleanup), vtophys(hyp_stub_vectors));
+	printf("rc = %lu\n", rc);
 
+	printf("before hypmap_cleanup(hyp_pmap)\n");
 	hypmap_cleanup(hyp_pmap);
+	printf("before free(hyp_pmap)\n");
 	free(hyp_pmap, M_HYP);
 
+	printf("before free(stack)\n");
 	free(stack, M_HYP);
 
+	printf("before mtx_destroy(vmid_generation_mtx)\n");
 	mtx_destroy(&vmid_generation_mtx);
 
 	return 0;
@@ -223,13 +231,13 @@ arm_vminit(struct vm *vm)
 		 * HCR_TSC: trap SMC (Secure Monitor Call) from EL1
 		 * HCR_BSU_IS: barrier instructions apply to the inner shareable
 		 * domain
-		 * HCR_AMO: route physical SError interrupts to EL2
-		 * HCR_IMO: route physical IRQ interrupts to EL2
-		 * HCR_FMO: route physical FIQ interrupts to EL2
+		 * HCR_AMO: route physical SError interrupts to EL2 ** DISABLED FOR NOW **
+		 * HCR_IMO: route physical IRQ interrupts to EL2 ** DISABLED FOR NOW **	
+		 * HCR_FMO: route physical FIQ interrupts to EL2 ** DISABLED FOR NOW **
 		 * HCR_VM: use stage 2 translation
 		 */
 		hypctx->hcr_el2 = HCR_RW | HCR_HCD | HCR_TSC | HCR_BSU_IS | \
-				 HCR_AMO | HCR_IMO | HCR_FMO | HCR_VM;
+				 HCR_VM;
 		/* The VM will detect a uniprocessor system */
 		hypctx->vmpidr_el2 = get_mpidr();
 		hypctx->vmpidr_el2 |= VMPIDR_EL2_U;
@@ -328,7 +336,7 @@ get_vm_reg_name(uint32_t reg_nr, uint32_t mode __attribute__((unused)))
 	return VM_REG_LAST;
 }
 
-static int hyp_handle_exception(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
+static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 {
 	int handled;
 	//int hsr_ec, hsr_il, hsr_iss;
@@ -438,7 +446,7 @@ static int hyp_handle_exception(struct hyp *hyp, int vcpu, struct vm_exit *vmexi
 }
 
 static int
-hyp_exit_process(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
+handle_world_switch(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 {
 	int handled;
 
@@ -446,26 +454,15 @@ hyp_exit_process(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 
 	vmexit->exitcode = VM_EXITCODE_BOGUS;
 	switch(vmexit->u.hyp.exception_nr) {
-	case EXCP_UNKNOWN:
-		panic("%s undefined exception\n", __func__);
-		break;
-	case EXCP_SVC:
-		panic("%s take SVC exception to hyp mode\n", __func__);
-		break;
-	/* The following are in the same category and are distinguished using HSR */
-	//case EXCEPTION_PABT:
-	//case EXCEPTION_DABT:
-	/* HVC instr disabled for now in arm_vminit() */
-	case EXCP_HVC:
+	case EXCP_TYPE_EL1_SYNC:
 		vmexit->exitcode = VM_EXITCODE_HYP;
-		handled = hyp_handle_exception(hyp, vcpu, vmexit);
+		handled = handle_el1_sync_exception(hyp, vcpu, vmexit);
 		break;
-	//case EXCEPTION_FIQ:
-	//case EXCEPTION_IRQ:
-	//	handled = HANDLED;
-	//	break;
+	case EXCP_TYPE_EL1_IRQ:
+	case EXCP_TYPE_EL1_FIQ:
+	case EXCP_TYPE_EL1_ERROR:
 	default:
-		printf("%s unknown exception: %d\n",__func__, vmexit->u.hyp.exception_nr);
+		printf("%s unhandled exception: %d\n",__func__, vmexit->u.hyp.exception_nr);
 		vmexit->exitcode = VM_EXITCODE_HYP;
 		break;
 	}
@@ -477,7 +474,7 @@ static int
 arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	void *rendezvous_cookie, void *suspend_cookie)
 {
-	uint64_t rc;
+	uint64_t excp_type;
 	int handled;
 	register_t regs;
 	struct hyp *hyp;
@@ -501,23 +498,25 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 
 		printf("before vmm_call_hyp\n");
 
-		rc = vmm_call_hyp((void *)ktohyp(vmm_enter_guest), ktohyp(hypctx));
+		excp_type = vmm_call_hyp((void *)ktohyp(vmm_enter_guest),
+				ktohyp(hypctx));
 
 		printf("after vmm_call_hyp\n");
-		printf("rc = %lu\n", rc);
 
 		vmexit->pc = hypctx->elr_el2;
 
-		vmexit->u.hyp.exception_nr = rc;
+		vmexit->u.hyp.exception_nr = excp_type;
 		vmexit->u.hyp.esr_el2 = hypctx->exit_info.esr_el2;
 		vmexit->u.hyp.far_el2 = hypctx->exit_info.far_el2;
 		vmexit->u.hyp.hpfar_el2 = hypctx->exit_info.hpfar_el2;
+
+		printf("excp_type = %d\n", vmexit->u.hyp.exception_nr);
 
 		vmexit->inst_length = 4;
 
 		intr_restore(regs);
 
-		handled = hyp_exit_process(hyp, vcpu, vmexit);
+		handled = handle_world_switch(hyp, vcpu, vmexit);
 
 		//vtimer_sync_hwstate(hypctx);
 		//vgic_sync_hwstate(hypctx);
@@ -536,7 +535,6 @@ arm_vmcleanup(void *arg)
 	hypmap_map(hyp_pmap, (vm_offset_t)hyp, sizeof(struct hyp), VM_PROT_NONE);
 	hypmap_cleanup(hyp->stage2_map);
 	free(hyp->stage2_map, M_HYP);
-
 	free(hyp, M_HYP);
 }
 
