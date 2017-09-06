@@ -36,6 +36,7 @@
 
 #include "hyp_assym.h"
 #include "hyp_macros.h"
+#include "hyp.h"
 
 	.text
 
@@ -62,9 +63,7 @@ END(vmm_call_hyp)
 
 .macro vempty
 	.align 7
-	//1: b 	1b
-	mov x0, #-1
-	eret
+	1: b 	1b
 .endm
 
 .macro vector name
@@ -95,6 +94,18 @@ hyp_init_vectors:
 	vempty		/* IRQ 32-bit EL1 */
 	vempty		/* FIQ 32-bit EL1 */
 	vempty		/* Error 32-bit EL1 */
+
+	.align 3
+
+tcr:
+	/* 48 bits physical addresses */
+	.quad (TCR_EL2_RES1 | TCR_EL2_PS_48BITS)
+sctlr_el2_set:
+	/* Bits to set */
+	.quad (SCTLR_EL2_M | SCTLR_EL2_C | SCTLR_EL2_SA | SCTLR_EL2_I)
+sctlr_el2_clear:
+	/* Bits to clear */
+	.quad (SCTLR_EL2_WXN | SCTLR_EL2_A)
 
 /*
  * Initialize the hypervisor mode with a new exception vector table, translation
@@ -156,43 +167,38 @@ ENTRY(handle_hyp_init)
 	eret
 END(handle_hyp_init)
 
-	.align 3
-
-tcr:
-	/* 48 bits physical addresses */
-	.quad (TCR_EL2_RES1 | TCR_EL2_PS_48BITS)
-sctlr_el2_set:
-	/* Bits to set */
-	.quad (SCTLR_EL2_M | SCTLR_EL2_C | SCTLR_EL2_SA | SCTLR_EL2_I)
-sctlr_el2_clear:
-	/* Bits to clear */
-	.quad (SCTLR_EL2_WXN | SCTLR_EL2_A)
+.macro wth num
+	.align	7
+	mov	x0, \num
+	eret
+.endm
 
 	.align 11
 
 	.globl	hyp_vectors
 hyp_vectors:
-	vempty			/* Synchronous EL2t */
-	vempty			/* IRQ EL2t */
-	vempty			/* FIQ EL2t */
-	vempty			/* Error EL2t */
+	wth 10			/* Synchronous EL2t */
+	wth 11			/* IRQ EL2t */
+	wth 12			/* FIQ EL2t */
+	wth 13			/* Error EL2t */
 
-	vempty			/* Synchronous EL2h */
-	vempty			/* IRQ EL2h */
-	vempty			/* FIQ EL2h */
-	vempty			/* Error EL2h */
+	wth 14			/* Synchronous EL2h */
+	wth 15			/* IRQ EL2h */
+	wth 16			/* FIQ EL2h */
+	wth 17			/* Error EL2h */
 
 	vector el1_sync		/* Synchronous 64-bit EL1 */
 	vector el1_irq		/* IRQ 64-bit EL1 */
 	vector el1_fiq		/* FIQ 64-bit EL1 */
 	vector el1_error	/* Error 64-bit EL1 */
 
-	vempty			/* Synchronous 32-bit EL1 */
-	vempty			/* IRQ 32-bit EL1 */
-	vempty			/* FIQ 32-bit EL1 */
-	vempty			/* Error 32-bit EL1 */
+	wth 18			/* Synchronous 32-bit EL1 */
+	wth 19			/* IRQ 32-bit EL1 */
+	wth 20			/* FIQ 32-bit EL1 */
+	wth 21			/* Error 32-bit EL1 */
 
 .macro ktohyp reg
+	.align	7
 	ldr	x7, kva_mask
 	and	\reg, \reg, x7
 	ldr	x7, kva_off
@@ -205,28 +211,59 @@ kva_mask:
 kva_off:
 	.quad 0x0000800000000000
 
+.macro do_world_switch_to_host
+	.align 	7
+	SAVE_GUEST_REGS()
+	LOAD_HOST_REGS()
+	SAVE_EXIT_INFO()
+.endm
+
 ENTRY(handle_el1_sync)
+	/* Save registers before modifying so we can restore them */
+	str	x1, [sp, #-16]!
+
 	/* Check for host hypervisor call */
-	mrs	x9, vttbr_el2
-	cmp	x9, #VTTBR_HOST
+	mrs	x1, vttbr_el2
+	cmp	x1, #VTTBR_HOST
+	mov	x0, #42
+	eret
 	beq	1f
 
+	/* Restore register */
+	ldr	x1, [sp], #16
+
 	/* Guest exception taken to EL2 */
-	mov	x0, #1
+	do_world_switch_to_host
+	mov	x0, #EXCP_TYPE_EL1_SYNC
 	b	exit
 
 1:
-	/* Return the vector table base address if is argument is -1 */
-	cmp 	x0, #-1
-	b.ne	2f
-	mrs	x0, vbar_el2
-	b	exit
-2:
-	/*
-	 * Call function in EL2 context
-	 */
+	/* Restore register */
+	ldr	x1, [sp], #16
 
-	/* Save function address */
+	/* TODO: delete me */
+	mov	x0, #42 
+	b 	exit
+
+	cmp 	x0, #HYP_GET_VECTOR_TABLE
+	beq	2f
+	b	call_function
+2:
+	/* Return the vector table base address */
+	mrs	x0, vbar_el2
+exit:
+	eret
+END(handle_el1_sync)
+
+/*
+ * Call a function in EL2 context
+ *
+ * Expecting:
+ * x0 - function virtual address
+ * x1-x7 - function parameters
+ */
+ENTRY(call_function)
+	/* Save the function address before shuffling parameters */
 	mov	x9, x0
 
 	/* Shuffle function parameters */
@@ -240,21 +277,24 @@ ENTRY(handle_el1_sync)
 
 	/* Call function */
 	br 	x9
-	/* UNREACHABLE */
-exit:
-	eret
-END(handle_el1_sync)
+END(call_function)
 
 ENTRY(handle_el1_irq)
-	b 	vmm_enter_host
+	do_world_switch_to_host
+	mov	x0, EXCP_TYPE_EL1_IRQ
+	eret
 END(handle_el1_irq)
 
 ENTRY(handle_el1_fiq)
-	b 	vmm_enter_host
+	do_world_switch_to_host
+	mov	x0, EXCP_TYPE_EL1_FIQ
+	eret
 END(handle_el1_fiq)
 
 ENTRY(handle_el1_error)
-	b 	vmm_enter_host
+	do_world_switch_to_host
+	mov	x0, EXCP_TYPE_EL1_ERROR
+	eret
 END(handle_el1_error)
 
 /*
@@ -270,22 +310,14 @@ ENTRY(vmm_enter_guest)
 
 	SAVE_HOST_REGS()
 	LOAD_GUEST_REGS()
+	
+	/* TODO: delete me */
+	do_world_switch_to_host
+	mov	x0, EXCP_TYPE_EL1_FIQ
 
 	/* Enter guest */
 	eret
 END(vmm_enter_guest)
-
-ENTRY(vmm_enter_host)
-	SAVE_GUEST_REGS()
-	LOAD_HOST_REGS()
-	SAVE_EXIT_INFO()
-
-	/* TODO: delete me */
-	mov	x0, #42
-
-	/* Enter host */
-	eret
-END(vmm_enter_host)
 
 /*
  * Usage:
