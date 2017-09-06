@@ -184,7 +184,6 @@ arm_cleanup(void)
 	uint64_t rc;
 	printf("before vmm_call_hyp(vmm_cleanup, hyp_stub_vectors)\n");
 	rc = vmm_call_hyp((void *)vtophys(vmm_cleanup), vtophys(hyp_stub_vectors));
-	printf("rc = %lu\n", rc);
 
 	printf("before hypmap_cleanup(hyp_pmap)\n");
 	hypmap_cleanup(hyp_pmap);
@@ -237,7 +236,7 @@ arm_vminit(struct vm *vm)
 		 * HCR_VM: use stage 2 translation
 		 */
 		hypctx->hcr_el2 = HCR_RW | HCR_HCD | HCR_TSC | HCR_BSU_IS | \
-				 HCR_VM;
+				 HCR_VM | HCR_AMO | HCR_IMO | HCR_FMO;
 		/* The VM will detect a uniprocessor system */
 		hypctx->vmpidr_el2 = get_mpidr();
 		hypctx->vmpidr_el2 |= VMPIDR_EL2_U;

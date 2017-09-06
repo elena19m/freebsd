@@ -209,7 +209,7 @@ main(int argc, char** argv)
 	}
 	munmap(addr, st.st_size);
 
-	/* The VM will start execution from the kernel load address */
-	guest_setreg(VM_REG_ELR_EL2, kernel_load_address);
+	/* The VM will start execution from the kernel '_start' symbol */
+	guest_setreg(VM_REG_ELR_EL2, kernel_load_address + 0x1000);
 	return 0;
 }
