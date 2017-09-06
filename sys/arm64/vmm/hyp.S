@@ -225,8 +225,6 @@ ENTRY(handle_el1_sync)
 	/* Check for host hypervisor call */
 	mrs	x1, vttbr_el2
 	cmp	x1, #VTTBR_HOST
-	mov	x0, #42
-	eret
 	beq	1f
 
 	/* Restore register */
@@ -240,10 +238,6 @@ ENTRY(handle_el1_sync)
 1:
 	/* Restore register */
 	ldr	x1, [sp], #16
-
-	/* TODO: delete me */
-	mov	x0, #42 
-	b 	exit
 
 	cmp 	x0, #HYP_GET_VECTOR_TABLE
 	beq	2f
@@ -310,10 +304,6 @@ ENTRY(vmm_enter_guest)
 
 	SAVE_HOST_REGS()
 	LOAD_GUEST_REGS()
-	
-	/* TODO: delete me */
-	do_world_switch_to_host
-	mov	x0, EXCP_TYPE_EL1_FIQ
 
 	/* Enter guest */
 	eret
