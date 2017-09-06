@@ -331,6 +331,7 @@
 	LOAD_SYSTEM_REG64(VMPIDR_EL2);			\
 	LOAD_SYSTEM_REG32(CPTR_EL2);			\
 							\
+	/* Load the guest VTTBR */			\
 	mov	x1, #HYPCTX_HYP;			\
 	add	x1, x1, x0;				\
 	mov	x2, #HYP_VTTBR;				\
