@@ -221,7 +221,7 @@ arm_vminit(struct vm *vm)
 		 * Set the Hypervisor Configuration Register:
 		 *
 		 * HCR_RW: use AArch64 for EL1
-		 * HCR_HCD: disable the HVC instruction from EL1
+		 * HCR_HCD: disable the HVC instruction from EL1 ** DISABLED FOR NOW **
 		 * HCR_TSC: trap SMC (Secure Monitor Call) from EL1
 		 * HCR_SWIO: turn set/way invalidate into set/way clean and
 		 * invalidate
@@ -233,8 +233,8 @@ arm_vminit(struct vm *vm)
 		 * HCR_FMO: route physical FIQ interrupts to EL2 ** DISABLED FOR NOW **
 		 * HCR_VM: use stage 2 translation
 		 */
-		hypctx->hcr_el2 = HCR_RW | HCR_HCD | HCR_TSC | HCR_BSU_IS | \
-				 HCR_SWIO | HCR_FB | HCR_VM | HCR_AMO | HCR_IMO | HCR_FMO;
+		hypctx->hcr_el2 = HCR_RW | HCR_TSC | HCR_BSU_IS | \
+				 HCR_SWIO | HCR_FB | HCR_VM; // | HCR_AMO | HCR_IMO | HCR_FMO;
 
 		/* The guest will detect a uniprocessor system */
 		hypctx->vmpidr_el2 = get_mpidr();
