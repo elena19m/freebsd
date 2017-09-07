@@ -96,6 +96,7 @@ ASSYM(HYPCTX_HCR_EL2, offsetof(struct hypctx, hcr_el2));
 ASSYM(HYPCTX_VPIDR_EL2, offsetof(struct hypctx, vpidr_el2));
 ASSYM(HYPCTX_VMPIDR_EL2, offsetof(struct hypctx, vmpidr_el2));
 ASSYM(HYPCTX_CPTR_EL2, offsetof(struct hypctx, cptr_el2));
+ASSYM(HYPCTX_SPSR_EL2, offsetof(struct hypctx, spsr_el2));
 
 ASSYM(HYPCTX_HYP, offsetof(struct hypctx, hyp));
 
