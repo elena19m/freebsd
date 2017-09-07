@@ -65,6 +65,7 @@ struct hypctx {
 	uint64_t	vpidr_el2;	/* Virtualization Processor ID Register */
 	uint64_t	vmpidr_el2;	/* Virtualization Multiprocessor ID Register */
 	uint32_t	cptr_el2;	/* Architectural Feature Trap Register */
+	uint32_t	spsr_el2;	/* Saved Program Status Register */
 
 	uint32_t	vcpu;
 	struct hyp	*hyp;

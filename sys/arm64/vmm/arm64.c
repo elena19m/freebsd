@@ -156,8 +156,8 @@ arm_init(int ipinum)
 	printf("\trc = %lu\n", rc);
 
 	/* Initialize VGIC infrastructure */
-	if (vgic_hyp_init())
-		return (ENXIO);
+	//if (vgic_hyp_init())
+	//	return (ENXIO);
 
 	vtimer_hyp_init();
 
@@ -181,19 +181,12 @@ arm_cleanup(void)
 	 * in the translation tables and vmm_cleanup() is called by its physical
 	 * address.
 	 */
-	uint64_t rc;
-	printf("before vmm_call_hyp(vmm_cleanup, hyp_stub_vectors)\n");
-	rc = vmm_call_hyp((void *)vtophys(vmm_cleanup), vtophys(hyp_stub_vectors));
+	vmm_call_hyp((void *)vtophys(vmm_cleanup), vtophys(hyp_stub_vectors));
 
-	printf("before hypmap_cleanup(hyp_pmap)\n");
 	hypmap_cleanup(hyp_pmap);
-	printf("before free(hyp_pmap)\n");
 	free(hyp_pmap, M_HYP);
-
-	printf("before free(stack)\n");
 	free(stack, M_HYP);
 
-	printf("before mtx_destroy(vmid_generation_mtx)\n");
 	mtx_destroy(&vmid_generation_mtx);
 
 	return 0;
@@ -220,28 +213,48 @@ arm_vminit(struct vm *vm)
 		hypctx = &hyp->ctx[i];
 		hypctx->vcpu = i;
 		hypctx->hyp = hyp;
+
 		/* The VM will see the same CPU ID as the host */
 		hypctx->vpidr_el2 = get_midr();
+
 		/*
 		 * Set the Hypervisor Configuration Register:
 		 *
 		 * HCR_RW: use AArch64 for EL1
 		 * HCR_HCD: disable the HVC instruction from EL1
 		 * HCR_TSC: trap SMC (Secure Monitor Call) from EL1
+		 * HCR_SWIO: turn set/way invalidate into set/way clean and
+		 * invalidate
+		 * HCR_FB: broadcast maintenance operations
 		 * HCR_BSU_IS: barrier instructions apply to the inner shareable
 		 * domain
 		 * HCR_AMO: route physical SError interrupts to EL2 ** DISABLED FOR NOW **
-		 * HCR_IMO: route physical IRQ interrupts to EL2 ** DISABLED FOR NOW **	
+		 * HCR_IMO: route physical IRQ interrupts to EL2 ** DISABLED FOR NOW **
 		 * HCR_FMO: route physical FIQ interrupts to EL2 ** DISABLED FOR NOW **
 		 * HCR_VM: use stage 2 translation
 		 */
 		hypctx->hcr_el2 = HCR_RW | HCR_HCD | HCR_TSC | HCR_BSU_IS | \
-				 HCR_VM | HCR_AMO | HCR_IMO | HCR_FMO;
-		/* The VM will detect a uniprocessor system */
+				 HCR_SWIO | HCR_FB | HCR_VM | HCR_AMO | HCR_IMO | HCR_FMO;
+
+		/* The guest will detect a uniprocessor system */
 		hypctx->vmpidr_el2 = get_mpidr();
 		hypctx->vmpidr_el2 |= VMPIDR_EL2_U;
-		/* The VM will start with the MMU disabled */
+
+		/* The guest will start with the MMU disabled */
+		hypctx->sctlr_el1 = SCTLR_RES1;
 		hypctx->sctlr_el1 &= ~SCTLR_M;
+
+		/* Don't trap to EL2 for any exceptions ** ENABLED FOR NOW ** */
+		hypctx->cptr_el2 = CPTR_RES1;
+
+		/*
+		 * Disable interrupts in the guest. They will be re-enabled when
+		 * the guest deems fit.
+		 */
+		hypctx->spsr_el2 = PSR_F | PSR_I | PSR_A | PSR_D;
+
+		/* Use the EL1 stack when taking exceptions to EL1 */
+	       	hypctx->spsr_el2 |= PSR_M_EL1h;
 
 		vtimer_cpu_init(hypctx);
 	}
@@ -461,8 +474,9 @@ handle_world_switch(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 	case EXCP_TYPE_EL1_FIQ:
 	case EXCP_TYPE_EL1_ERROR:
 	default:
-		printf("%s unhandled exception: %d\n",__func__, vmexit->u.hyp.exception_nr);
-		vmexit->exitcode = VM_EXITCODE_HYP;
+		//printf("%s unhandled exception: %d\n",__func__, vmexit->u.hyp.exception_nr);
+		//vmexit->exitcode = VM_EXITCODE_HYP;
+		printf("%s exception: %d\n", __func__, vmexit->u.hyp.exception_nr);
 		break;
 	}
 
@@ -475,7 +489,7 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 {
 	uint64_t excp_type;
 	int handled;
-	register_t regs;
+	register_t daif;
 	struct hyp *hyp;
 	struct hypctx *hypctx;
 	struct vm *vm;
@@ -491,16 +505,18 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	do {
 		handled = UNHANDLED;
 
-		regs = intr_disable();
 		//vgic_flush_hwstate(hypctx);
 		//vtimer_flush_hwstate(hypctx);
 
-		printf("before vmm_call_hyp\n");
+		printf("\n");
+		printf("[ENTER GUEST] PC = 0x%lx\n", hypctx->elr_el2);
 
+		daif = intr_disable();
 		excp_type = vmm_call_hyp((void *)ktohyp(vmm_enter_guest),
 				ktohyp(hypctx));
+		intr_restore(daif);
 
-		printf("after vmm_call_hyp\n");
+		printf("[EXIT GUEST] PC = 0x%lx\n", hypctx->elr_el2);
 
 		vmexit->pc = hypctx->elr_el2;
 
@@ -510,15 +526,17 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 		vmexit->u.hyp.hpfar_el2 = hypctx->exit_info.hpfar_el2;
 
 		printf("excp_type = %d\n", vmexit->u.hyp.exception_nr);
+		printf("esr_el2 = 0x%x\n", hypctx->exit_info.esr_el2);
 
 		vmexit->inst_length = 4;
 
-		intr_restore(regs);
-
 		handled = handle_world_switch(hyp, vcpu, vmexit);
+		hypctx->elr_el2 += vmexit->inst_length;
 
 		//vtimer_sync_hwstate(hypctx);
 		//vgic_sync_hwstate(hypctx);
+
+		handled = HANDLED;
 
 	} while (handled == HANDLED);
 
