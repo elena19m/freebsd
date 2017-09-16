@@ -307,6 +307,10 @@ drop_to_el1:
 	adrp	x2, hyp_stub_vectors
 	msr	vbar_el2, x2
 
+	/* Use the host VTTBR_EL2 to tell the host and the guests apart */
+	mov	x2, #VTTBR_HOST
+	msr	vttbr_el2, x2
+
 	/* Mark hypervisor mode as enabled */
 	mov 	x1, #1
 	adr	x2, hypmode_enabled
