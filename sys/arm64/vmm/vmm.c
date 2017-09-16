@@ -309,6 +309,9 @@ vm_run(struct vm *vm, struct vm_run *vmrun)
 	struct vm_exit *vme;
 	bool retu;
 	void *rvc, *sc;
+	/* TODO: delete me */
+	uint64_t pa, va;
+	struct hyp *hyp;
 
 	vcpuid = vmrun->cpuid;
 	pc = vmrun->pc;
@@ -324,6 +327,14 @@ vm_run(struct vm *vm, struct vm_run *vmrun)
 
 	rvc = sc = NULL;
 restart:
+	/* TODO: delete me */
+	hyp = vm->cookie;
+	pa = (uint64_t)pmap_extract(hyp->stage2_map, 0x80001000);
+	va = (uint64_t)PHYS_TO_DMAP(pa);
+	printf("pa = 0x%lx\n", pa);
+	printf("va = 0x%lx\n", va);
+	printf("*va = 0x%x\n", *(uint32_t *)va);
+
 	critical_enter();
 	error = VMRUN(vm->cookie, vcpuid, pc, NULL, rvc, sc);
 	critical_exit();

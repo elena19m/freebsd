@@ -216,6 +216,10 @@ kva_off:
 	SAVE_GUEST_REGS()
 	LOAD_HOST_REGS()
 	SAVE_EXIT_INFO()
+
+	/* Restore host VTTBR */
+	mov	x1, #VTTBR_HOST
+	msr	vttbr_el2, x1
 .endm
 
 ENTRY(handle_el1_sync)
