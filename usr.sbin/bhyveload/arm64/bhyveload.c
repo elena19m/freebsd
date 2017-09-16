@@ -203,6 +203,8 @@ main(int argc, char** argv)
 		perror("guest_copyin");
 		exit(1);
 	}
+	uint32_t *first_instruction = vm_map_ipa(ctx, 0x1000, 0);
+	printf("first instruction = 0x%x\n", *first_instruction);
 
 	error = vm_attach_vgic(ctx, periphbase + 0x1000, periphbase + 0x2000);
 	if (error) {
