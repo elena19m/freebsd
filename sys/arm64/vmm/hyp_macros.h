@@ -65,9 +65,10 @@
 	stp	x24, x25, [sp, #-16]!;			\
 	stp	x26, x27, [sp, #-16]!;			\
 	stp	x28, x29, [sp, #-16]!;			\
-	str	x30, [sp, #-16]!;			\
+	str	lr, [sp, #-16]!;			\
 							\
 	/* Push the system registers */			\
+	PUSH_SYSTEM_REG(SP_EL1);			\
 	PUSH_SYSTEM_REG_PAIR(ACTLR_EL1, AMAIR_EL1);	\
 	PUSH_SYSTEM_REG_PAIR(ELR_EL1, PAR_EL1);		\
 	PUSH_SYSTEM_REG_PAIR(MAIR_EL1, TCR_EL1);	\
@@ -80,16 +81,14 @@
 	PUSH_SYSTEM_REG_PAIR(SCTLR_EL1, SPSR_EL1);	\
 	PUSH_SYSTEM_REG_PAIR(ELR_EL2, HCR_EL2);		\
 	PUSH_SYSTEM_REG_PAIR(VPIDR_EL2, VMPIDR_EL2);	\
-	PUSH_SYSTEM_REG_PAIR(CPTR_EL2, VTTBR_EL2);	\
-	PUSH_SYSTEM_REG_PAIR(VTTBR_EL2, SPSR_EL2);
+	PUSH_SYSTEM_REG_PAIR(CPTR_EL2, SPSR_EL2);	\
 
 /*
  * Restore all the host registers before entering the host.
  */
 #define LOAD_HOST_REGS()				\
 	/* Pop the system registers first */		\
-	POP_SYSTEM_REG_PAIR(VTTBR_EL2, SPSR_EL2);	\
-	POP_SYSTEM_REG_PAIR(CPTR_EL2, VTTBR_EL2);	\
+	POP_SYSTEM_REG_PAIR(CPTR_EL2, SPSR_EL2);	\
 	POP_SYSTEM_REG_PAIR(VPIDR_EL2, VMPIDR_EL2);	\
 	POP_SYSTEM_REG_PAIR(ELR_EL2, HCR_EL2);		\
 	POP_SYSTEM_REG_PAIR(SCTLR_EL1, SPSR_EL1);	\
@@ -102,9 +101,10 @@
 	POP_SYSTEM_REG_PAIR(MAIR_EL1, TCR_EL1);		\
 	POP_SYSTEM_REG_PAIR(ELR_EL1, PAR_EL1);		\
 	POP_SYSTEM_REG_PAIR(ACTLR_EL1, AMAIR_EL1);	\
+	POP_SYSTEM_REG(SP_EL1);				\
 							\
 	/* Pop the regular registers */			\
-	ldr	x30, [sp], #16;				\
+	ldr	lr, [sp], #16;				\
 	ldp	x28, x29, [sp], #16;			\
 	ldp	x26, x27, [sp], #16;			\
 	ldp	x24, x25, [sp], #16;			\
@@ -180,6 +180,7 @@
 	SAVE_REG_PAIR(X25, X26);			\
 	SAVE_REG_PAIR(X27, X28);			\
 	SAVE_REG(X29);					\
+	SAVE_REG(LR);					\
 							\
 	/* Pop and save x1 and x2 */			\
 	ldp	x1, x2, [sp], #16;			\
@@ -189,7 +190,8 @@
 	/* Pop and save x0 */				\
 	ldr	x1, [sp], #16;				\
 	mov	x2, #HYPCTX_REGS_X0;			\
-	str	x1, [x0, x2];
+	add	x2, x2, x0;				\
+	str	x1, [x2];
 
 /*
  * The STR and LDR instructions take an offset between [-256, 255], but the
@@ -230,11 +232,16 @@
 #define	SAVE_GUEST_REGS()				\
 	SAVE_GUEST_X_REGS();				\
 							\
+	mov	x1, #HYPCTX_REGS_SP;			\
+	add	x1, x1, x0;				\
+	ldr	x2, [x1];				\
+	msr	sp_el1, x2;				\
+							\
 	SAVE_SYSTEM_REG64(ACTLR_EL1);			\
 	SAVE_SYSTEM_REG64(AMAIR_EL1);			\
 	SAVE_SYSTEM_REG64(ELR_EL1);			\
-	SAVE_SYSTEM_REG64(PAR_EL1);			\
 	SAVE_SYSTEM_REG64(MAIR_EL1);			\
+	SAVE_SYSTEM_REG64(PAR_EL1);			\
 	SAVE_SYSTEM_REG64(TCR_EL1);			\
 	SAVE_SYSTEM_REG64(TPIDR_EL0);			\
 	SAVE_SYSTEM_REG64(TPIDR_EL1);			\
@@ -261,15 +268,15 @@
 
 /*
  * We use x1 as a temporary register to store the hypctx member offset and x0
- * to hold the hypctx address. We load the x0 and x1 guest values, push them on
- * the stack and after all the other registers have been restored we pop and
- * restore them.
+ * to hold the hypctx address. We load the guest x0 and x1 register values in
+ * registers x2 and x3, push x2 and x3 on the stack and then we restore x0 and
+ * x1.
  */
 #define	LOAD_GUEST_X_REGS()				\
-	/* Load and push on the stack guest x0 and x1 */\
 	mov	x1, #HYPCTX_REGS_X0;			\
+	/* x1 now holds the address of hypctx reg x0 */	\
 	add	x1, x1, x0;				\
-	/* Make x2 = x0 and x3 = x1 */			\
+	/* Make x2 = guest x0 and x3 = guest x1 */	\
 	ldp	x2, x3, [x1];				\
 	stp	x2, x3, [sp, #-16]!;			\
 							\
@@ -288,9 +295,8 @@
 	LOAD_REG_PAIR(X24, X25);			\
 	LOAD_REG_PAIR(X26, X27);			\
 	LOAD_REG_PAIR(X28, X29);			\
+	LOAD_REG(LR);					\
 							\
-	/* Save hypctx address to tpidr_el2 */		\
-	msr	tpidr_el2, x0;				\
 	/* Pop guest x0 and x1 from the stack */	\
 	ldp	x0, x1, [sp], #16;			\
 
@@ -307,8 +313,8 @@
 	LOAD_SYSTEM_REG64(ACTLR_EL1);			\
 	LOAD_SYSTEM_REG64(AMAIR_EL1);			\
 	LOAD_SYSTEM_REG64(ELR_EL1);			\
-	LOAD_SYSTEM_REG64(PAR_EL1);			\
 	LOAD_SYSTEM_REG64(MAIR_EL1);			\
+	LOAD_SYSTEM_REG64(PAR_EL1);			\
 	LOAD_SYSTEM_REG64(TCR_EL1);			\
 	LOAD_SYSTEM_REG64(TPIDR_EL0);			\
 	LOAD_SYSTEM_REG64(TPIDR_EL1);			\
@@ -341,7 +347,13 @@
 	ldr	x2, [x1];				\
 	msr	vttbr_el2, x2;				\
 							\
-	LOAD_GUEST_X_REGS();
+	/* Load the guest EL1 stack pointer */		\
+	mov	x1, #HYPCTX_REGS_SP;			\
+	add	x1, x1, x0;				\
+	ldr	x2, [x1];				\
+	msr	sp_el1, x2;				\
+							\
+	LOAD_GUEST_X_REGS();				\
 
 /*
  * Save exit information
