@@ -41,8 +41,8 @@ struct hypctx {
 	uint64_t	actlr_el1;	/* Auxiliary Control Register */
 	uint64_t	amair_el1;	/* Auxiliary Memory Attribute Indirection Register */
 	uint64_t	elr_el1;	/* Exception Link Register */
-	uint64_t	par_el1;	/* Physical Address Register */
 	uint64_t	mair_el1;	/* Memory Attribute Indirection Register */
+	uint64_t	par_el1;	/* Physical Address Register */
 	uint64_t	tcr_el1;	/* Translation Control Register */
 	uint64_t	tpidr_el0;	/* EL0 Software ID Register */
 	uint64_t	tpidr_el1;	/* EL1 Software ID Register */

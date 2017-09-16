@@ -115,6 +115,8 @@ arm_init(int ipinum)
 		return (ENXIO);
 	}
 
+	printf("\thypmode_enabled = 0x%lx\n", hypmode_enabled);
+
 	mtx_init(&vmid_generation_mtx, "vmid_generation_mtx", NULL, MTX_DEF);
 
 	/*
@@ -234,24 +236,30 @@ arm_vminit(struct vm *vm)
 		 * HCR_VM: use stage 2 translation
 		 */
 		hypctx->hcr_el2 = HCR_RW | HCR_TSC | HCR_BSU_IS | \
-				 HCR_SWIO | HCR_FB | HCR_VM; // | HCR_AMO | HCR_IMO | HCR_FMO;
+				HCR_SWIO | HCR_FB | HCR_VM | HCR_AMO | HCR_IMO | HCR_FMO;
 
 		/* The guest will detect a uniprocessor system */
 		hypctx->vmpidr_el2 = get_mpidr();
 		hypctx->vmpidr_el2 |= VMPIDR_EL2_U;
 
-		/* The guest will start with the MMU disabled */
+		/* Make sure the guest starts with the MMU disabled */
 		hypctx->sctlr_el1 = SCTLR_RES1;
 		hypctx->sctlr_el1 &= ~SCTLR_M;
 
-		/* Don't trap to EL2 for any exceptions ** ENABLED FOR NOW ** */
+		/* Use the same memory attributes as the host */
+		hypctx->mair_el1 = READ_SPECIALREG(mair_el1);
+
+		/* Use the same CPU identification information as the host */
+		hypctx->vpidr_el2 = READ_SPECIALREG(midr_el1);
+
+		/* Don't trap to EL2 for any exceptions */
 		hypctx->cptr_el2 = CPTR_RES1;
 
 		/*
-		 * Disable interrupts in the guest. They will be re-enabled when
-		 * the guest deems fit.
+		 * Disable interrupts in the guest. The guest OS will re-enable
+		 * them.
 		 */
-		hypctx->spsr_el2 = PSR_F | PSR_I | PSR_A | PSR_D;
+		hypctx->spsr_el2 = PSR_D | PSR_A | PSR_I | PSR_F;
 
 		/* Use the EL1 stack when taking exceptions to EL1 */
 	       	hypctx->spsr_el2 |= PSR_M_EL1h;
@@ -476,7 +484,7 @@ handle_world_switch(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 	default:
 		//printf("%s unhandled exception: %d\n",__func__, vmexit->u.hyp.exception_nr);
 		//vmexit->exitcode = VM_EXITCODE_HYP;
-		printf("%s exception: %d\n", __func__, vmexit->u.hyp.exception_nr);
+		//printf("%s exception: %d\n", __func__, vmexit->u.hyp.exception_nr);
 		break;
 	}
 
@@ -525,13 +533,17 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 		vmexit->u.hyp.far_el2 = hypctx->exit_info.far_el2;
 		vmexit->u.hyp.hpfar_el2 = hypctx->exit_info.hpfar_el2;
 
-		printf("excp_type = %d\n", vmexit->u.hyp.exception_nr);
+		if (vmexit->u.hyp.exception_nr == 1)
+			printf("excp_type = EXCP_TYPE_EL1_IRQ\n");
+		else
+			printf("excp_type = %d\n", vmexit->u.hyp.exception_nr);
 		printf("esr_el2 = 0x%x\n", hypctx->exit_info.esr_el2);
+		printf("sctlr_el1 = 0x%x\n", hypctx->sctlr_el1);
 
 		vmexit->inst_length = 4;
 
 		handled = handle_world_switch(hyp, vcpu, vmexit);
-		hypctx->elr_el2 += vmexit->inst_length;
+		//hypctx->elr_el2 += vmexit->inst_length;
 
 		//vtimer_sync_hwstate(hypctx);
 		//vgic_sync_hwstate(hypctx);
