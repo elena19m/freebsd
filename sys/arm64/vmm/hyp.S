@@ -105,7 +105,7 @@ sctlr_el2_set:
 	.quad (SCTLR_EL2_M | SCTLR_EL2_C | SCTLR_EL2_SA | SCTLR_EL2_I)
 sctlr_el2_clear:
 	/* Bits to clear */
-	.quad (SCTLR_EL2_WXN | SCTLR_EL2_A)
+	.quad (SCTLR_EL2_WXN | SCTLR_EL2_A | SCTLR_EL2_EE)
 
 /*
  * Initialize the hypervisor mode with a new exception vector table, translation
