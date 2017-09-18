@@ -102,6 +102,26 @@ out:
 			vtophys(hyp->stage2_map->pm_l0));
 }
 
+extern uint64_t boot_actlr_el1;
+extern uint64_t boot_amair_el1;
+extern uint64_t boot_elr_el1;
+extern uint64_t boot_mair_el1;
+extern uint64_t boot_par_el1;
+extern uint64_t boot_tcr_el1;
+extern uint64_t boot_tpidr_el1;
+extern uint64_t boot_ttbr0_el1;
+extern uint64_t boot_ttbr1_el1;
+extern uint64_t boot_vbar_el1;
+
+extern uint32_t boot_afsr0_el1;
+extern uint32_t boot_afsr1_el1;
+extern uint32_t boot_contextidr_el1;
+extern uint32_t boot_cpacr_el1;
+extern uint32_t boot_esr_el1;
+extern uint32_t boot_far_el1;
+extern uint32_t boot_sctlr_el1;
+extern uint32_t boot_spsr_el1;
+
 static int
 arm_init(int ipinum)
 {
@@ -115,7 +135,28 @@ arm_init(int ipinum)
 		return (ENXIO);
 	}
 
-	printf("\thypmode_enabled = 0x%lx\n", hypmode_enabled);
+	printf("\n");
+	printf("\tboot_actlr_el1 = 0x%lx\n", boot_actlr_el1);
+	printf("\tboot_amair_el1 = 0x%lx\n", boot_amair_el1);
+	printf("\tboot_elr_el1 = 0x%lx\n", boot_elr_el1);
+	printf("\tboot_mair_el1 = 0x%lx\n", boot_mair_el1);
+	printf("\tboot_par_el1 = 0x%lx\n", boot_par_el1);
+	printf("\tboot_tcr_el1 = 0x%lx\n", boot_tcr_el1);
+	printf("\tboot_tpidr_el1 = 0x%lx\n", boot_tpidr_el1);
+	printf("\tboot_ttbr0_el1 = 0x%lx\n", boot_ttbr0_el1);
+	printf("\tboot_ttbr1_el1 = 0x%lx\n", boot_ttbr1_el1);
+	printf("\tboot_vbar_el1 = 0x%lx\n", boot_vbar_el1);
+
+	printf("\n");
+	printf("\tboot_afsr0_el1 = 0x%x\n", boot_afsr0_el1);
+	printf("\tboot_afsr1_el1 = 0x%x\n", boot_afsr1_el1);
+	printf("\tboot_contextidr_el1 = 0x%x\n", boot_contextidr_el1);
+	printf("\tboot_cpacr_el1 = 0x%x\n", boot_cpacr_el1);
+	printf("\tboot_esr_el1 = 0x%x\n", boot_esr_el1);
+	printf("\tboot_far_el1 = 0x%x\n", boot_far_el1);
+	printf("\tboot_sctlr_el1 = 0x%x\n", boot_sctlr_el1);
+	printf("\tboot_spsr_el1 = 0x%x\n", boot_spsr_el1);
+	printf("\n");
 
 	mtx_init(&vmid_generation_mtx, "vmid_generation_mtx", NULL, MTX_DEF);
 
@@ -161,7 +202,7 @@ arm_init(int ipinum)
 	//if (vgic_hyp_init())
 	//	return (ENXIO);
 
-	vtimer_hyp_init();
+	//vtimer_hyp_init();
 
 	return 0;
 }
@@ -216,14 +257,11 @@ arm_vminit(struct vm *vm)
 		hypctx->vcpu = i;
 		hypctx->hyp = hyp;
 
-		/* The VM will see the same CPU ID as the host */
-		hypctx->vpidr_el2 = get_midr();
-
 		/*
 		 * Set the Hypervisor Configuration Register:
 		 *
 		 * HCR_RW: use AArch64 for EL1
-		 * HCR_HCD: disable the HVC instruction from EL1 ** DISABLED FOR NOW **
+		 * HCR_HCD: disable the HVC instruction from EL1 ** HVC ENABLED FOR NOW **
 		 * HCR_TSC: trap SMC (Secure Monitor Call) from EL1
 		 * HCR_SWIO: turn set/way invalidate into set/way clean and
 		 * invalidate
@@ -241,18 +279,15 @@ arm_vminit(struct vm *vm)
 		/* The guest will detect a uniprocessor system */
 		hypctx->vmpidr_el2 = get_mpidr();
 		hypctx->vmpidr_el2 |= VMPIDR_EL2_U;
-
-		/* Make sure the guest starts with the MMU disabled */
-		hypctx->sctlr_el1 = SCTLR_RES1;
-		hypctx->sctlr_el1 &= ~SCTLR_M;
-
-		/* Use the same memory attributes as the host */
-		hypctx->mair_el1 = READ_SPECIALREG(mair_el1);
+		hypctx->vmpidr_el2 &= ~VMPIDR_EL2_MT;
 
 		/* Use the same CPU identification information as the host */
 		hypctx->vpidr_el2 = READ_SPECIALREG(midr_el1);
 
-		/* Don't trap to EL2 for any exceptions */
+		/*
+		 * Don't trap accesses to CPACR_EL1, trace, SVE, Advanced SIMD
+		 * and floating point functionality to EL2.
+		 */
 		hypctx->cptr_el2 = CPTR_RES1;
 
 		/*
@@ -260,17 +295,28 @@ arm_vminit(struct vm *vm)
 		 * them.
 		 */
 		hypctx->spsr_el2 = PSR_D | PSR_A | PSR_I | PSR_F;
-
 		/* Use the EL1 stack when taking exceptions to EL1 */
 	       	hypctx->spsr_el2 |= PSR_M_EL1h;
 
-		vtimer_cpu_init(hypctx);
+		/* The guest starts with the MMU disabled */
+		hypctx->sctlr_el1 = SCTLR_RES1;
+		hypctx->sctlr_el1 &= ~SCTLR_M;
+
+		/* Use the same memory attributes as the host */
+		hypctx->mair_el1 = READ_SPECIALREG(mair_el1);
+
+		/* Don't trap accesses to SVE, Advanced SIMD and FP to EL1 */
+		hypctx->cpacr_el1 = CPACR_FPEN_TRAP_NONE;
+
+		hypctx->par_el1 = 0x0000000000001000;
+
+		//vtimer_cpu_init(hypctx);
 	}
 
 	hypmap_map(hyp_pmap, (vm_offset_t)hyp, sizeof(struct hyp),
 			VM_PROT_READ | VM_PROT_WRITE);
 
-	vtimer_init(hyp);
+	//vtimer_init(hyp);
 
 	return (hyp);
 }
@@ -497,7 +543,7 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 {
 	uint64_t excp_type;
 	int handled;
-	register_t daif;
+	//register_t daif;
 	struct hyp *hyp;
 	struct hypctx *hypctx;
 	struct vm *vm;
@@ -510,6 +556,9 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	hypctx = &hyp->ctx[vcpu];
 	hypctx->elr_el2 = (uint64_t)pc;
 
+	printf("vttbr = 0x%lx\n", hyp->vttbr);
+	printf("vtophys(stage2_map) = 0x%lx\n", (uint64_t)vtophys(hyp->stage2_map->pm_l0));
+
 	do {
 		handled = UNHANDLED;
 
@@ -519,10 +568,10 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 		printf("\n");
 		printf("[ENTER GUEST] PC = 0x%lx\n", hypctx->elr_el2);
 
-		daif = intr_disable();
+		//daif = intr_disable();
 		excp_type = vmm_call_hyp((void *)ktohyp(vmm_enter_guest),
 				ktohyp(hypctx));
-		intr_restore(daif);
+		//intr_restore(daif);
 
 		printf("[EXIT GUEST] PC = 0x%lx\n", hypctx->elr_el2);
 
@@ -538,7 +587,10 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 		else
 			printf("excp_type = %d\n", vmexit->u.hyp.exception_nr);
 		printf("esr_el2 = 0x%x\n", hypctx->exit_info.esr_el2);
+		printf("far_el2 = 0x%x\n", hypctx->exit_info.far_el2);
+		printf("hpfar_el2 = 0x%x\n", hypctx->exit_info.hpfar_el2);
 		printf("sctlr_el1 = 0x%x\n", hypctx->sctlr_el1);
+		printf("par_el1 = 0x%lx\n", hypctx->par_el1);
 
 		vmexit->inst_length = 4;
 

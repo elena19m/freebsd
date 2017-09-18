@@ -244,6 +244,97 @@ END(mpentry)
 _C_LABEL(hypmode_enabled):
 	.zero 8
 
+/* TODO: delete me */
+.macro	save_reg64 reg
+	.align 7
+	mrs	x2, \reg
+	adr	x3, boot_\reg
+	str	x2, [x3]
+.endm
+
+.macro	save_reg32 reg
+	.align 7
+	mrs	x2, \reg
+	adr	x3, boot_\reg
+	str	w2, [x3]
+.endm
+
+
+/* TODO: delete me */
+	.align 3
+	.globl _C_LABEL(boot_actlr_el1)
+_C_LABEL(boot_actlr_el1):
+	.zero 8
+	.align 3
+	.globl _C_LABEL(boot_amair_el1)
+_C_LABEL(boot_amair_el1):
+	.zero 8
+	.align 3
+	.globl _C_LABEL(boot_elr_el1)
+_C_LABEL(boot_elr_el1):
+	.zero 8
+	.align 3
+	.globl _C_LABEL(boot_mair_el1)
+_C_LABEL(boot_mair_el1):
+	.zero 8
+	.align 3
+	.globl _C_LABEL(boot_par_el1)
+_C_LABEL(boot_par_el1):
+	.zero 8
+	.align 3
+	.globl _C_LABEL(boot_tcr_el1)
+_C_LABEL(boot_tcr_el1):
+	.zero 8
+	.align 3
+	.globl _C_LABEL(boot_tpidr_el1)
+_C_LABEL(boot_tpidr_el1):
+	.zero 8
+	.align 3
+	.globl _C_LABEL(boot_ttbr0_el1)
+_C_LABEL(boot_ttbr0_el1):
+	.zero 8
+	.align 3
+	.globl _C_LABEL(boot_ttbr1_el1)
+_C_LABEL(boot_ttbr1_el1):
+	.zero 8
+	.align 3
+	.globl _C_LABEL(boot_vbar_el1)
+_C_LABEL(boot_vbar_el1):
+	.zero 8
+
+	.align 3
+	.globl _C_LABEL(boot_afsr0_el1)
+_C_LABEL(boot_afsr0_el1):
+	.zero 4
+	.align 3
+	.globl _C_LABEL(boot_afsr1_el1)
+_C_LABEL(boot_afsr1_el1):
+	.zero 4
+	.align 3
+	.globl _C_LABEL(boot_contextidr_el1)
+_C_LABEL(boot_contextidr_el1):
+	.zero 4
+	.align 3
+	.globl _C_LABEL(boot_cpacr_el1)
+_C_LABEL(boot_cpacr_el1):
+	.zero 4
+	.align 3
+	.globl _C_LABEL(boot_esr_el1)
+_C_LABEL(boot_esr_el1):
+	.zero 4
+	.align 3
+	.globl _C_LABEL(boot_far_el1)
+_C_LABEL(boot_far_el1):
+	.zero 4
+	.align 3
+	.globl _C_LABEL(boot_sctlr_el1)
+_C_LABEL(boot_sctlr_el1):
+	.zero 4
+	.align 3
+	.globl _C_LABEL(boot_spsr_el1)
+_C_LABEL(boot_spsr_el1):
+	.zero 4
+
 	.align 2
 /*
  * If we are started in EL2, configure the required hypervisor
@@ -315,6 +406,27 @@ drop_to_el1:
 	mov 	x1, #1
 	adr	x2, hypmode_enabled
 	str 	x1, [x2]
+
+	/* TODO: delete me */
+	save_reg64	actlr_el1
+	save_reg64	amair_el1
+	save_reg64	elr_el1
+	save_reg64	mair_el1
+	save_reg64	par_el1
+	save_reg64	tcr_el1
+	save_reg64	tpidr_el1
+	save_reg64	ttbr0_el1
+	save_reg64	ttbr1_el1
+	save_reg64	vbar_el1
+
+	save_reg32	afsr0_el1
+	save_reg32	afsr1_el1
+	save_reg32	contextidr_el1
+	save_reg32	cpacr_el1
+	save_reg32	esr_el1
+	save_reg32	far_el1
+	save_reg32	sctlr_el1
+	save_reg32	spsr_el1
 
 	mov	x2, #(PSR_F | PSR_I | PSR_A | PSR_D | PSR_M_EL1h)
 	msr	spsr_el2, x2
