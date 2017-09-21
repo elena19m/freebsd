@@ -296,6 +296,13 @@
 	/* Pop guest x0 and x1 from the stack */	\
 	ldp	x0, x1, [sp], #16;			\
 
+
+#define KTOHYP_REG(reg)					\
+	mov	x7, HYP_KVA_MASK;			\
+	and	reg, reg, x7;				\
+	mov	x7, HYP_KVA_OFFSET;			\
+	orr	reg, reg, x7;
+
 /*
  * Restore all the guest registers to their original values.
  *
@@ -336,10 +343,14 @@
 	/* Load the guest VTTBR */			\
 	mov	x1, #HYPCTX_HYP;			\
 	add	x1, x1, x0;				\
-	mov	x2, #HYP_VTTBR;				\
-	add	x1, x1, x2;				\
+	/* Hyp kernel VA is in x2 */			\
 	ldr	x2, [x1];				\
-	msr	vttbr_el2, x2;				\
+	/* Transform the kernel VA into a hyp VA */	\
+	KTOHYP_REG(x2);					\
+	mov	x1, #HYP_VTTBR;				\
+	add	x2, x2, x1;				\
+	ldr	x1, [x2];				\
+	msr	vttbr_el2, x1;				\
 							\
 	/* Load the guest EL1 stack pointer */		\
 	mov	x1, #HYPCTX_REGS_SP;			\
