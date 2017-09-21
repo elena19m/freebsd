@@ -196,7 +196,7 @@ arm_init(int ipinum)
 	printf("\tBefore vmm_call_hyp(hyp_vectors, hyp_pmap, stack_top)\n");
 	uint64_t rc;
 	rc = vmm_call_hyp((void *)vtophys(hyp_vectors), vtophys(hyp_pmap->pm_l0), ktohyp(stack_top));
-	printf("\trc = %lu\n", rc);
+	printf("\trc = 0x%lx\n", rc);
 
 	/* Initialize VGIC infrastructure */
 	//if (vgic_hyp_init())
@@ -274,7 +274,7 @@ arm_vminit(struct vm *vm)
 		 * HCR_VM: use stage 2 translation
 		 */
 		hypctx->hcr_el2 = HCR_RW | HCR_TSC | HCR_BSU_IS | \
-				HCR_SWIO | HCR_FB | HCR_VM | HCR_AMO | HCR_IMO | HCR_FMO;
+				HCR_SWIO | HCR_FB | HCR_VM;// | HCR_AMO | HCR_IMO | HCR_FMO;
 
 		/* The guest will detect a uniprocessor system */
 		hypctx->vmpidr_el2 = get_mpidr();
@@ -307,8 +307,6 @@ arm_vminit(struct vm *vm)
 
 		/* Don't trap accesses to SVE, Advanced SIMD and FP to EL1 */
 		hypctx->cpacr_el1 = CPACR_FPEN_TRAP_NONE;
-
-		hypctx->par_el1 = 0x0000000000001000;
 
 		//vtimer_cpu_init(hypctx);
 	}
@@ -601,6 +599,10 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 		//vgic_sync_hwstate(hypctx);
 
 		handled = HANDLED;
+
+		if (excp_type != EXCP_TYPE_EL1_IRQ) {
+			panic("\n\nUnhandled exception from guest\n\n");
+		}
 
 	} while (handled == HANDLED);
 
