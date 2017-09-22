@@ -35,10 +35,12 @@
 #include <sys/sysctl.h>
 #include <sys/lock.h>
 #include <sys/mutex.h>
+
 #include <vm/vm.h>
 #include <vm/pmap.h>
 #include <vm/vm_page.h>
 #include <vm/vm_param.h>
+
 #include <machine/vm.h>
 #include <machine/cpufunc.h>
 #include <machine/cpu.h>
@@ -46,6 +48,7 @@
 #include <machine/vmm_dev.h>
 #include <machine/atomic.h>
 #include <machine/hypervisor.h>
+#include <machine/pmap.h>
 
 #include "mmu.h"
 #include "arm64.h"
@@ -171,7 +174,7 @@ arm_init(int ipinum)
 	 * Create the necessary mappings for the hypervisor translation table
 	 */
 	hyp_pmap = malloc(sizeof(*hyp_pmap), M_HYP, M_WAITOK | M_ZERO);
-	hypmap_init(hyp_pmap);
+	hypmap_init(hyp_pmap, PT_STAGE1);
 	hyp_code_len = (size_t)hyp_code_end - (size_t)hyp_code_start;
 	printf("\tBefore hypmap_map(hyp_pmap)\n");
 	hypmap_map(hyp_pmap, (vm_offset_t)hyp_code_start, hyp_code_len, VM_PROT_EXECUTE);
@@ -247,7 +250,8 @@ arm_vminit(struct vm *vm)
 	hyp->vgic_attached = false;
 
 	hyp->stage2_map = malloc(sizeof(*hyp->stage2_map), M_HYP, M_WAITOK | M_ZERO);
-	hypmap_init(hyp->stage2_map);
+	//hypmap_init(hyp->stage2_map, PT_STAGE2);
+	hypmap_init(hyp->stage2_map, PT_STAGE1);
 	set_vttbr(hyp);
 
 	mtx_init(&hyp->vgic_distributor.distributor_lock, "Distributor Lock", "", MTX_SPIN);

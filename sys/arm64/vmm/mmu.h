@@ -37,7 +37,7 @@
 
 #define page_aligned(x)		(((vm_offset_t)(x) & PAGE_MASK) == 0)
 
-void 		hypmap_init(pmap_t map);
+void 		hypmap_init(pmap_t map, enum pmap_type pm_type);
 void 		hypmap_map(pmap_t map, vm_offset_t va, size_t len,
 			vm_prot_t prot);
 void 		hypmap_map_identity(pmap_t map, vm_offset_t va, size_t len,
