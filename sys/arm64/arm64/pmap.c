@@ -408,6 +408,8 @@ static void _pmap_unwire_l3(pmap_t pmap, vm_offset_t va, vm_page_t m,
 static int pmap_unuse_pt(pmap_t, vm_offset_t, pd_entry_t, struct spglist *);
 static __inline vm_page_t pmap_remove_pt_page(pmap_t pmap, vm_offset_t va);
 
+static int pa_range_bits = 0;
+
 /*
  * These load the old table data and store the new value.
  * They need to be atomic as the System MMU may write to the table at
@@ -432,10 +434,26 @@ pagecopy(void *s, void *d)
 	memcpy(d, s, PAGE_SIZE);
 }
 
+#define	pmap_l0_index(va)	(((va) >> L0_SHIFT) & L0_ADDR_MASK)
+#define	pmap_l1_index(va)	(((va) >> L1_SHIFT) & Ln_ADDR_MASK)
+#define	pmap_l2_index(va)	(((va) >> L2_SHIFT) & Ln_ADDR_MASK)
+#define	pmap_l3_index(va)	(((va) >> L3_SHIFT) & Ln_ADDR_MASK)
+
+static __inline unsigned long
+pmap_stage2_l1_index(vm_offset_t va)
+{
+	return 0;
+}
+
+static __inline pd_entry_t *
+pmap_stage2_l1(pmap_t pmap, vm_offset_t va)
+{
+	return (&pmap->pm_l0[pmap_stage2_l1_index(va)]);
+}
+
 static __inline pd_entry_t *
 pmap_l0(pmap_t pmap, vm_offset_t va)
 {
-
 	return (&pmap->pm_l0[pmap_l0_index(va)]);
 }
 
@@ -457,7 +475,7 @@ pmap_l1(pmap_t pmap, vm_offset_t va)
 	if ((pmap_load(l0) & ATTR_DESCR_MASK) != L0_TABLE)
 		return (NULL);
 
-	return (pmap_l0_to_l1(l0, va));
+	return(pmap_l0_to_l1(l0, va));
 }
 
 static __inline pd_entry_t *
@@ -520,14 +538,16 @@ pmap_pde(pmap_t pmap, vm_offset_t va, int *level)
 {
 	pd_entry_t *l0, *l1, *l2, desc;
 
-	l0 = pmap_l0(pmap, va);
-	desc = pmap_load(l0) & ATTR_DESCR_MASK;
-	if (desc != L0_TABLE) {
-		*level = -1;
-		return (NULL);
-	}
-
-	l1 = pmap_l0_to_l1(l0, va);
+	if (pmap->pm_type == PT_STAGE1) {
+		l0 = pmap_l0(pmap, va);
+		desc = pmap_load(l0) & ATTR_DESCR_MASK;
+		if (desc != L0_TABLE) {
+			*level = -1;
+			return (NULL);
+		}
+		l1 = pmap_l0_to_l1(l0, va);
+	} else
+		l1 = pmap_stage2_l1(pmap, va);
 	desc = pmap_load(l1) & ATTR_DESCR_MASK;
 	if (desc != L1_TABLE) {
 		*level = 0;
@@ -949,7 +969,10 @@ void
 pmap_bootstrap(vm_offset_t l0pt, vm_offset_t l1pt, vm_paddr_t kernstart,
     vm_size_t kernlen)
 {
-	vm_offset_t freemempos;
+	u_int l1_slot, l2_slot;
+	uint64_t id_aa64mmfr0_el1;
+	pt_entry_t *l2;
+	vm_offset_t va, freemempos;
 	vm_offset_t dpcpu, msgbufpv;
 	vm_paddr_t start_pa, pa, min_pa;
 	uint64_t kern_delta;
@@ -1036,6 +1059,35 @@ pmap_bootstrap(vm_offset_t l0pt, vm_offset_t l1pt, vm_paddr_t kernstart,
 	pa = pmap_early_vtophys(l1pt, freemempos);
 
 	physmem_exclude_region(start_pa, pa - start_pa, EXFLAG_NOALLOC);
+
+	id_aa64mmfr0_el1 = READ_SPECIALREG(id_aa64mmfr0_el1);
+	switch (ID_AA64MMFR0_PA_RANGE(id_aa64mmfr0_el1)) {
+	case ID_AA64MMFR0_PA_RANGE_4G:
+		pa_range_bits = 32;
+		break;
+	case ID_AA64MMFR0_PA_RANGE_64G:
+		pa_range_bits = 36;
+		break;
+	case ID_AA64MMFR0_PA_RANGE_1T:
+		pa_range_bits = 40;
+		break;
+	case ID_AA64MMFR0_PA_RANGE_4T:
+		pa_range_bits = 42;
+		break;
+	case ID_AA64MMFR0_PA_RANGE_16T:
+		pa_range_bits = 44;
+		break;
+	case ID_AA64MMFR0_PA_RANGE_256T:
+		pa_range_bits = 48;
+		break;
+	default:
+		/*
+		 * Unknown PA range bits, will lead to a panic if a stage 2
+		 * pmap starting at level 1 is created.
+		 */
+		pa_range_bits = 0;
+		break;
+	}
 
 	cpu_tlb_flushID();
 }
@@ -1728,6 +1780,9 @@ int
 pmap_pinit_stage(pmap_t pmap, enum pmap_stage stage, int levels)
 {
 	vm_page_t m;
+
+	KASSERT(!((pm_type == PT_STAGE2) && (pa_range_bits == 0)),
+			("Unknown PARange bits"));
 
 	/*
 	 * allocate the l0 page
@@ -3944,7 +3999,15 @@ retry:
 		}
 		/* We need to allocate an L3 table. */
 	}
+
+	//if (pmap->pm_type == PT_STAGE2)
+	//	printf("don't have level3\n");
+
 	if (va < VM_MAXUSER_ADDRESS) {
+
+		//if (pmap->pm_type == PT_STAGE2)
+		//	printf("va < VM_MAXUSER_ADDRESS\n");
+
 		nosleep = (flags & PMAP_ENTER_NOSLEEP) != 0;
 
 		/*
