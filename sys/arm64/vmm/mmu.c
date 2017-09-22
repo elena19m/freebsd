@@ -37,6 +37,7 @@
 #include <machine/vm.h>
 #include <machine/vmm.h>
 #include <machine/vmparam.h>
+#include <machine/pmap.h>
 
 #include "mmu.h"
 #include "arm64.h"
@@ -44,10 +45,10 @@
 MALLOC_DECLARE(M_HYP);
 
 void
-hypmap_init(pmap_t map)
+hypmap_init(pmap_t map, enum pmap_type pm_type)
 {
 	mtx_init(&map->pm_mtx, "hypmap_pm_mtx", NULL, MTX_DEF);
-	pmap_pinit(map);
+	pmap_pinit_type(map, pm_type);
 }
 
 void
