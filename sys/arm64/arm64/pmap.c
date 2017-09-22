@@ -149,6 +149,7 @@ __FBSDID("$FreeBSD$");
 #include <machine/machdep.h>
 #include <machine/md_var.h>
 #include <machine/pcb.h>
+#include <machine/pmap.h>
 
 #define	PMAP_ASSERT_STAGE1(pmap)	MPASS((pmap)->pm_stage == PM_STAGE1)
 #define	PMAP_ASSERT_STAGE2(pmap)	MPASS((pmap)->pm_stage == PM_STAGE2)
@@ -1742,6 +1743,7 @@ pmap_pinit_stage(pmap_t pmap, enum pmap_stage stage, int levels)
 		pagezero(pmap->pm_l0);
 
 	pmap->pm_root.rt_root = 0;
+	pmap->pm_type = pm_type;
 	bzero(&pmap->pm_stats, sizeof(pmap->pm_stats));
 	pmap->pm_cookie = COOKIE_FROM(-1, INT_MAX);
 
