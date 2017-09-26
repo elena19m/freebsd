@@ -434,16 +434,13 @@ pagecopy(void *s, void *d)
 	memcpy(d, s, PAGE_SIZE);
 }
 
-#define	pmap_l0_index(va)	(((va) >> L0_SHIFT) & L0_ADDR_MASK)
-#define	pmap_l1_index(va)	(((va) >> L1_SHIFT) & Ln_ADDR_MASK)
-#define	pmap_l2_index(va)	(((va) >> L2_SHIFT) & Ln_ADDR_MASK)
-#define	pmap_l3_index(va)	(((va) >> L3_SHIFT) & Ln_ADDR_MASK)
+#define	pmap_l0_index(va)		(((va) >> L0_SHIFT) & L0_ADDR_MASK)
+#define	pmap_l1_index(va)		(((va) >> L1_SHIFT) & Ln_ADDR_MASK)
+#define	pmap_l2_index(va)		(((va) >> L2_SHIFT) & Ln_ADDR_MASK)
+#define	pmap_l3_index(va)		(((va) >> L3_SHIFT) & Ln_ADDR_MASK)
 
-static __inline unsigned long
-pmap_stage2_l1_index(vm_offset_t va)
-{
-	return 0;
-}
+#define	STAGE2_L1_ADDR_MASK		((1UL << (pa_range_bits - L1_SHIFT)) - 1)
+#define	pmap_stage2_l1_index(va)	(((va) >> L1_SHIFT) & STAGE2_L1_ADDR_MASK)
 
 static __inline pd_entry_t *
 pmap_stage2_l1(pmap_t pmap, vm_offset_t va)
@@ -454,6 +451,8 @@ pmap_stage2_l1(pmap_t pmap, vm_offset_t va)
 static __inline pd_entry_t *
 pmap_l0(pmap_t pmap, vm_offset_t va)
 {
+	KASSERT(pmap->pm_type != PT_STAGE2,
+			("Level 0 table is invalid for PT_STAGE2 pmap"));
 	return (&pmap->pm_l0[pmap_l0_index(va)]);
 }
 
@@ -545,13 +544,21 @@ pmap_pde(pmap_t pmap, vm_offset_t va, int *level)
 			*level = -1;
 			return (NULL);
 		}
+
 		l1 = pmap_l0_to_l1(l0, va);
-	} else
+		desc = pmap_load(l1) & ATTR_DESCR_MASK;
+		if (desc != L1_TABLE) {
+			*level = 0;
+			return (l0);
+		}
+	} else {
 		l1 = pmap_stage2_l1(pmap, va);
-	desc = pmap_load(l1) & ATTR_DESCR_MASK;
-	if (desc != L1_TABLE) {
-		*level = 0;
-		return (l0);
+		desc = pmap_load(l1) & ATTR_DESCR_MASK;
+		if (desc != L1_TABLE) {
+			/* For PT_STAGE2 mappings the first level is level 1 */
+			*level = -1;
+			return (NULL);
+		}
 	}
 
 	l2 = pmap_l1_to_l2(l1, va);
@@ -576,7 +583,10 @@ pmap_pte(pmap_t pmap, vm_offset_t va, int *level)
 	pd_entry_t *l1, *l2, desc;
 	pt_entry_t *l3;
 
-	l1 = pmap_l1(pmap, va);
+	if (pmap->pm_type == PT_STAGE1)
+		l1 = pmap_l1(pmap, va);
+	else
+		l1 = pmap_stage2_l1(pmap, va);
 	if (l1 == NULL) {
 		*level = 0;
 		return (NULL);
@@ -628,14 +638,20 @@ pmap_get_tables(pmap_t pmap, vm_offset_t va, pd_entry_t **l0, pd_entry_t **l1,
 	if (pmap->pm_l0 == NULL)
 		return (false);
 
-	l0p = pmap_l0(pmap, va);
-	*l0 = l0p;
+	if (pmap->pm_type == PT_STAGE1) {
+		l0p = pmap_l0(pmap, va);
+		*l0 = l0p;
 
-	if ((pmap_load(l0p) & ATTR_DESCR_MASK) != L0_TABLE)
-		return (false);
+		if ((pmap_load(l0p) & ATTR_DESCR_MASK) != L0_TABLE)
+			return (false);
 
-	l1p = pmap_l0_to_l1(l0p, va);
-	*l1 = l1p;
+		l1p = pmap_l0_to_l1(l0p, va);
+		*l1 = l1p;
+	} else {
+		*l0 = NULL;
+		l1p = pmap->pm_l0;
+		*l1 = l1p;
+	}
 
 	if ((pmap_load(l1p) & ATTR_DESCR_MASK) == L1_BLOCK) {
 		*l2 = NULL;
@@ -1781,6 +1797,8 @@ pmap_pinit_stage(pmap_t pmap, enum pmap_stage stage, int levels)
 {
 	vm_page_t m;
 
+	KASSERT(pm_type < PT_INVALID, ("Unknown pmap type"));
+
 	KASSERT(!((pm_type == PT_STAGE2) && (pa_range_bits == 0)),
 			("Unknown PARange bits"));
 
@@ -1897,6 +1915,10 @@ _pmap_alloc_l3(pmap_t pmap, vm_pindex_t ptepindex, struct rwlock **lockp)
 	 */
 
 	if (ptepindex >= (NUL2E + NUL1E)) {
+
+		if (pmap->pm_type == PT_STAGE2)
+			printf("ERROR: ptepindex >= (NUL2E + NUL1E)\n");
+
 		pd_entry_t *l0;
 		vm_pindex_t l0index;
 
@@ -1904,57 +1926,88 @@ _pmap_alloc_l3(pmap_t pmap, vm_pindex_t ptepindex, struct rwlock **lockp)
 		l0 = &pmap->pm_l0[l0index];
 		pmap_store(l0, VM_PAGE_TO_PHYS(m) | L0_TABLE);
 	} else if (ptepindex >= NUL2E) {
+
+		if (pmap->pm_type == PT_STAGE2)
+			printf("ptepindex >= NUL2E\n");
+
 		vm_pindex_t l0index, l1index;
 		pd_entry_t *l0, *l1;
 		pd_entry_t tl0;
 
 		l1index = ptepindex - NUL2E;
-		l0index = l1index >> L0_ENTRIES_SHIFT;
-
-		l0 = &pmap->pm_l0[l0index];
-		tl0 = pmap_load(l0);
-		if (tl0 == 0) {
-			/* recurse for allocating page dir */
-			if (_pmap_alloc_l3(pmap, NUL2E + NUL1E + l0index,
-			    lockp) == NULL) {
-				vm_page_unwire_noq(m);
-				vm_page_free_zero(m);
-				return (NULL);
+		if (pmap->pm_type == PT_STAGE1) {
+			l0index = l1index >> L0_ENTRIES_SHIFT;
+			l0 = &pmap->pm_l0[l0index];
+			tl0 = pmap_load(l0);
+			if (tl0 == 0) {
+				/* recurse for allocating page dir */
+				if (_pmap_alloc_l3(pmap, NUL2E + NUL1E + l0index,
+				    lockp) == NULL) {
+					--m->wire_count;
+					/* XXX: release mem barrier? */
+					atomic_subtract_int(&vm_cnt.v_wire_count, 1);
+					vm_page_free_zero(m);
+					return (NULL);
+				}
+			} else {
+				l1pg = PHYS_TO_VM_PAGE(tl0 & ~ATTR_MASK);
+				l1pg->wire_count++;
 			}
-		} else {
-			l1pg = PHYS_TO_VM_PAGE(tl0 & ~ATTR_MASK);
-			l1pg->ref_count++;
-		}
-
-		l1 = (pd_entry_t *)PHYS_TO_DMAP(pmap_load(l0) & ~ATTR_MASK);
-		l1 = &l1[ptepindex & Ln_ADDR_MASK];
+			l1 = (pd_entry_t *)PHYS_TO_DMAP(pmap_load(l0) & ~ATTR_MASK);
+			l1 = &l1[ptepindex & Ln_ADDR_MASK];
+		} else
+			l1 = &pmap->pm_l0[l1index & STAGE2_L1_ADDR_MASK];
 		pmap_store(l1, VM_PAGE_TO_PHYS(m) | L1_TABLE);
 	} else {
+		if (pmap->pm_type == PT_STAGE2)
+			printf("ptepindex < NUL2E\n");
 		vm_pindex_t l0index, l1index;
 		pd_entry_t *l0, *l1, *l2;
 		pd_entry_t tl0, tl1;
 
 		l1index = ptepindex >> Ln_ENTRIES_SHIFT;
-		l0index = l1index >> L0_ENTRIES_SHIFT;
-
-		l0 = &pmap->pm_l0[l0index];
-		tl0 = pmap_load(l0);
-		if (tl0 == 0) {
-			/* recurse for allocating page dir */
-			if (_pmap_alloc_l3(pmap, NUL2E + l1index,
-			    lockp) == NULL) {
-				vm_page_unwire_noq(m);
-				vm_page_free_zero(m);
-				return (NULL);
-			}
+		if (pmap->pm_type == PT_STAGE1) {
+			l0index = l1index >> L0_ENTRIES_SHIFT;
+			l0 = &pmap->pm_l0[l0index];
 			tl0 = pmap_load(l0);
-			l1 = (pd_entry_t *)PHYS_TO_DMAP(tl0 & ~ATTR_MASK);
-			l1 = &l1[l1index & Ln_ADDR_MASK];
+			if (tl0 == 0) {
+				/* recurse for allocating page dir */
+				if (_pmap_alloc_l3(pmap, NUL2E + l1index,
+				    lockp) == NULL) {
+					--m->wire_count;
+					atomic_subtract_int(&vm_cnt.v_wire_count, 1);
+					vm_page_free_zero(m);
+					return (NULL);
+				}
+				tl0 = pmap_load(l0);
+				l1 = (pd_entry_t *)PHYS_TO_DMAP(tl0 & ~ATTR_MASK);
+				l1 = &l1[l1index & Ln_ADDR_MASK];
+			} else {
+				l1 = (pd_entry_t *)PHYS_TO_DMAP(tl0 & ~ATTR_MASK);
+				l1 = &l1[l1index & Ln_ADDR_MASK];
+				tl1 = pmap_load(l1);
+				if (tl1 == 0) {
+					/* recurse for allocating page dir */
+					if (_pmap_alloc_l3(pmap, NUL2E + l1index,
+					    lockp) == NULL) {
+						--m->wire_count;
+						/* XXX: release mem barrier? */
+						atomic_subtract_int(
+						    &vm_cnt.v_wire_count, 1);
+						vm_page_free_zero(m);
+						return (NULL);
+					}
+				} else {
+					l2pg = PHYS_TO_VM_PAGE(tl1 & ~ATTR_MASK);
+					l2pg->wire_count++;
+				}
+			}
 		} else {
-			l1 = (pd_entry_t *)PHYS_TO_DMAP(tl0 & ~ATTR_MASK);
-			l1 = &l1[l1index & Ln_ADDR_MASK];
+			l1 = &pmap->pm_l0[l1index & STAGE2_L1_ADDR_MASK];
 			tl1 = pmap_load(l1);
 			if (tl1 == 0) {
+				if (pmap->pm_type == PT_STAGE2)
+					printf("\tl1 == 0\n");
 				/* recurse for allocating page dir */
 				if (_pmap_alloc_l3(pmap, NUL2E + l1index,
 				    lockp) == NULL) {
@@ -1963,6 +2016,8 @@ _pmap_alloc_l3(pmap_t pmap, vm_pindex_t ptepindex, struct rwlock **lockp)
 					return (NULL);
 				}
 			} else {
+				if (pmap->pm_type == PT_STAGE2)
+					printf("\tl1 != 0\n");
 				l2pg = PHYS_TO_VM_PAGE(tl1 & ~ATTR_MASK);
 				l2pg->ref_count++;
 			}
@@ -2073,6 +2128,8 @@ retry:
 	/*
 	 * Here if the pte page isn't mapped, or if it has been deallocated.
 	 */
+	if (pmap->pm_type == PT_STAGE2)
+		printf("va = 0x%lx, ptepindex = 0x%lx, ", va, ptepindex);
 	m = _pmap_alloc_l3(pmap, ptepindex, lockp);
 	if (m == NULL && lockp != NULL)
 		goto retry;
