@@ -560,6 +560,15 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	printf("vttbr = 0x%lx\n", hyp->vttbr);
 	printf("vtophys(stage2_map) = 0x%lx\n", (uint64_t)vtophys(hyp->stage2_map->pm_l0));
 
+	pd_entry_t *l0, *l1, *l2, *l3;
+	pmap_get_tables(hyp->stage2_map, 0x80001000, &l0, &l1, &l2, &l3);
+	printf("\n");
+	printf("l0 = 0x%lx\n", (uint64_t)l0);
+	printf("l1 = 0x%lx\n", (uint64_t)*l1);
+	printf("l2 = 0x%lx\n", (uint64_t)*l2);
+	printf("l3 = 0x%lx\n", (uint64_t)*l3);
+	printf("\n");
+
 	do {
 		handled = UNHANDLED;
 
