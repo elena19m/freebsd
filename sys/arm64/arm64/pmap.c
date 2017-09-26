@@ -649,7 +649,7 @@ pmap_get_tables(pmap_t pmap, vm_offset_t va, pd_entry_t **l0, pd_entry_t **l1,
 		*l1 = l1p;
 	} else {
 		*l0 = NULL;
-		l1p = pmap->pm_l0;
+		l1p = pmap_stage2_l1(pmap, va);
 		*l1 = l1p;
 	}
 
