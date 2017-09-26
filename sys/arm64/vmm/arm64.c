@@ -250,8 +250,7 @@ arm_vminit(struct vm *vm)
 	hyp->vgic_attached = false;
 
 	hyp->stage2_map = malloc(sizeof(*hyp->stage2_map), M_HYP, M_WAITOK | M_ZERO);
-	//hypmap_init(hyp->stage2_map, PT_STAGE2);
-	hypmap_init(hyp->stage2_map, PT_STAGE1);
+	hypmap_init(hyp->stage2_map, PT_STAGE2);
 	set_vttbr(hyp);
 
 	mtx_init(&hyp->vgic_distributor.distributor_lock, "Distributor Lock", "", MTX_SPIN);
