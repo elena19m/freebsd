@@ -474,6 +474,30 @@ pmap_l1(pmap_t pmap, vm_offset_t va)
 	return(pmap_l0_to_l1(l0, va));
 }
 
+static __inline vm_page_t
+pmap_l1pg(pmap_t pmap, vm_offset_t va)
+{
+	if (pmap->pm_type == PT_STAGE1) {
+		pd_entry_t *l0, tl0;
+
+		l0 = pmap_l0(pmap, va);
+		tl0 = pmap_load(l0);
+		return (PHYS_TO_VM_PAGE(tl0 & ~ATTR_MASK));
+	} else {
+		uint64_t pa_offset;
+		vm_paddr_t pa;
+
+		/*
+		 * The offset will be the bits
+		 * [pa_range_bits-1:L0_SHIFT]
+		 */
+		va = va & ((1 << pa_range_bits) - 1);
+		pa_offset = (va & ~L0_OFFSET) >> L0_SHIFT;
+		pa = DMAP_TO_PHYS((vm_offset_t)pmap->pm_l0) + pa_offset * PAGE_SIZE;
+		return (PHYS_TO_VM_PAGE(pa));
+	}
+}
+
 static __inline pd_entry_t *
 pmap_l1_to_l2(pd_entry_t *l1p, vm_offset_t va)
 {
