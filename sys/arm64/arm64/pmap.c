@@ -1823,9 +1823,29 @@ pmap_pinit_stage(pmap_t pmap, enum pmap_stage stage, int levels)
 		    VM_ALLOC_NOOBJ | VM_ALLOC_WIRED | VM_ALLOC_ZERO)) == NULL)
 			VM_WAIT;
 	} else {
-		uint64_t npages = 1 << (pa_range_bits - L0_SHIFT);
-		uint64_t alignment = 1 << (12 + pa_range_bits - 39);
+		uint64_t npages;
+		uint64_t alignment;
 
+		if (pa_range_bits <= L0_SHIFT) {
+			/*
+			 * The level 1 translation table is not larger than a
+			 * PT_STAGE1 level 1 table, use only one page.
+			 */
+			npages = 1;
+			alignment = PAGE_SIZE;
+		} else {
+			/*
+			 * The level 1 translation table is larger than a
+			 * regular PT_STAGE1 level 1 table, for every x bits
+			 * that is larger we need 2^x pages and the table must
+			 * be aligned at a  2^(x + 12) boundary.
+			 *
+			 * See Table D5-25 and Example D4-5 from the DDI0487B
+			 * ARMv8 Architecture Manual for more information.
+			 */
+			npages = 1 << (pa_range_bits - L0_SHIFT);
+			alignment = 1 << (PAGE_SHIFT + pa_range_bits - L0_SHIFT);
+		}
 		while ((l0pt = vm_page_alloc_contig(NULL, 0, VM_ALLOC_NORMAL |
 		    VM_ALLOC_NOOBJ | VM_ALLOC_WIRED | VM_ALLOC_ZERO,
 		    npages, DMAP_MIN_PHYSADDR, DMAP_MAX_PHYSADDR,
