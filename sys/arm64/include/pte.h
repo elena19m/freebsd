@@ -99,6 +99,35 @@ typedef	uint64_t	pt_entry_t;		/* page table entry */
 #define	ATTR_DESCR_TYPE_TABLE	2
 #define	ATTR_DESCR_TYPE_PAGE	2
 #define	ATTR_DESCR_TYPE_BLOCK	0
+/* Stage 2 translation Block and Page attributes */
+#define ATTR_ST2_AF		ATTR_AF
+#define	ATTR_ST2_SH(x)		ATTR_SH(x)
+#define	 ATTR_ST2_SH_MASK	ATTR_SH_MASK
+#define	 ATTR_ST2_SH_NS		ATTR_SH_NS	/* Non-shareable */
+#define	 ATTR_ST2_SH_OS		ATTR_SH_OS	/* Outer-shareable */
+#define	 ATTR_ST2_SH_IS		ATTR_SH_IS	/* Inner-shareable */
+#define	ATTR_ST2_S2AP(x)	((x) << 6)	/* Data access permissions */
+#define	 ATTR_ST2_S2AP_NONE	(0 << 1)
+#define	 ATTR_ST2_S2AP_R0	(1 << 0)
+#define	 ATTR_ST2_S2AP_W0	(1 << 1)
+#define	 ATTR_ST2_S2AP_RW	(3 << 0)
+#define ATTR_ST2_MEMATTR(x)	((x) << 2)	/* Memory attributes */
+#define  ATTR_ST2_MEM_DEV	(0 << 2)	/* Device memory */
+#define   ATTR_ST2_MEM_DEV_nGnRnE	(0 << 0)
+#define   ATTR_ST2_MEM_DEV_nGnRE	(1 << 0)
+#define   ATTR_ST2_MEM_DEV_nGRE		(1 << 1)
+#define   ATTR_ST2_MEM_DEV_GRE		(3 << 0)
+#define  ATTR_ST2_MEM_ONC	(1 << 2)	/* Outer Non-cacheable */
+#define  ATTR_ST2_MEM_OWT	(1 << 2)	/* Outer Write-Through Cacheable */
+#define  ATTR_ST2_MEM_OWB	(3 << 2)	/* Outer Write-Back Cacheable */
+#define	 ATTR_ST2_MEM_INC	(1 << 0)	/* Inner Non-cacheable */
+#define	 ATTR_ST2_MEM_IWT	(1 << 1)	/* Inner Write-Through Cacheable */
+#define	 ATTR_ST2_MEM_IWB	(3 << 0)	/* Inner Write-Back Cacheable */
+
+#define ATTR_ST2_DEFAULT	(ATTR_ST2_AF | ATTR_ST2_SH(ATTR_ST2_SH_IS) | \
+				ATTR_ST2_S2AP(ATTR_ST2_S2AP_RW) | \
+				ATTR_ST2_MEMATTR(ATTR_ST2_MEM_OWB | ATTR_ST2_MEM_IWB))
+
 
 /* Level 0 table, 512GiB per entry */
 #define	L0_SHIFT	39
