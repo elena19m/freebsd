@@ -126,12 +126,13 @@ mmio_parse_opts(const char *args)
 	if (baddr != 0) {
 		for (mmi = mmio_info_head; mmi != NULL; mmi = mmi->next)
 			if ((mmio_mem_available(mmi->baddr, mmi->size,
-						baddr, size)) != 0)
+						baddr, size)) == 0)
 				break;
 
 		if (mmi != NULL) {
 			fprintf(stderr, "The requested address 0x%llx is "
 				"already bound or overlapping\r\n", baddr);
+			error = EINVAL;
 			goto parse_error;
 		}
 	}
@@ -325,6 +326,9 @@ mmio_emul_init(struct vmctx *ctx, struct mmio_devemu *me, struct mmio_info *mmi)
 	if (error == 0) {
 		mmi->mi = mi;
 	} else {
+		fprintf(stderr, "Device \"%s\": initialization failed\r\n",
+			mi->mi_name);
+		fprintf(stderr, "Device arguments were: %s\r\n", mmi->arg);
 		free(mi->mi_cfgregs);
 		free(mi);
 	}
