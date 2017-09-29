@@ -10,7 +10,9 @@ SRCS=				\
 	mevent.c		\
 	mmio_emul.c		\
 	mmio_irq.c		\
+	mmio_virtio_console.c	\
 	mmio_virtio_rnd.c	\
+	sockstream.c		\
 	reset.c			\
 	virtio.c
 
