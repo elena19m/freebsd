@@ -347,7 +347,6 @@ mmio_vtcon_sock_add(struct mmio_vtcon_softc *sc, const char *name,
 
 	if (sock->vss_server_evp == NULL) {
 		error = -1;
-		mevent_enable(sock->vss_server_evp);
 		goto out;
 	}
 
