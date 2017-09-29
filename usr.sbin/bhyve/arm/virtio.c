@@ -41,6 +41,10 @@ __FBSDID("$FreeBSD$");
 #include "virtio_mmio.h"
 #include "vmmapi.h"
 
+static int debug_virtio = 1;
+
+#define DPRINTF(fmt, ...) if (debug_virtio) printf(fmt, ##__VA_ARGS__)
+
 /*
  * Functions for dealing with generalized "virtual devices" as
  * defined by <https://www.google.com/#output=search&q=virtio+spec>
@@ -470,31 +474,48 @@ vi_mmio_read(struct vmctx *ctx, int vcpu, struct mmio_devinst *mi,
 	switch (offset) {
 	case VIRTIO_MMIO_MAGIC_VALUE:
 		value = mmio_get_cfgreg(mi, offset);
+		DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_MAGIC_VALUE value = %llx\r\n", __FILE__, __func__, value);
 		break;
 	case VIRTIO_MMIO_VERSION:
 		value = mmio_get_cfgreg(mi, offset);
+		DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_VERSION value = %llx\r\n", __FILE__, __func__, value);
 		break;
 	case VIRTIO_MMIO_DEVICE_ID:
 		value = mmio_get_cfgreg(mi, offset);
+		DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_DEVICE_ID value = %llx\r\n", __FILE__, __func__, value);
 		break;
 	case VIRTIO_MMIO_VENDOR_ID:
 		value = mmio_get_cfgreg(mi, offset);
+		DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_VENDOR_ID value = %llx\r\n", __FILE__, __func__, value);
 		break;
 	case VIRTIO_MMIO_INTERRUPT_STATUS:
 		value = mmio_get_cfgreg(mi, offset);
+		DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_INTERRUPT_STATUS value = %llx\r\n", __FILE__, __func__, value);
 		break;
 	case VIRTIO_MMIO_STATUS:
 		value = mmio_get_cfgreg(mi, offset);
+		DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_STATUS value = %llx\r\n", __FILE__, __func__, value);
 		break;
 	case VIRTIO_MMIO_HOST_FEATURES:
 		sel = mmio_get_cfgreg(mi, VIRTIO_MMIO_HOST_FEATURES_SEL);
 		value = (vc->vc_hv_caps >> (32 * sel)) & 0xffffffff;
+		DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_HOST_FEATURES value = %llx; sel = %llx\r\n", __FILE__, __func__, value, sel);
 		break;
 	case VIRTIO_MMIO_QUEUE_NUM_MAX:
 		value = vs->vs_curq < vc->vc_nvq ?
 			vs->vs_queues[vs->vs_curq].vq_qsize : 0;
+		DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_QUEUE_NUM_MAX value = %llx\r\n", __FILE__, __func__, value);
 		break;
 	default:
+		if (offset > VIRTIO_MMIO_CONFIG) {
+			value = mmio_get_cfgspace(mi,
+						  offset - VIRTIO_MMIO_CONFIG,
+						  size);
+			DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_CONFIG offset = %llx; value = %llx\r\n", __FILE__, __func__, offset, value);
+		} else {
+			DPRINTF("[device][%s][%s] UNKNOWN OFFSET 0x%llx\r\n",
+				__FILE__, __func__, offset);
+		}
 		break;
 	}
 
@@ -531,26 +552,32 @@ vi_mmio_write(struct vmctx *ctx, int vcpu, struct mmio_devinst *mi,
 	switch (offset) {
 		/* TODO: QUEUE_ALIGN */
 	case VIRTIO_MMIO_HOST_FEATURES_SEL:
+		DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_HOST_FEATURES_SEL value = %llx\r\n", __FILE__, __func__, value);
 		mmio_set_cfgreg(mi, offset, value);
 		break;
 	case VIRTIO_MMIO_GUEST_FEATURES_SEL:
+		DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_GUEST_FEATURES_SEL value = %llx\r\n", __FILE__, __func__, value);
 		mmio_set_cfgreg(mi, offset, value);
 		break;
 	case VIRTIO_MMIO_INTERRUPT_ACK:
+		DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_INTERRUPT_ACK value = %llx\r\n", __FILE__, __func__, value);
 		mmio_set_cfgreg(mi, offset, value);
 		break;
 	case VIRTIO_MMIO_STATUS:
+		DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_STATUS value = %llx\r\n", __FILE__, __func__, value);
 		mmio_set_cfgreg(mi, offset, value);
 		vs->vs_status = value;
 		if (value == 0)
 			(*vc->vc_reset)(DEV_SOFTC(vs));
 		break;
 	case VIRTIO_MMIO_QUEUE_NUM:
+		DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_QUEUE_NUM value = %llx\r\n", __FILE__, __func__, value);
 		mmio_set_cfgreg(mi, offset, value);
 		vq = &vs->vs_queues[vs->vs_curq];
 		vq->vq_qsize = value;
 		break;
 	case VIRTIO_MMIO_GUEST_FEATURES:
+		DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_GUEST_FEATURES value = %llx\r\n", __FILE__, __func__, value);
 		mmio_set_cfgreg(mi, offset, value);
 		vs->vs_negotiated_caps = value & vc->vc_hv_caps;
 		if (vc->vc_apply_features)
@@ -559,6 +586,7 @@ vi_mmio_write(struct vmctx *ctx, int vcpu, struct mmio_devinst *mi,
 		break;
 	/* TODO: add VIRTIO_MMIO_GUEST_PAGE_SIZE */
 	case VIRTIO_MMIO_QUEUE_SEL:
+		DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_QUEUE_SEL value = %llx\r\n", __FILE__, __func__, value);
 		mmio_set_cfgreg(mi, offset, value);
 		/*
 		 * Note that the guest is allowed to select an
@@ -569,6 +597,7 @@ vi_mmio_write(struct vmctx *ctx, int vcpu, struct mmio_devinst *mi,
 		break;
 	/* TODO: add VIRTIO_MMIO_QUEUE_ALIGN */
 	case VIRTIO_MMIO_QUEUE_PFN:
+		DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_QUEUE_PFN value = %llx\r\n", __FILE__, __func__, value);
 		mmio_set_cfgreg(mi, offset, value);
 		if (vs->vs_curq >= vc->vc_nvq)
 			fprintf(stderr, "%s: curq %d >= max %d\r\n",
@@ -577,12 +606,13 @@ vi_mmio_write(struct vmctx *ctx, int vcpu, struct mmio_devinst *mi,
 			vi_vq_init(vs, value);
 		break;
 	case VIRTIO_MMIO_QUEUE_NOTIFY:
-		mmio_set_cfgreg(mi, offset, value);
+		DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_QUEUE_NOTIFY value = %llx\r\n", __FILE__, __func__, value);
 		if (value >= vc->vc_nvq) {
 			fprintf(stderr, "%s: queue %d notify out of range\r\n",
 				name, (int)value);
 			break;
 		}
+		mmio_set_cfgreg(mi, offset, value);
 		vq = &vs->vs_queues[value];
 		if (vq->vq_notify)
 			(*vq->vq_notify)(DEV_SOFTC(vs), vq);
@@ -594,6 +624,14 @@ vi_mmio_write(struct vmctx *ctx, int vcpu, struct mmio_devinst *mi,
 				name, (int)value);
 		break;
 	default:
+		if (offset > VIRTIO_MMIO_CONFIG) {
+			mmio_set_cfgspace(mi, offset - VIRTIO_MMIO_CONFIG,
+					  value, size);
+			DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_CONFIG offset = %llx; value = %llx\r\n", __FILE__, __func__, offset, value);
+		} else {
+			DPRINTF("[device][%s][%s] UNKNOWN OFFSET 0x%llx\r\n",
+				__FILE__, __func__, offset);
+		}
 		break;
 	}
 
