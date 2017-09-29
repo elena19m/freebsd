@@ -1709,17 +1709,11 @@ _pmap_unwire_l3(pmap_t pmap, vm_offset_t va, vm_page_t m, struct spglist *free)
 		/* l1 page */
 		pd_entry_t *l0;
 
-		if (pmap->pm_type == PT_STAGE2)
-			printf("m->pindex >= (NUL2E + NUL1E)\n");
-
 		l0 = pmap_l0(pmap, va);
 		pmap_clear(l0);
 	} else if (m->pindex >= NUL2E) {
 		/* l2 page */
 		pd_entry_t *l1;
-
-		if (pmap->pm_type == PT_STAGE2)
-			printf("m->pindex >= NUL2E\n");
 
 		l1 = pmap_l1(pmap, va);
 		pmap_clear(l1);
@@ -1727,18 +1721,11 @@ _pmap_unwire_l3(pmap_t pmap, vm_offset_t va, vm_page_t m, struct spglist *free)
 		/* l3 page */
 		pd_entry_t *l2;
 
-		if (pmap->pm_type == PT_STAGE2)
-			printf("m->pindex < NUL2E (first)\n");
-
 		l2 = pmap_l2(pmap, va);
 		pmap_clear(l2);
 	}
 	pmap_resident_count_dec(pmap, 1);
 	if (m->pindex < NUL2E) {
-
-		if (pmap->pm_type == PT_STAGE2)
-			printf("m->pindex < NUL2E (second)\n");
-
 		/* We just released an l3, unhold the matching l2 */
 		pd_entry_t *l1, tl1;
 		vm_page_t l2pg;
@@ -1748,24 +1735,9 @@ _pmap_unwire_l3(pmap_t pmap, vm_offset_t va, vm_page_t m, struct spglist *free)
 		l2pg = PHYS_TO_VM_PAGE(tl1 & ~ATTR_MASK);
 		pmap_unwire_l3(pmap, va, l2pg, free);
 	} else if (m->pindex < (NUL2E + NUL1E)) {
-
-		if (pmap->pm_type == PT_STAGE2)
-			printf("m->pindex < (NUL2E + NUL1E)\n");
-
 		/* We just released an l2, unhold the matching l1 */
 		vm_page_t l1pg;
 		l1pg = pmap_l1pg(pmap, va);
-
-		/*
-		if (pmap->pm_type == PT_STAGE1) {
-			pd_entry_t *l0, tl0;
-
-			l0 = pmap_l0(pmap, va);
-			tl0 = pmap_load(l0);
-			l1pg = PHYS_TO_VM_PAGE(tl0 & ~ATTR_MASK);
-		} else
-			l1pg = PHYS_TO_VM_PAGE((pd_entry_t)DMAP_TO_PHYS((pd_entry_t)pmap->pm_l0));
-			*/
 		pmap_unwire_l3(pmap, va, l1pg, free);
 	}
 	pmap_invalidate_page(pmap, va);
