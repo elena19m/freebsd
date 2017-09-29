@@ -538,6 +538,9 @@ handle_world_switch(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 	return (handled);
 }
 
+static void
+arm_vmcleanup(void *arg);
+
 static int
 arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	void *rendezvous_cookie, void *suspend_cookie)
@@ -563,10 +566,10 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	pd_entry_t *l0, *l1, *l2, *l3;
 	pmap_get_tables(hyp->stage2_map, 0x80001000, &l0, &l1, &l2, &l3);
 	printf("\n");
-	printf("l0 = 0x%lx\n", (uint64_t)l0);
-	printf("l1 = 0x%lx\n", (uint64_t)*l1);
-	printf("l2 = 0x%lx\n", (uint64_t)*l2);
-	printf("l3 = 0x%lx\n", (uint64_t)*l3);
+	printf("l0 = 0x%016lx\n", (uint64_t)l0);
+	printf("l1 = 0x%016lx\n", (uint64_t)*l1);
+	printf("l2 = 0x%016lx\n", (uint64_t)*l2);
+	printf("l3 = 0x%016lx\n", (uint64_t)*l3);
 	printf("\n");
 
 	do {
@@ -612,9 +615,10 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 
 		handled = HANDLED;
 
-		if (excp_type != EXCP_TYPE_EL1_IRQ) {
-			panic("\n\nUnhandled exception from guest\n\n");
-		}
+		if (excp_type == EXCP_TYPE_EL1_IRQ)
+			handled = HANDLED;
+		else
+			handled = UNHANDLED;
 
 	} while (handled == HANDLED);
 
