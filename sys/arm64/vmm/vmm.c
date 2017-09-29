@@ -339,6 +339,9 @@ restart:
 	error = VMRUN(vm->cookie, vcpuid, pc, NULL, rvc, sc);
 	critical_exit();
 
+	VMCLEANUP(vm->cookie);
+	panic("\n\n\ncleanup successful!\n\n");
+
 	if (error == 0) {
 		switch (vme->exitcode) {
 		case VM_EXITCODE_INST_EMUL:

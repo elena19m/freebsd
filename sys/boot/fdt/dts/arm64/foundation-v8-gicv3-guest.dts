@@ -43,7 +43,7 @@
 	/* 128 MB of memory from address 0x80000000 to 0x88000000 (64bit) */
 	memory@80000000 {
 		device_type = "memory";
-		reg = <0x00000000 0x80000000 0x00000000  0x08000000>;
+		reg = <0x00000000 0x80000000 0  0x08000000>;
 	};
 
 	gic: interrupt-controller@2f000000 {

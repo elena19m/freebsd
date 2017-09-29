@@ -57,7 +57,6 @@
 	.text
 	.globl _start
 _start:
-	hvc	#0x42
 	/* Drop to EL1 */
 	bl	drop_to_el1
 
@@ -138,6 +137,7 @@ virtdone:
 
 	/* trace back starts here */
 	mov	fp, #0
+
 	/* Branch to C code */
 	bl	initarm
 	bl	mi_startup
