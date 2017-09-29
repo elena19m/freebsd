@@ -4084,7 +4084,11 @@ pmap_enter(pmap_t pmap, vm_offset_t va, vm_page_t m, vm_prot_t prot,
 					    ~ATTR_S2_S2AP(ATTR_S2_S2AP_WRITE);
 			}
 		}
+	} else {
+		new_l3 = (pd_entry_t)(pa | ATTR_ST2_DEFAULT | L3_PAGE);
 	}
+	if ((flags & PMAP_ENTER_WIRED) != 0)
+		new_l3 |= ATTR_SW_WIRED;
 
 	CTR2(KTR_PMAP, "pmap_enter: %.16lx -> %.16lx", va, pa);
 
@@ -4139,14 +4143,7 @@ retry:
 		/* We need to allocate an L3 table. */
 	}
 
-	//if (pmap->pm_type == PT_STAGE2)
-	//	printf("don't have level3\n");
-
 	if (va < VM_MAXUSER_ADDRESS) {
-
-		//if (pmap->pm_type == PT_STAGE2)
-		//	printf("va < VM_MAXUSER_ADDRESS\n");
-
 		nosleep = (flags & PMAP_ENTER_NOSLEEP) != 0;
 
 		/*
