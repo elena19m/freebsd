@@ -20,7 +20,7 @@ static struct mmio_irq {
 	uint32_t	active_count;	/* number of asserts */
 	uint32_t	active;		/* irq active */
 	pthread_mutex_t	lock;
-} irqs[1];
+} irqs[50];
 
 void
 mmio_irq_reserve(int irq)
