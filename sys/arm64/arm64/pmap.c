@@ -408,7 +408,7 @@ static void _pmap_unwire_l3(pmap_t pmap, vm_offset_t va, vm_page_t m,
 static int pmap_unuse_pt(pmap_t, vm_offset_t, pd_entry_t, struct spglist *);
 static __inline vm_page_t pmap_remove_pt_page(pmap_t pmap, vm_offset_t va);
 
-static int pa_range_bits = 0;
+static uint64_t pa_range_bits = 0;
 
 /*
  * These load the old table data and store the new value.
@@ -482,18 +482,20 @@ pmap_l1pg(pmap_t pmap, vm_offset_t va)
 
 		l0 = pmap_l0(pmap, va);
 		tl0 = pmap_load(l0);
+
 		return (PHYS_TO_VM_PAGE(tl0 & ~ATTR_MASK));
 	} else {
-		uint64_t pa_offset;
-		vm_paddr_t pa;
+		vm_paddr_t pa, pa_offset;
 
 		/*
 		 * The offset will be the bits
 		 * [pa_range_bits-1:L0_SHIFT]
 		 */
 		va = va & ((1 << pa_range_bits) - 1);
-		pa_offset = (va & ~L0_OFFSET) >> L0_SHIFT;
-		pa = DMAP_TO_PHYS((vm_offset_t)pmap->pm_l0) + pa_offset * PAGE_SIZE;
+		pa_offset = va >> L0_SHIFT;
+		pa = DMAP_TO_PHYS((vm_offset_t)pmap->pm_l0) + \
+			(pa_offset << PAGE_SHIFT);
+
 		return (PHYS_TO_VM_PAGE(pa));
 	}
 }
@@ -1752,7 +1754,9 @@ _pmap_unwire_l3(pmap_t pmap, vm_offset_t va, vm_page_t m, struct spglist *free)
 
 		/* We just released an l2, unhold the matching l1 */
 		vm_page_t l1pg;
+		l1pg = pmap_l1pg(pmap, va);
 
+		/*
 		if (pmap->pm_type == PT_STAGE1) {
 			pd_entry_t *l0, tl0;
 
@@ -1761,6 +1765,7 @@ _pmap_unwire_l3(pmap_t pmap, vm_offset_t va, vm_page_t m, struct spglist *free)
 			l1pg = PHYS_TO_VM_PAGE(tl0 & ~ATTR_MASK);
 		} else
 			l1pg = PHYS_TO_VM_PAGE((pd_entry_t)DMAP_TO_PHYS((pd_entry_t)pmap->pm_l0));
+			*/
 		pmap_unwire_l3(pmap, va, l1pg, free);
 	}
 	pmap_invalidate_page(pmap, va);
@@ -2016,7 +2021,7 @@ _pmap_alloc_l3(pmap_t pmap, vm_pindex_t ptepindex, struct rwlock **lockp)
 			l1 = (pd_entry_t *)PHYS_TO_DMAP(pmap_load(l0) & ~ATTR_MASK);
 			l1 = &l1[ptepindex & Ln_ADDR_MASK];
 		} else {
-			l1pg = PHYS_TO_VM_PAGE((pd_entry_t)DMAP_TO_PHYS((pd_entry_t)pmap->pm_l0));
+			l1pg = pmap_l1pg(pmap, l1index);
 			l1pg->wire_count++;
 			l1 = &pmap->pm_l0[l1index & STAGE2_L1_ADDR_MASK];
 		}
@@ -2257,9 +2262,27 @@ pmap_release(pmap_t pmap)
 		mtx_unlock_spin(&set->asid_set_mutex);
 	}
 
-	m = PHYS_TO_VM_PAGE(pmap->pm_l0_paddr);
-	vm_page_unwire_noq(m);
-	vm_page_free_zero(m);
+	if (pmap->pm_type == PT_STAGE1) {
+		m = PHYS_TO_VM_PAGE(pmap->pm_l0_paddr);
+		vm_page_unwire_noq(m);
+		vm_page_free_zero(m);
+	} else {
+		uint64_t i, page_cnt;
+		vm_paddr_t pa;
+
+		if (pa_range_bits < L0_SHIFT)
+			page_cnt = 1;
+		else
+			page_cnt = 1 << (pa_range_bits - L0_SHIFT);
+
+		pa = DMAP_TO_PHYS((vm_offset_t)pmap->pm_l0);
+		for (i = 0; i < page_cnt; i++) {
+			m = PHYS_TO_VM_PAGE(pa);
+			vm_page_unwire_noq(m);
+			vm_page_free_zero(m);
+			pa += PAGE_SIZE;
+		}
+	}
 }
 
 static int
