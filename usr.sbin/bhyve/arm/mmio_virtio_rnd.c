@@ -14,10 +14,13 @@ __FBSDID("$FreeBSD$");
 #include <sys/param.h>
 #include <sys/uio.h>
 
+#include <err.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sysexits.h>
 #include <unistd.h>
 
 #include "bhyverun.h"
