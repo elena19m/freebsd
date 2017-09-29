@@ -63,6 +63,7 @@ __FBSDID("$FreeBSD$");
 #include "debug.h"
 #include "pci_emul.h"
 #include "virtio.h"
+#include "virtio_console.h"
 #include "mevent.h"
 #include "sockstream.h"
 
@@ -79,11 +80,10 @@ __FBSDID("$FreeBSD$");
 #define	VTCON_PORT_OPEN		6
 #define	VTCON_PORT_NAME		7
 
-#define	VTCON_F_SIZE		0
-#define	VTCON_F_MULTIPORT	1
-#define	VTCON_F_EMERG_WRITE	2
-#define	VTCON_S_HOSTCAPS	\
-    (VTCON_F_SIZE | VTCON_F_MULTIPORT | VTCON_F_EMERG_WRITE)
+#define	VTCON_S_HOSTCAPS		\
+	(VIRTIO_CONSOLE_F_SIZE		| \
+	 VIRTIO_CONSOLE_F_MULTIPORT	| \
+	 VIRTIO_CONSOLE_F_EMERG_WRITE)
 
 static int pci_vtcon_debug;
 #define DPRINTF(params) if (pci_vtcon_debug) PRINTLN params

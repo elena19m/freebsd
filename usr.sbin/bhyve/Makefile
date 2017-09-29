@@ -129,4 +129,6 @@ CFLAGS+=-DGDB_LOG
 
 WARNS?=	2
 
+CFLAGS+= -I${BHYVE_SYSDIR}/sys/dev/virtio/console
+
 .include <bsd.prog.mk>
