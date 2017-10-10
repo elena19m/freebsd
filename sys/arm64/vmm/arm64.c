@@ -125,6 +125,10 @@ extern uint32_t boot_far_el1;
 extern uint32_t boot_sctlr_el1;
 extern uint32_t boot_spsr_el1;
 
+extern uint64_t boot_x0;
+extern uint64_t boot_x28;
+extern uint64_t boot_x29;
+
 static int
 arm_init(int ipinum)
 {
@@ -137,6 +141,12 @@ arm_init(int ipinum)
 		printf("arm_init: processor didn't boot in EL2 (no support)\n");
 		return (ENXIO);
 	}
+
+	printf("\n");
+
+	printf("\tboot_x0 = 0x%lx\n", boot_x0);
+	printf("\tboot_x28 = 0x%lx\n", boot_x28);
+	printf("\tboot_x29 = 0x%lx\n", boot_x29);
 
 	printf("\n");
 	printf("\tboot_actlr_el1 = 0x%lx\n", boot_actlr_el1);
@@ -310,6 +320,9 @@ arm_vminit(struct vm *vm)
 
 		/* Don't trap accesses to SVE, Advanced SIMD and FP to EL1 */
 		hypctx->cpacr_el1 = CPACR_FPEN_TRAP_NONE;
+
+		// TODO: delete me
+		//hypctx->regs.x[0] = 0xffff000000000000;
 
 		//vtimer_cpu_init(hypctx);
 	}
@@ -599,11 +612,13 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 			printf("excp_type = EXCP_TYPE_EL1_IRQ\n");
 		else
 			printf("excp_type = %d\n", vmexit->u.hyp.exception_nr);
+		printf("\n");
 		printf("esr_el2 = 0x%x\n", hypctx->exit_info.esr_el2);
 		printf("far_el2 = 0x%x\n", hypctx->exit_info.far_el2);
 		printf("hpfar_el2 = 0x%x\n", hypctx->exit_info.hpfar_el2);
 		printf("sctlr_el1 = 0x%x\n", hypctx->sctlr_el1);
 		printf("par_el1 = 0x%lx\n", hypctx->par_el1);
+		printf("x0 = 0x%lx\n", hypctx->regs.x[0]);
 
 		vmexit->inst_length = 4;
 

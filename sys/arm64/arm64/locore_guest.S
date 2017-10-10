@@ -140,6 +140,10 @@ virtdone:
 
 	/* Branch to C code */
 	bl	initarm
+
+	// TODO: delete me
+	hvc	0x600
+
 	bl	mi_startup
 
 	/* We should not get here */
