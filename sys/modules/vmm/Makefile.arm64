@@ -14,6 +14,7 @@ SRCS+=	vmm.c		\
 	arm64.c		\
 	vgic.c		\
 	vtimer.c	\
+	parse_kernel.c	\
 	hyp.S
 
 CLEANFILES=	hyp_assym.h hyp_genassym.o
