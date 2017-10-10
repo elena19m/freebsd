@@ -67,7 +67,26 @@
  *  We are loaded at a 2MiB aligned address
  */
 
+
 	.text
+
+// TODO: delete me
+.macro save_reg reg
+	.align 7
+	adr	x3, boot_\reg
+	str	\reg, [x3]
+.endm
+
+	.align 3
+	.globl _C_LABEL(boot_x28)
+_C_LABEL(boot_x28):
+	.zero 8
+
+	.align 3
+	.globl _C_LABEL(boot_x29)
+_C_LABEL(boot_x29):
+	.zero 8
+
 	.globl _start
 _start:
 #if defined(LINUX_BOOT_ABI)
@@ -112,6 +131,9 @@ _start:
 	 * x29 = PA - VA
 	 * x28 = Our physical load address
 	 */
+
+	save_reg 	x29
+	save_reg	x28
 
 	/* Create the page tables */
 	bl	create_pagetables
@@ -333,6 +355,11 @@ _C_LABEL(boot_sctlr_el1):
 _C_LABEL(boot_spsr_el1):
 	.zero 4
 
+	.align 3
+	.globl _C_LABEL(boot_x0)
+_C_LABEL(boot_x0):
+	.zero 8
+
 	.align 2
 /*
  * If we are started in EL2, configure the required hypervisor
@@ -425,6 +452,8 @@ drop_to_el1:
 	save_reg32	far_el1
 	save_reg32	sctlr_el1
 	save_reg32	spsr_el1
+
+	save_reg	x0
 
 	mov	x2, #(PSR_F | PSR_I | PSR_A | PSR_D | PSR_M_EL1h)
 	msr	spsr_el2, x2
