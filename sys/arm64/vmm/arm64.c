@@ -553,6 +553,7 @@ handle_world_switch(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 
 static void
 arm_vmcleanup(void *arg);
+#include "bootparams.h"
 
 static int
 arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
@@ -569,6 +570,15 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	hyp = arg;
 	vm = hyp->vm;
 	vmexit = vm_exitinfo(vm, vcpu);
+
+	vm_paddr_t pa;
+	int ret;
+
+	//pa = (vm_paddr_t)pmap_extract(hyp->stage2_map, 0x80001000);
+	pa = (vm_paddr_t)pmap_extract(hyp->stage2_map, 0x80000000);
+	ret = parse_kernel(pa);
+	printf("\n\n ret = %d\n\n\n", ret);
+	panic("panicking");
 
 	hypctx = &hyp->ctx[vcpu];
 	hypctx->elr_el2 = (uint64_t)pc;
