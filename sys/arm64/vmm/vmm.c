@@ -328,10 +328,12 @@ vm_run(struct vm *vm, struct vm_run *vmrun)
 	if (!hyp->bootparams_created) {
 		vm_paddr_t pa;
 		int ret;
+		struct vmm_bootparams bootparams;
 
 		pa = (vm_paddr_t)pmap_extract(hyp->stage2_map, 0x80000000);
-		ret = parse_kernel(pa);
+		ret = parse_kernel(pa, &bootparams);
 		printf("\n\n ret = %d\n\n\n", ret);
+		printf("\n\n entry = %lx\n\n", bootparams.entry);
 		panic("panicking");
 
 		hyp->bootparams_created = true;

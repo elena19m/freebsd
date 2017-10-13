@@ -326,9 +326,6 @@ arm_vminit(struct vm *vm)
 		/* Don't trap accesses to SVE, Advanced SIMD and FP to EL1 */
 		hypctx->cpacr_el1 = CPACR_FPEN_TRAP_NONE;
 
-		// TODO: delete me
-		//hypctx->regs.x[0] = 0xffff000000000000;
-
 		//vtimer_cpu_init(hypctx);
 	}
 

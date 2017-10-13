@@ -27,6 +27,10 @@
 #ifndef _VMM_BOOTPARAMS_H_
 #define	_VMM_BOOTPARAMS_H_
 
-int 	parse_kernel(vm_paddr_t phys_base);
+struct vmm_bootparams {
+	uint64_t entry;
+};
+
+int parse_kernel(vm_paddr_t phys_base, struct vmm_bootparams *bootparams);
 
 #endif
