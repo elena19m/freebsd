@@ -89,6 +89,7 @@ struct hyp {
 	uint64_t	vmid_generation;
 	uint64_t	vttbr;
 	bool		vgic_attached;
+	bool		bootparams_created;
 };
 
 uint64_t vmm_call_hyp(void *hyp_func_addr, ...);

@@ -62,6 +62,7 @@
 #include "mmu.h"
 #include "arm64.h"
 #include "vgic.h"
+#include "bootparams.h"
 
 #define	BSP	0			/* the boostrap processor */
 
@@ -307,11 +308,9 @@ vm_run(struct vm *vm, struct vm_run *vmrun)
 	uint32_t pc;
 	struct vcpu *vcpu;
 	struct vm_exit *vme;
+	struct hyp *hyp;
 	bool retu;
 	void *rvc, *sc;
-	/* TODO: delete me */
-	uint64_t pa, va;
-	struct hyp *hyp;
 
 	vcpuid = vmrun->cpuid;
 	pc = vmrun->pc;
@@ -325,16 +324,21 @@ vm_run(struct vm *vm, struct vm_run *vmrun)
 	vcpu = &vm->vcpu[vcpuid];
 	vme = &vcpu->exitinfo;
 
+	hyp = (struct hyp *)vm->cookie;
+	if (!hyp->bootparams_created) {
+		vm_paddr_t pa;
+		int ret;
+
+		pa = (vm_paddr_t)pmap_extract(hyp->stage2_map, 0x80000000);
+		ret = parse_kernel(pa);
+		printf("\n\n ret = %d\n\n\n", ret);
+		panic("panicking");
+
+		hyp->bootparams_created = true;
+	}
+
 	rvc = sc = NULL;
 restart:
-	/* TODO: delete me */
-	hyp = vm->cookie;
-	pa = (uint64_t)pmap_extract(hyp->stage2_map, 0x80001000);
-	va = (uint64_t)PHYS_TO_DMAP(pa);
-	printf("pa = 0x%lx\n", pa);
-	printf("va = 0x%lx\n", va);
-	printf("*va = 0x%x\n", *(uint32_t *)va);
-
 	critical_enter();
 	error = VMRUN(vm->cookie, vcpuid, pc, NULL, rvc, sc);
 	critical_exit();

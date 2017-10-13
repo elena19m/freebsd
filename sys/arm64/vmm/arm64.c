@@ -105,6 +105,7 @@ out:
 			vtophys(hyp->stage2_map->pm_l0));
 }
 
+/*
 extern uint64_t boot_actlr_el1;
 extern uint64_t boot_amair_el1;
 extern uint64_t boot_elr_el1;
@@ -128,6 +129,7 @@ extern uint32_t boot_spsr_el1;
 extern uint64_t boot_x0;
 extern uint64_t boot_x28;
 extern uint64_t boot_x29;
+*/
 
 static int
 arm_init(int ipinum)
@@ -144,6 +146,7 @@ arm_init(int ipinum)
 
 	printf("\n");
 
+	/*
 	printf("\tboot_x0 = 0x%lx\n", boot_x0);
 	printf("\tboot_x28 = 0x%lx\n", boot_x28);
 	printf("\tboot_x29 = 0x%lx\n", boot_x29);
@@ -170,6 +173,7 @@ arm_init(int ipinum)
 	printf("\tboot_sctlr_el1 = 0x%x\n", boot_sctlr_el1);
 	printf("\tboot_spsr_el1 = 0x%x\n", boot_spsr_el1);
 	printf("\n");
+	*/
 
 	mtx_init(&vmid_generation_mtx, "vmid_generation_mtx", NULL, MTX_DEF);
 
@@ -262,6 +266,7 @@ arm_vminit(struct vm *vm)
 	hyp->stage2_map = malloc(sizeof(*hyp->stage2_map), M_HYP, M_WAITOK | M_ZERO);
 	hypmap_init(hyp->stage2_map, PT_STAGE2);
 	set_vttbr(hyp);
+	hyp->bootparams_created = false;
 
 	mtx_init(&hyp->vgic_distributor.distributor_lock, "Distributor Lock", "", MTX_SPIN);
 
@@ -553,7 +558,6 @@ handle_world_switch(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 
 static void
 arm_vmcleanup(void *arg);
-#include "bootparams.h"
 
 static int
 arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
@@ -570,15 +574,6 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	hyp = arg;
 	vm = hyp->vm;
 	vmexit = vm_exitinfo(vm, vcpu);
-
-	vm_paddr_t pa;
-	int ret;
-
-	//pa = (vm_paddr_t)pmap_extract(hyp->stage2_map, 0x80001000);
-	pa = (vm_paddr_t)pmap_extract(hyp->stage2_map, 0x80000000);
-	ret = parse_kernel(pa);
-	printf("\n\n ret = %d\n\n\n", ret);
-	panic("panicking");
 
 	hypctx = &hyp->ctx[vcpu];
 	hypctx->elr_el2 = (uint64_t)pc;
