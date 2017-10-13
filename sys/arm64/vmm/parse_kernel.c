@@ -64,6 +64,8 @@ typedef struct elf_file {
     u_int64_t	off;
 } *elf_file_t;
 
+static uint64_t loadimage(void *something_here, elf_file_t ef, uint64_t entry);
+
 #if 0
 static int __elfN(loadimage)(struct preloaded_file *mp, elf_file_t ef, u_int64_t loadaddr);
 static int __elfN(lookup_symbol)(struct preloaded_file *mp, elf_file_t ef, const char* name, Elf_Sym* sym);
@@ -114,19 +116,35 @@ error:
 }
 
 int
-parse_kernel(vm_paddr_t phys_base)
+parse_kernel(vm_paddr_t phys_base, struct vmm_bootparams *bootparams)
 {
 	struct elf_file ef;
-	int ret;
+	Elf_Ehdr *ehdr;
+	int err;
+	size_t kernel_size = 0; //TODO: delete this
 
 	bzero(&ef, sizeof(struct elf_file));
 	ef.firstpage = malloc(PAGE_SIZE, M_HYP, M_WAITOK | M_ZERO);
 
-	ret = load_elf_header(phys_base, &ef);
+	err = load_elf_header(phys_base, &ef);
+	if (err != 0)
+		goto exit;
 
+	ehdr = ef.ehdr;
+	if (ehdr->e_type != ET_EXEC) {
+		printf("Image not a kernel\n");
+		err = EPERM;
+		goto exit;
+	}
+	ef.kernel = 1;
+
+	bootparams->entry = ehdr->e_entry & ~PAGE_MASK;
+	kernel_size = loadimage(NULL, &ef, bootparams->entry);
+
+exit:
 	free(ef.firstpage, M_HYP);
 
-	return (ret);
+	return ((int)kernel_size);
 }
 
 #if 0
@@ -147,99 +165,6 @@ parse_kernel(uint64_t dest, struct preloaded_file **result)
     	return (err);
 
     ehdr = ef.ehdr;
-
-    /*
-     * Check to see what sort of module we are.
-     */
-    kfp = file_findfile(NULL, __elfN(kerneltype));
-#ifdef __powerpc__
-    /*
-     * Kernels can be ET_DYN, so just assume the first loaded object is the
-     * kernel. This assumption will be checked later.
-     */
-    if (kfp == NULL)
-        ef.kernel = 1;
-#endif
-    if (ef.kernel || ehdr->e_type == ET_EXEC) {
-	/* Looks like a kernel */
-	if (kfp != NULL) {
-	    printf("elf" __XSTRING(__ELF_WORD_SIZE) "_loadfile: kernel already loaded\n");
-	    err = EPERM;
-	    goto oerr;
-	}
-	/* 
-	 * Calculate destination address based on kernel entrypoint.
-	 *
-	 * For ARM, the destination address is independent of any values in the
-	 * elf header (an ARM kernel can be loaded at any 2MB boundary), so we
-	 * leave dest set to the value calculated by archsw.arch_loadaddr() and
-	 * passed in to this function.
-	 */
-#ifndef __arm__
-        if (ehdr->e_type == ET_EXEC)
-	    dest = (ehdr->e_entry & ~PAGE_MASK);
-#endif
-	if ((ehdr->e_entry & ~PAGE_MASK) == 0) {
-	    printf("elf" __XSTRING(__ELF_WORD_SIZE) "_loadfile: not a kernel (maybe static binary?)\n");
-	    err = EPERM;
-	    goto oerr;
-	}
-	ef.kernel = 1;
-
-    } else if (ehdr->e_type == ET_DYN) {
-	/* Looks like a kld module */
-	if (multiboot != 0) {
-		printf("elf" __XSTRING(__ELF_WORD_SIZE) "_loadfile: can't load module as multiboot\n");
-		err = EPERM;
-		goto oerr;
-	}
-	if (kfp == NULL) {
-	    printf("elf" __XSTRING(__ELF_WORD_SIZE) "_loadfile: can't load module before kernel\n");
-	    err = EPERM;
-	    goto oerr;
-	}
-	if (strcmp(__elfN(kerneltype), kfp->f_type)) {
-	    printf("elf" __XSTRING(__ELF_WORD_SIZE) "_loadfile: can't load module with kernel type '%s'\n", kfp->f_type);
-	    err = EPERM;
-	    goto oerr;
-	}
-	/* Looks OK, got ahead */
-	ef.kernel = 0;
-
-    } else {
-	err = EFTYPE;
-	goto oerr;
-    }
-
-    if (archsw.arch_loadaddr != NULL)
-	dest = archsw.arch_loadaddr(LOAD_ELF, ehdr, dest);
-    else
-	dest = roundup(dest, PAGE_SIZE);
-
-    /* 
-     * Ok, we think we should handle this.
-     */
-    fp = file_alloc();
-    if (fp == NULL) {
-	    printf("elf" __XSTRING(__ELF_WORD_SIZE) "_loadfile: cannot allocate module info\n");
-	    err = EPERM;
-	    goto out;
-    }
-    if (ef.kernel == 1 && multiboot == 0)
-	setenv("kernelname", filename, 1);
-    fp->f_name = strdup(filename);
-    if (multiboot == 0)
-    	fp->f_type = strdup(ef.kernel ?
-    	    __elfN(kerneltype) : __elfN(moduletype));
-    else
-    	fp->f_type = strdup("elf multiboot kernel");
-
-#ifdef ELF_VERBOSE
-    if (ef.kernel)
-	printf("%s entry at 0x%jx\n", filename, (uintmax_t)ehdr->e_entry);
-#else
-    printf("%s ", filename);
-#endif
 
     fp->f_size = __elfN(loadimage)(fp, &ef, dest);
     if (fp->f_size == 0 || fp->f_addr == 0)
@@ -264,7 +189,25 @@ parse_kernel(uint64_t dest, struct preloaded_file **result)
     	close(ef.fd);
     return(err);
 }
+#endif
 
+static uint64_t
+loadimage(void *something_here, elf_file_t ef, uint64_t entry)
+{
+	Elf_Ehdr *ehdr;
+	Elf_Phdr *phdr;
+
+	ef->off = 0;
+	ehdr = ef->ehdr;
+
+	printf("\tehdr->e_phoff = %lx\n", (uint64_t)ehdr->e_phoff);
+	phdr = (Elf_Phdr *)(ef->firstpage + ehdr->e_phoff);
+	printf("\tphdr = %lx\n", (uint64_t)phdr);
+
+	return 0;
+}
+
+#if 0
 /*
  * With the file (fd) open on the image, and (ehdr) containing
  * the Elf header, load the image at (off)
@@ -300,71 +243,11 @@ __elfN(loadimage)(struct preloaded_file *fp, elf_file_t ef, u_int64_t off)
     ret = 0;
     firstaddr = lastaddr = 0;
     ehdr = ef->ehdr;
-    if (ehdr->e_type == ET_EXEC) {
-#if defined(__i386__) || defined(__amd64__)
-#if __ELF_WORD_SIZE == 64
-	off = - (off & 0xffffffffff000000ull);/* x86_64 relocates after locore */
-#else
-	off = - (off & 0xff000000u);	/* i386 relocates after locore */
-#endif
-#elif defined(__powerpc__)
-	/*
-	 * On the purely virtual memory machines like e500, the kernel is
-	 * linked against its final VA range, which is most often not
-	 * available at the loader stage, but only after kernel initializes
-	 * and completes its VM settings. In such cases we cannot use p_vaddr
-	 * field directly to load ELF segments, but put them at some
-	 * 'load-time' locations.
-	 */
-	if (off & 0xf0000000u) {
-	    off = -(off & 0xf0000000u);
-	    /*
-	     * XXX the physical load address should not be hardcoded. Note
-	     * that the Book-E kernel assumes that it's loaded at a 16MB
-	     * boundary for now...
-	     */
-	    off += 0x01000000;
-	    ehdr->e_entry += off;
-#ifdef ELF_VERBOSE
-	    printf("Converted entry 0x%08x\n", ehdr->e_entry);
-#endif
-	} else
-	    off = 0;
-#elif defined(__arm__) && !defined(EFI)
-	/*
-	 * The elf headers in arm kernels specify virtual addresses in all
-	 * header fields, even the ones that should be physical addresses.
-	 * We assume the entry point is in the first page, and masking the page
-	 * offset will leave us with the virtual address the kernel was linked
-	 * at.  We subtract that from the load offset, making 'off' into the
-	 * value which, when added to a virtual address in an elf header,
-	 * translates it to a physical address.  We do the va->pa conversion on
-	 * the entry point address in the header now, so that later we can
-	 * launch the kernel by just jumping to that address.
-	 *
-	 * When booting from UEFI the copyin and copyout functions handle
-	 * adjusting the location relative to the first virtual address.
-	 * Because of this there is no need to adjust the offset or entry
-	 * point address as these will both be handled by the efi code.
-	 */
-	off -= ehdr->e_entry & ~PAGE_MASK;
-	ehdr->e_entry += off;
-#ifdef ELF_VERBOSE
-	printf("ehdr->e_entry 0x%08x, va<->pa off %llx\n", ehdr->e_entry, off);
-#endif
-#else
-	off = 0;		/* other archs use direct mapped kernels */
-#endif
-    }
     ef->off = off;
 
     if (ef->kernel)
 	__elfN(relocation_offset) = off;
 
-    if ((ehdr->e_phoff + ehdr->e_phnum * sizeof(*phdr)) > ef->firstlen) {
-	printf("elf" __XSTRING(__ELF_WORD_SIZE) "_loadimage: program header not within first page\n");
-	goto out;
-    }
     phdr = (Elf_Phdr *)(ef->firstpage + ehdr->e_phoff);
 
     for (i = 0; i < ehdr->e_phnum; i++) {
