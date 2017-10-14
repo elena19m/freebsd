@@ -35,12 +35,24 @@ __FBSDID("$FreeBSD$");
 #include <sys/link_elf.h>
 #include <sys/systm.h>
 
-#include <machine/elf.h>
+#include <vm/vm.h>
+#include <vm/pmap.h>
+#include <vm/vm_page.h>
+#include <vm/vm_param.h>
+
+#include <machine/vm.h>
 #include <machine/vmparam.h>
+#include <machine/pmap.h>
+#include <machine/elf.h>
+
 
 #include "bootparams.h"
+#include "mmu.h"
 
 MALLOC_DECLARE(M_HYP);
+
+// XXX: Parse it from the fdt or get from userland.
+#define VMM_MIN_GUEST_IPA	(0x80000000UL)
 
 typedef struct elf_file {
     Elf_Phdr 	*ph;
@@ -66,29 +78,15 @@ typedef struct elf_file {
 
 static uint64_t loadimage(void *something_here, elf_file_t ef, uint64_t entry);
 
-#if 0
-static int __elfN(loadimage)(struct preloaded_file *mp, elf_file_t ef, u_int64_t loadaddr);
-static int __elfN(lookup_symbol)(struct preloaded_file *mp, elf_file_t ef, const char* name, Elf_Sym* sym);
-static int __elfN(reloc_ptr)(struct preloaded_file *mp, elf_file_t ef,
-    Elf_Addr p, void *val, size_t len);
-static int __elfN(parse_modmetadata)(struct preloaded_file *mp, elf_file_t ef,
-    Elf_Addr p_start, Elf_Addr p_end);
-static symaddr_fn __elfN(symaddr);
-static char	*fake_modname(const char *name);
-
-const char	*__elfN(kerneltype) = "elf kernel";
-const char	*__elfN(moduletype) = "elf module";
-
-u_int64_t	__elfN(relocation_offset) = 0;
-#endif
-
 static int
-load_elf_header(vm_paddr_t phys_base, elf_file_t ef)
+load_elf_header(pmap_t guestmap, elf_file_t ef)
 {
 	Elf_Ehdr  *ehdr;
+	vm_paddr_t pa;
 	int  err;
 
-	memcpy(ef->firstpage, (void *)PHYS_TO_DMAP(phys_base), PAGE_SIZE);
+	pa = pmap_extract(guestmap, VMM_MIN_GUEST_IPA);
+	ef->firstpage = (caddr_t)PHYS_TO_DMAP(pa);
 	ehdr = ef->ehdr = (Elf_Ehdr *)ef->firstpage;
 
 	/* Is it ELF? */
@@ -108,25 +106,21 @@ load_elf_header(vm_paddr_t phys_base, elf_file_t ef)
 	return (0);
 
 error:
-	if (ef->firstpage != NULL) {
-		free(ef->firstpage, M_HYP);
-		ef->firstpage = NULL;
-	}
+	ef->firstpage = NULL;
 	return (err);
 }
 
 int
-parse_kernel(vm_paddr_t phys_base, struct vmm_bootparams *bootparams)
+parse_kernel(pmap_t guestmap, struct vmm_bootparams *bootparams)
 {
 	struct elf_file ef;
 	Elf_Ehdr *ehdr;
 	int err;
-	size_t kernel_size = 0; //TODO: delete this
+	size_t kernel_size;
 
 	bzero(&ef, sizeof(struct elf_file));
-	ef.firstpage = malloc(PAGE_SIZE, M_HYP, M_WAITOK | M_ZERO);
 
-	err = load_elf_header(phys_base, &ef);
+	err = load_elf_header(guestmap, &ef);
 	if (err != 0)
 		goto exit;
 
@@ -138,13 +132,14 @@ parse_kernel(vm_paddr_t phys_base, struct vmm_bootparams *bootparams)
 	}
 	ef.kernel = 1;
 
-	bootparams->entry = ehdr->e_entry & ~PAGE_MASK;
-	kernel_size = loadimage(NULL, &ef, bootparams->entry);
+	bootparams->entry_ipa = ehdr->e_entry - VMM_MIN_KERNEL_ADDRESS;
+	printf("\tentry_ipa = %zx\n", bootparams->entry_ipa);
+
+	kernel_size = loadimage(NULL, &ef, bootparams->entry_ipa);
+	printf("\tkernel_size = %zd\n", kernel_size);
 
 exit:
-	free(ef.firstpage, M_HYP);
-
-	return ((int)kernel_size);
+	return (err);
 }
 
 #if 0
@@ -200,7 +195,7 @@ loadimage(void *something_here, elf_file_t ef, uint64_t entry)
 	ef->off = 0;
 	ehdr = ef->ehdr;
 
-	printf("\tehdr->e_phoff = %lx\n", (uint64_t)ehdr->e_phoff);
+	printf("\tehdr->e_phoff = %lu\n", (uint64_t)ehdr->e_phoff);
 	phdr = (Elf_Phdr *)(ef->firstpage + ehdr->e_phoff);
 	printf("\tphdr = %lx\n", (uint64_t)phdr);
 
