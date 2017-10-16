@@ -44,15 +44,12 @@ __FBSDID("$FreeBSD$");
 #include <machine/vmparam.h>
 #include <machine/pmap.h>
 #include <machine/elf.h>
-
+#include <machine/vmm.h>
 
 #include "bootparams.h"
 #include "mmu.h"
 
 MALLOC_DECLARE(M_HYP);
-
-// XXX: Parse it from the fdt or get from userland.
-#define VMM_MIN_GUEST_IPA	(0x80000000UL)
 
 typedef struct elf_file {
     Elf_Phdr 	*ph;
@@ -85,7 +82,7 @@ load_elf_header(pmap_t guestmap, elf_file_t ef)
 	vm_paddr_t pa;
 	int  err;
 
-	pa = pmap_extract(guestmap, VMM_MIN_GUEST_IPA);
+	pa = pmap_extract(guestmap, VM_GUEST_BASE_IPA);
 	ef->firstpage = (caddr_t)PHYS_TO_DMAP(pa);
 	ehdr = ef->ehdr = (Elf_Ehdr *)ef->firstpage;
 
@@ -132,8 +129,9 @@ parse_kernel(pmap_t guestmap, struct vmm_bootparams *bootparams)
 	}
 	ef.kernel = 1;
 
-	bootparams->entry_ipa = ehdr->e_entry - VMM_MIN_KERNEL_ADDRESS;
-	printf("\tentry_ipa = %zx\n", bootparams->entry_ipa);
+	bootparams->entry_ipa = ehdr->e_entry - VM_MIN_KERNEL_ADDRESS + \
+				VM_GUEST_BASE_IPA;
+	printf("\tentry_ipa = 0x%zx\n", bootparams->entry_ipa);
 
 	kernel_size = loadimage(NULL, &ef, bootparams->entry_ipa);
 	printf("\tkernel_size = %zd\n", kernel_size);
@@ -197,7 +195,7 @@ loadimage(void *something_here, elf_file_t ef, uint64_t entry)
 
 	printf("\tehdr->e_phoff = %lu\n", (uint64_t)ehdr->e_phoff);
 	phdr = (Elf_Phdr *)(ef->firstpage + ehdr->e_phoff);
-	printf("\tphdr = %lx\n", (uint64_t)phdr);
+	printf("\tphdr = 0x%lx\n", (uint64_t)phdr);
 
 	return 0;
 }

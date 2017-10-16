@@ -970,6 +970,8 @@ initarm(struct arm64_bootparams *abp)
 	bool valid;
 	int i;
 
+	__asm __volatile("hvc 0x42");
+
 	/* Set the module data location */
 	preload_metadata = (caddr_t)(uintptr_t)(abp->modulep);
 
