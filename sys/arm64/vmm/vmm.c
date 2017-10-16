@@ -305,7 +305,7 @@ int
 vm_run(struct vm *vm, struct vm_run *vmrun)
 {
 	int error, vcpuid;
-	uint32_t pc;
+	uint64_t pc;
 	struct vcpu *vcpu;
 	struct vm_exit *vme;
 	struct hyp *hyp;
@@ -332,7 +332,7 @@ vm_run(struct vm *vm, struct vm_run *vmrun)
 		printf("\n\n");
 		ret = parse_kernel(hyp->stage2_map, &bootparams);
 		printf("\tret = %d\n\n\n", ret);
-		panic("panicking");
+		pc = bootparams.entry_ipa;
 
 		hyp->bootparams_created = true;
 	}

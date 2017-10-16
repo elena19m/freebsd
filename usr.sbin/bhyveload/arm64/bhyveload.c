@@ -124,8 +124,8 @@ main(int argc, char** argv)
 	progname = basename(argv[0]);
 
 	mem_size = 128 * MB;
-	kernel_load_address = 0x80000000UL;
-	memory_base_address = 0x80000000UL;
+	memory_base_address = VM_GUEST_BASE_IPA;
+	kernel_load_address = memory_base_address;
 	periphbase = 0x2c000000UL;
 	strncpy(kernel_image_name, "kernel.bin", KERNEL_IMAGE_NAME_LEN);
 
@@ -206,12 +206,14 @@ main(int argc, char** argv)
 	uint32_t *first_instruction = vm_map_ipa(ctx, 0x1000, 0);
 	printf("first instruction = 0x%x\n", *first_instruction);
 
+	/*
 	error = vm_attach_vgic(ctx, periphbase + 0x1000, periphbase + 0x2000);
 	if (error) {
 	}
 	munmap(addr, st.st_size);
+	*/
 
 	/* The VM will start execution from the kernel '_start' symbol */
-	guest_setreg(VM_REG_ELR_EL2, kernel_load_address + 0x1000);
+	//guest_setreg(VM_REG_ELR_EL2, kernel_load_address + 0x1000);
 	return 0;
 }

@@ -587,6 +587,10 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	printf("l3 = 0x%016lx\n", (uint64_t)*l3);
 	printf("\n");
 
+	printf("\n");
+	printf("elr_el2 = 0x%016lx\n", hypctx->elr_el2);
+	printf("\n");
+
 	do {
 		handled = UNHANDLED;
 
