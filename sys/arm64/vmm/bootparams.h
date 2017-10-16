@@ -28,7 +28,7 @@
 #define	_VMM_BOOTPARAMS_H_
 
 struct vmm_bootparams {
-	uint64_t entry_ipa;
+	vm_paddr_t entry_ipa;
 };
 
 int parse_kernel(pmap_t guestmap, struct vmm_bootparams *bootparams);
