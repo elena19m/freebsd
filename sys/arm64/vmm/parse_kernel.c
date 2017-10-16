@@ -51,6 +51,8 @@ __FBSDID("$FreeBSD$");
 
 MALLOC_DECLARE(M_HYP);
 
+#define vmtoipa(vmaddr) ((vmaddr) - VM_MIN_KERNEL_ADDRESS + VM_GUEST_BASE_IPA)
+
 typedef struct elf_file {
     Elf_Phdr 	*ph;
     Elf_Ehdr	*ehdr;
@@ -72,6 +74,32 @@ typedef struct elf_file {
     int		kernel;
     u_int64_t	off;
 } *elf_file_t;
+
+struct preloaded_file;
+
+struct file_metadata {
+	size_t md_size;
+	uint16_t md_type;
+	struct file_metadata *md_next;
+	char md_data[1];
+};
+
+struct kernel_module {
+	char *mm_name;
+	int m_version;
+	struct preloaded_file *m_fp;
+	struct kernel_module *m_next;
+};
+
+struct preloaded_file {
+	char *f_name;
+	char *f_type;
+	char *f_args;
+	struct file_metadata *f_metadata;
+	vm_offset_t f_addr;
+	size_t f_size;
+	struct kernel_module *f_modules;
+};
 
 static uint64_t loadimage(void *something_here, elf_file_t ef, uint64_t entry);
 
@@ -129,8 +157,10 @@ parse_kernel(pmap_t guestmap, struct vmm_bootparams *bootparams)
 	}
 	ef.kernel = 1;
 
-	bootparams->entry_ipa = ehdr->e_entry - VM_MIN_KERNEL_ADDRESS + \
-				VM_GUEST_BASE_IPA;
+	printf("\tsizeof(Elf_Ehdr) = %lu\n", sizeof(Elf_Ehdr));
+	printf("\tef->firstlen = %zd\n", ef.firstlen);
+
+	bootparams->entry_ipa = vmtoipa(ehdr->e_entry);
 	printf("\tentry_ipa = 0x%zx\n", bootparams->entry_ipa);
 
 	kernel_size = loadimage(NULL, &ef, bootparams->entry_ipa);
@@ -189,6 +219,8 @@ loadimage(void *something_here, elf_file_t ef, uint64_t entry)
 {
 	Elf_Ehdr *ehdr;
 	Elf_Phdr *phdr;
+	vm_offset_t firstaddr, lastaddr;
+	int i;
 
 	ef->off = 0;
 	ehdr = ef->ehdr;
@@ -196,6 +228,21 @@ loadimage(void *something_here, elf_file_t ef, uint64_t entry)
 	printf("\tehdr->e_phoff = %lu\n", (uint64_t)ehdr->e_phoff);
 	phdr = (Elf_Phdr *)(ef->firstpage + ehdr->e_phoff);
 	printf("\tphdr = 0x%lx\n", (uint64_t)phdr);
+	printf("\tehdr->phnum = %d\n", ehdr->e_phnum);
+
+	firstaddr = lastaddr = 0;
+	for (i = 0; i < ehdr->e_phnum; i++) {
+		if (phdr[i].p_type != PT_LOAD)
+			continue;
+		printf("\tphdr[%d].p_filesz = 0x%016lx\n", i, phdr[i].p_filesz);
+
+		if (firstaddr == 0 || firstaddr > phdr[i].p_vaddr)
+		    firstaddr = phdr[i].p_vaddr;
+		/* We mmap'ed the kernel, so p_memsz == p_filesz. */
+		if (lastaddr == 0 || lastaddr < (phdr[i].p_vaddr + phdr[i].p_filesz))
+		    lastaddr = phdr[i].p_vaddr + phdr[i].p_filesz;
+	}
+	lastaddr = roundup(lastaddr, sizeof(long));
 
 	return 0;
 }
@@ -263,12 +310,19 @@ __elfN(loadimage)(struct preloaded_file *fp, elf_file_t ef, u_int64_t off)
 	    printf(" ");
 	}
 #endif
+	// ef->firstlen will be PAGE_SIZE. fpcopy represents the difference
+	// between PAGE_SIZE and the offset in the file for this program header.
+	// We copy fpcopy bytes from the program header to segment's virtual
+	// address.
 	fpcopy = 0;
 	if (ef->firstlen > phdr[i].p_offset) {
 	    fpcopy = ef->firstlen - phdr[i].p_offset;
 	    archsw.arch_copyin(ef->firstpage + phdr[i].p_offset,
 			       phdr[i].p_vaddr + off, fpcopy);
 	}
+
+	// Copy the segment into memory at the virtual memory address pointed to
+	// by p_vaddr.
 	if (phdr[i].p_filesz > fpcopy) {
 	    if (kern_pread(ef->fd, phdr[i].p_vaddr + off + fpcopy,
 		phdr[i].p_filesz - fpcopy, phdr[i].p_offset + fpcopy) != 0) {
@@ -277,6 +331,11 @@ __elfN(loadimage)(struct preloaded_file *fp, elf_file_t ef, u_int64_t off)
 		goto out;
 	    }
 	}
+
+	// Here we copy zeroes to the segment virtual memory address for
+	// segments that in memory are larger than in the file (for example,
+	// .bss).
+
 	/* clear space from oversized segments; eg: bss */
 	if (phdr[i].p_filesz < phdr[i].p_memsz) {
 #ifdef ELF_VERBOSE

@@ -305,7 +305,7 @@ int
 vm_run(struct vm *vm, struct vm_run *vmrun)
 {
 	int error, vcpuid;
-	uint64_t pc;
+	register_t pc;
 	struct vcpu *vcpu;
 	struct vm_exit *vme;
 	struct hyp *hyp;
