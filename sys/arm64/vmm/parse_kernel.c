@@ -30,6 +30,8 @@ __FBSDID("$FreeBSD$");
 
 #include <sys/param.h>
 #include <sys/exec.h>
+#include <sys/queue.h>
+#include <sys/linker.h>
 #include <sys/module.h>
 #include <sys/malloc.h>
 #include <sys/link_elf.h>
@@ -42,18 +44,22 @@ __FBSDID("$FreeBSD$");
 
 #include <machine/vm.h>
 #include <machine/vmparam.h>
+#include <machine/param.h>
 #include <machine/pmap.h>
 #include <machine/elf.h>
 #include <machine/vmm.h>
+
+/* Terrible hack to avoid conflicting declarations of hexdump(). */
+#define hexdump _hexdump
+#include <bootstrap.h>
+#undef hexdump
 
 #include "bootparams.h"
 #include "mmu.h"
 
 MALLOC_DECLARE(M_HYP);
 
-#define vmtoipa(vmaddr) ((vmaddr) - VM_MIN_KERNEL_ADDRESS + VM_GUEST_BASE_IPA)
-
-typedef struct elf_file {
+struct elf_file {
     Elf_Phdr 	*ph;
     Elf_Ehdr	*ehdr;
     Elf_Sym	*symtab;
@@ -73,45 +79,20 @@ typedef struct elf_file {
     size_t	firstlen;
     int		kernel;
     u_int64_t	off;
-} *elf_file_t;
-
-struct preloaded_file;
-
-struct file_metadata {
-	size_t md_size;
-	uint16_t md_type;
-	struct file_metadata *md_next;
-	char md_data[1];
 };
 
-struct kernel_module {
-	char *mm_name;
-	int m_version;
-	struct preloaded_file *m_fp;
-	struct kernel_module *m_next;
-};
-
-struct preloaded_file {
-	char *f_name;
-	char *f_type;
-	char *f_args;
-	struct file_metadata *f_metadata;
-	vm_offset_t f_addr;
-	size_t f_size;
-	struct kernel_module *f_modules;
-};
-
-static uint64_t loadimage(void *something_here, elf_file_t ef, uint64_t entry);
+static uint64_t loadimage(struct preloaded_file *img, struct elf_file *ef,
+			pmap_t guestmap);
+static void	image_addmetadata(struct preloaded_file *img, int type,
+			size_t size, vm_offset_t addr);
 
 static int
-load_elf_header(pmap_t guestmap, elf_file_t ef)
+load_elf_header(pmap_t guestmap, struct elf_file *ef)
 {
 	Elf_Ehdr  *ehdr;
-	vm_paddr_t pa;
 	int  err;
 
-	pa = pmap_extract(guestmap, VM_GUEST_BASE_IPA);
-	ef->firstpage = (caddr_t)PHYS_TO_DMAP(pa);
+	ef->firstpage = (caddr_t)ipatok(VM_GUEST_BASE_IPA, guestmap);
 	ehdr = ef->ehdr = (Elf_Ehdr *)ef->firstpage;
 
 	/* Is it ELF? */
@@ -139,6 +120,7 @@ int
 parse_kernel(pmap_t guestmap, struct vmm_bootparams *bootparams)
 {
 	struct elf_file ef;
+	struct preloaded_file img;
 	Elf_Ehdr *ehdr;
 	int err;
 	size_t kernel_size;
@@ -159,68 +141,43 @@ parse_kernel(pmap_t guestmap, struct vmm_bootparams *bootparams)
 
 	printf("\tsizeof(Elf_Ehdr) = %lu\n", sizeof(Elf_Ehdr));
 	printf("\tef->firstlen = %zd\n", ef.firstlen);
+	printf("\tehdr->e_shoff = %lu\n", ehdr->e_shoff);
 
-	bootparams->entry_ipa = vmtoipa(ehdr->e_entry);
-	printf("\tentry_ipa = 0x%zx\n", bootparams->entry_ipa);
+	img.f_addr = VM_GUEST_BASE_IPA;
+	kernel_size = loadimage(&img, &ef, guestmap);
+	if (kernel_size == 0) {
+		err = EIO;
+		goto exit;
+	}
+	img.f_size = kernel_size;
 
-	kernel_size = loadimage(NULL, &ef, bootparams->entry_ipa);
+	image_addmetadata(&img, MODINFOMD_ELFHDR, sizeof(*ehdr), (vm_offset_t)ehdr);
+
+	bootparams->entry_ipa = ktoipa(ehdr->e_entry);
+
 	printf("\tkernel_size = %zd\n", kernel_size);
+	printf("\tentry_ipa = 0x%zx\n", bootparams->entry_ipa);
 
 exit:
 	return (err);
 }
 
-#if 0
-int
-parse_kernel(uint64_t dest, struct preloaded_file **result)
-{
-    struct preloaded_file	*fp, *kfp;
-    struct elf_file		ef;
-    Elf_Ehdr 			*ehdr;
-    int				err;
-
-    fp = NULL;
-    bzero(&ef, sizeof(struct elf_file));
-    ef.fd = -1;
-
-    err = __elfN(load_elf_header)(filename, &ef);
-    if (err != 0)
-    	return (err);
-
-    ehdr = ef.ehdr;
-
-    fp->f_size = __elfN(loadimage)(fp, &ef, dest);
-    if (fp->f_size == 0 || fp->f_addr == 0)
-	goto ioerr;
-
-    /* save exec header as metadata */
-    file_addmetadata(fp, MODINFOMD_ELFHDR, sizeof(*ehdr), ehdr);
-
-    /* Load OK, return module pointer */
-    *result = (struct preloaded_file *)fp;
-    err = 0;
-    goto out;
-    
- ioerr:
-    err = EIO;
- oerr:
-    file_discard(fp);
- out:
-    if (ef.firstpage)
-	free(ef.firstpage);
-    if (ef.fd != -1)
-    	close(ef.fd);
-    return(err);
-}
-#endif
-
 static uint64_t
-loadimage(void *something_here, elf_file_t ef, uint64_t entry)
+loadimage(struct preloaded_file *img, struct elf_file *ef, pmap_t guestmap)
 {
 	Elf_Ehdr *ehdr;
 	Elf_Phdr *phdr;
+	Elf_Shdr *shdr;
+	Elf_Addr ctors;
+	Elf_Size size;
 	vm_offset_t firstaddr, lastaddr;
+	vm_offset_t shstr_addr;
+	char *shstr;
+	int symstrindex;
+	int symtabindex;
+	size_t chunk_len;
 	int i;
+	unsigned int j;
 
 	ef->off = 0;
 	ehdr = ef->ehdr;
@@ -234,8 +191,6 @@ loadimage(void *something_here, elf_file_t ef, uint64_t entry)
 	for (i = 0; i < ehdr->e_phnum; i++) {
 		if (phdr[i].p_type != PT_LOAD)
 			continue;
-		printf("\tphdr[%d].p_filesz = 0x%016lx\n", i, phdr[i].p_filesz);
-
 		if (firstaddr == 0 || firstaddr > phdr[i].p_vaddr)
 		    firstaddr = phdr[i].p_vaddr;
 		/* We mmap'ed the kernel, so p_memsz == p_filesz. */
@@ -244,7 +199,97 @@ loadimage(void *something_here, elf_file_t ef, uint64_t entry)
 	}
 	lastaddr = roundup(lastaddr, sizeof(long));
 
-	return 0;
+	/*
+	 * Get the section headers.  We need this for finding the .ctors
+	 * section as well as for loading any symbols.  Both may be hard
+	 * to do if reading from a .gz file as it involves seeking.  I
+	 * think the rule is going to have to be that you must strip a
+	 * file to remove symbols before gzipping it.
+	 */
+	chunk_len = ehdr->e_shnum * ehdr->e_shentsize;
+	if (chunk_len == 0 || ehdr->e_shoff == 0)
+		goto nosyms;
+	shdr = (Elf_Shdr *)ipatok(img->f_addr + ehdr->e_shoff, guestmap);
+	image_addmetadata(img, MODINFOMD_SHDR, chunk_len, (vm_offset_t)shdr);
+
+	printf("\tshdr = 0x%016lx\n", (uint64_t)shdr);
+	printf("\tshdr[1].sh_name = %u\n", shdr[1].sh_name);
+
+	/*
+	 * Read the section string table and look for the .ctors section.
+	 * We need to tell the kernel where it is so that it can call the
+	 * ctors.
+	 */
+	chunk_len = shdr[ehdr->e_shstrndx].sh_size;
+	if (chunk_len > 0) {
+		shstr_addr = ipatok(img->f_addr + shdr[ehdr->e_shstrndx].sh_offset,
+				guestmap);
+		shstr = malloc(chunk_len, M_HYP, M_WAITOK | M_ZERO);
+		memcpy(shstr, (void *)shstr_addr, chunk_len);
+		if (shstr) {
+			for (i = 0; i < ehdr->e_shnum; i++) {
+				if (strcmp(shstr + shdr[i].sh_name, ".ctors") != 0)
+					continue;
+				ctors = shdr[i].sh_addr;
+				image_addmetadata(img, MODINFOMD_CTORS_ADDR,
+						sizeof(ctors), (vm_offset_t)&ctors);
+				size = shdr[i].sh_size;
+				image_addmetadata(img, MODINFOMD_CTORS_SIZE,
+						sizeof(size), (vm_offset_t)&size);
+				break;
+			}
+		}
+		free(shstr, M_HYP);
+	}
+
+	/*
+	 * Now load any symbols.
+	 */
+	symtabindex = -1;
+	symstrindex = -1;
+	for (i = 0; i < ehdr->e_shnum; i++) {
+		if (shdr[i].sh_type != SHT_SYMTAB)
+			continue;
+		for (j = 0; j < ehdr->e_phnum; j++) {
+			if (phdr[j].p_type != PT_LOAD)
+				continue;
+			if (shdr[i].sh_offset >= phdr[j].p_offset &&
+					(shdr[i].sh_offset + shdr[i].sh_size <=
+					 phdr[j].p_offset + phdr[j].p_filesz)) {
+				shdr[i].sh_offset = 0;
+				shdr[i].sh_size = 0;
+				break;
+			}
+		}
+		if (shdr[i].sh_offset == 0 || shdr[i].sh_size == 0)
+			continue;		/* alread loaded in a PT_LOAD above */
+		/* Save it for loading below */
+		symtabindex = i;
+		symstrindex = shdr[i].sh_link;
+	}
+	if (symtabindex < 0 || symstrindex < 0)
+		goto nosyms;
+
+	printf("\n");
+	printf("\tsymtabindex = %d\n", symtabindex);
+	printf("\tsymstrindex = %d\n", symstrindex);
+
+nosyms:
+	return 1;
+}
+
+static void
+image_addmetadata(struct preloaded_file *img, int type,
+		size_t size, vm_offset_t addr)
+{
+	struct file_metadata *md;
+
+	md = malloc(sizeof(struct file_metadata) - sizeof(md->md_data) + size,
+			M_HYP, M_WAITOK | M_ZERO);
+	md->md_size = size;
+	md->md_type = type;
+	bcopy((void *)addr, md->md_data, size);
+	img->f_metadata = md;
 }
 
 #if 0
@@ -284,124 +329,6 @@ __elfN(loadimage)(struct preloaded_file *fp, elf_file_t ef, u_int64_t off)
     firstaddr = lastaddr = 0;
     ehdr = ef->ehdr;
     ef->off = off;
-
-    if (ef->kernel)
-	__elfN(relocation_offset) = off;
-
-    phdr = (Elf_Phdr *)(ef->firstpage + ehdr->e_phoff);
-
-    for (i = 0; i < ehdr->e_phnum; i++) {
-	/* We want to load PT_LOAD segments only.. */
-	if (phdr[i].p_type != PT_LOAD)
-	    continue;
-
-#ifdef ELF_VERBOSE
-	printf("Segment: 0x%lx@0x%lx -> 0x%lx-0x%lx",
-	    (long)phdr[i].p_filesz, (long)phdr[i].p_offset,
-	    (long)(phdr[i].p_vaddr + off),
-	    (long)(phdr[i].p_vaddr + off + phdr[i].p_memsz - 1));
-#else
-	if ((phdr[i].p_flags & PF_W) == 0) {
-	    printf("text=0x%lx ", (long)phdr[i].p_filesz);
-	} else {
-	    printf("data=0x%lx", (long)phdr[i].p_filesz);
-	    if (phdr[i].p_filesz < phdr[i].p_memsz)
-		printf("+0x%lx", (long)(phdr[i].p_memsz -phdr[i].p_filesz));
-	    printf(" ");
-	}
-#endif
-	// ef->firstlen will be PAGE_SIZE. fpcopy represents the difference
-	// between PAGE_SIZE and the offset in the file for this program header.
-	// We copy fpcopy bytes from the program header to segment's virtual
-	// address.
-	fpcopy = 0;
-	if (ef->firstlen > phdr[i].p_offset) {
-	    fpcopy = ef->firstlen - phdr[i].p_offset;
-	    archsw.arch_copyin(ef->firstpage + phdr[i].p_offset,
-			       phdr[i].p_vaddr + off, fpcopy);
-	}
-
-	// Copy the segment into memory at the virtual memory address pointed to
-	// by p_vaddr.
-	if (phdr[i].p_filesz > fpcopy) {
-	    if (kern_pread(ef->fd, phdr[i].p_vaddr + off + fpcopy,
-		phdr[i].p_filesz - fpcopy, phdr[i].p_offset + fpcopy) != 0) {
-		printf("\nelf" __XSTRING(__ELF_WORD_SIZE)
-		    "_loadimage: read failed\n");
-		goto out;
-	    }
-	}
-
-	// Here we copy zeroes to the segment virtual memory address for
-	// segments that in memory are larger than in the file (for example,
-	// .bss).
-
-	/* clear space from oversized segments; eg: bss */
-	if (phdr[i].p_filesz < phdr[i].p_memsz) {
-#ifdef ELF_VERBOSE
-	    printf(" (bss: 0x%lx-0x%lx)",
-		(long)(phdr[i].p_vaddr + off + phdr[i].p_filesz),
-		(long)(phdr[i].p_vaddr + off + phdr[i].p_memsz - 1));
-#endif
-
-	    kern_bzero(phdr[i].p_vaddr + off + phdr[i].p_filesz,
-		phdr[i].p_memsz - phdr[i].p_filesz);
-	}
-#ifdef ELF_VERBOSE
-	printf("\n");
-#endif
-
-	if (archsw.arch_loadseg != NULL)
-	    archsw.arch_loadseg(ehdr, phdr + i, off);
-
-	if (firstaddr == 0 || firstaddr > (phdr[i].p_vaddr + off))
-	    firstaddr = phdr[i].p_vaddr + off;
-	if (lastaddr == 0 || lastaddr < (phdr[i].p_vaddr + off + phdr[i].p_memsz))
-	    lastaddr = phdr[i].p_vaddr + off + phdr[i].p_memsz;
-    }
-    lastaddr = roundup(lastaddr, sizeof(long));
-
-    /*
-     * Get the section headers.  We need this for finding the .ctors
-     * section as well as for loading any symbols.  Both may be hard
-     * to do if reading from a .gz file as it involves seeking.  I
-     * think the rule is going to have to be that you must strip a
-     * file to remove symbols before gzipping it.
-     */
-    chunk = ehdr->e_shnum * ehdr->e_shentsize;
-    if (chunk == 0 || ehdr->e_shoff == 0)
-	goto nosyms;
-    shdr = alloc_pread(ef->fd, ehdr->e_shoff, chunk);
-    if (shdr == NULL) {
-	printf("\nelf" __XSTRING(__ELF_WORD_SIZE)
-	    "_loadimage: failed to read section headers");
-	goto nosyms;
-    }
-    file_addmetadata(fp, MODINFOMD_SHDR, chunk, shdr);
-
-    /*
-     * Read the section string table and look for the .ctors section.
-     * We need to tell the kernel where it is so that it can call the
-     * ctors.
-     */
-    chunk = shdr[ehdr->e_shstrndx].sh_size;
-    if (chunk) {
-	shstr = alloc_pread(ef->fd, shdr[ehdr->e_shstrndx].sh_offset, chunk);
-	if (shstr) {
-	    for (i = 0; i < ehdr->e_shnum; i++) {
-		if (strcmp(shstr + shdr[i].sh_name, ".ctors") != 0)
-		    continue;
-		ctors = shdr[i].sh_addr;
-		file_addmetadata(fp, MODINFOMD_CTORS_ADDR, sizeof(ctors),
-		    &ctors);
-		size = shdr[i].sh_size;
-		file_addmetadata(fp, MODINFOMD_CTORS_SIZE, sizeof(size),
-		    &size);
-		break;
-	    }
-	    free(shstr);
-	}
-    }
 
     /*
      * Now load any symbols.
