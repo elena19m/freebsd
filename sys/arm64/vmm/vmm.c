@@ -62,7 +62,6 @@
 #include "mmu.h"
 #include "arm64.h"
 #include "vgic.h"
-#include "bootparams.h"
 
 #define	BSP	0			/* the boostrap processor */
 
@@ -308,7 +307,7 @@ vm_run(struct vm *vm, struct vm_run *vmrun)
 	register_t pc;
 	struct vcpu *vcpu;
 	struct vm_exit *vme;
-	struct hyp *hyp;
+	//struct hyp *hyp;
 	bool retu;
 	void *rvc, *sc;
 
@@ -323,19 +322,6 @@ vm_run(struct vm *vm, struct vm_run *vmrun)
 
 	vcpu = &vm->vcpu[vcpuid];
 	vme = &vcpu->exitinfo;
-
-	hyp = (struct hyp *)vm->cookie;
-	if (!hyp->bootparams_created) {
-		int ret;
-		struct vmm_bootparams bootparams;
-
-		printf("\n\n");
-		ret = parse_kernel(hyp->stage2_map, &bootparams);
-		printf("\tret = %d\n\n\n", ret);
-		pc = bootparams.entry_ipa;
-
-		hyp->bootparams_created = true;
-	}
 
 	rvc = sc = NULL;
 restart:

@@ -1,7 +1,7 @@
 SRCS+=	hyp_assym.h
 DPSRCS=	hyp_genassym.c
 
-CFLAGS+= -I${.CURDIR}/../../arm64/vmm -I${.CURDIR}/../../arm64/include -I${.CURDIR}/../../boot/common
+CFLAGS+= -I${.CURDIR}/../../arm64/vmm -I${.CURDIR}/../../arm64/include
 
 # generic vmm support
 .PATH: ${.CURDIR}/../../arm64/vmm
@@ -14,7 +14,6 @@ SRCS+=	vmm.c		\
 	arm64.c		\
 	vgic.c		\
 	vtimer.c	\
-	parse_kernel.c	\
 	hyp.S
 
 CLEANFILES=	hyp_assym.h hyp_genassym.o
