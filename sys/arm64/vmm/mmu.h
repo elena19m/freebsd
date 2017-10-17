@@ -30,10 +30,15 @@
 #ifndef _VMM_MMU_H_
 #define	_VMM_MMU_H_
 
+#include <machine/vmparam.h>
+#include <machine/vmm.h>
+
 #include "hyp.h"
 
 #define ktohyp(kva)		(((vm_offset_t)(kva) & HYP_KVA_MASK) | \
 					HYP_KVA_OFFSET)
+#define ipatok(ipa, hypmap)	(PHYS_TO_DMAP(pmap_extract(hypmap, (ipa))))
+#define ktoipa(kva) 		((kva) - KERNBASE + VM_GUEST_BASE_IPA)
 
 #define page_aligned(x)		(((vm_offset_t)(x) & PAGE_MASK) == 0)
 
