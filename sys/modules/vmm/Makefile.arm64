@@ -1,7 +1,7 @@
 SRCS+=	hyp_assym.h
 DPSRCS=	hyp_genassym.c
 
-CFLAGS+= -I${.CURDIR}/../../arm64/vmm -I${.CURDIR}/../../arm64/include
+CFLAGS+= -I${.CURDIR}/../../arm64/vmm -I${.CURDIR}/../../arm64/include -I${.CURDIR}/../../boot/common
 
 # generic vmm support
 .PATH: ${.CURDIR}/../../arm64/vmm
