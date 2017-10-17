@@ -24,13 +24,14 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _VMM_BOOTPARAMS_H_
-#define	_VMM_BOOTPARAMS_H_
+#ifndef _BOOT_H_
+#define	_BOOT_H_
 
-struct vmm_bootparams {
-	vm_paddr_t entry_ipa;
+struct vm_bootparams {
+	uint64_t entry;
+	struct preloaded_file *img;
 };
 
-int parse_kernel(pmap_t guestmap, struct vmm_bootparams *bootparams);
+int parse_kernel(void *addr, struct vm_bootparams *bootparams);
 
 #endif
