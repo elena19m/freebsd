@@ -58,21 +58,18 @@ struct elf_file {
     size_t	relasz;
     char	*strtab;
     size_t	strsz;
-    int		fd;
     caddr_t	firstpage;
     size_t	firstlen;
-    int		kernel;
-    uint64_t	off;
 };
 
-static uint64_t parse_image(struct preloaded_file *img, struct elf_file *ef, void *addr);
+static uint64_t parse_image(struct preloaded_file *img, struct elf_file *ef);
 static void	image_addmetadata(struct preloaded_file *img, int type,
 			size_t size, void *addr);
 static int	image_addmodule(struct preloaded_file *img, char *modname, int version);
 static void	parse_metadata(struct preloaded_file *img, struct elf_file *ef,
-			Elf_Addr p_start, Elf_Addr p_end, void *addr);
+			Elf_Addr p_startu, Elf_Addr p_endu);
 static int	lookup_symbol(struct preloaded_file *imp, struct elf_file *ef,
-			const char *name, Elf_Sym *symp, void *addr);
+			const char *name, Elf_Sym *symp);
 static struct kernel_module *image_findmodule(struct preloaded_file *img, char *modname,
 			struct mod_depend *verinfo);
 
@@ -110,7 +107,6 @@ parse_kernel(void *addr, struct vm_bootparams *bootparams)
 	struct preloaded_file img;
 	Elf_Ehdr *ehdr;
 	int err;
-	size_t kernel_size;
 
 	memset(&ef, 0, sizeof(struct elf_file));
 	memset(&img, 0, sizeof(struct preloaded_file));
@@ -126,33 +122,23 @@ parse_kernel(void *addr, struct vm_bootparams *bootparams)
 		err = EPERM;
 		goto exit;
 	}
-	ef.kernel = 1;
-
-	printf("\tsizeof(Elf_Ehdr) = %lu\n", sizeof(Elf_Ehdr));
-	printf("\tef->firstlen = %zd\n", ef.firstlen);
-	printf("\tehdr->e_shoff = %lu\n", ehdr->e_shoff);
 
 	img.f_addr = VM_GUEST_BASE_IPA;
-	kernel_size = parse_image(&img, &ef, addr);
-	if (kernel_size == 0) {
+	img.f_size = parse_image(&img, &ef);
+	if (img.f_size == 0) {
 		err = EIO;
 		goto exit;
 	}
-	img.f_size = kernel_size;
-
-	image_addmetadata(&img, MODINFOMD_ELFHDR, sizeof(*ehdr), ehdr);
-
 	bootparams->entry = ehdr->e_entry - KERNBASE;
 
-	printf("\tkernel_size = %zd\n", kernel_size);
-	printf("\tentry = 0x%zx\n", bootparams->entry);
+	image_addmetadata(&img, MODINFOMD_ELFHDR, sizeof(*ehdr), ehdr);
 
 exit:
 	return (err);
 }
 
 static uint64_t
-parse_image(struct preloaded_file *img, struct elf_file *ef, void *addr)
+parse_image(struct preloaded_file *img, struct elf_file *ef)
 {
 	Elf_Ehdr *ehdr;
 	Elf_Phdr *phdr;
@@ -180,7 +166,6 @@ parse_image(struct preloaded_file *img, struct elf_file *ef, void *addr)
 
 	dp = NULL;
 	shdr = NULL;
-	ef->off = 0;
 	ret = 0;
 
 	ehdr = ef->ehdr;
@@ -268,8 +253,6 @@ parse_image(struct preloaded_file *img, struct elf_file *ef, void *addr)
 		goto nosyms;
 
 	printf("\tsymtabindex = %d\n", symtabindex);
-	printf("\tsymstrindex = %d\n", symstrindex);
-	printf("\tlastaddr = 0x%016lx\n", (uint64_t)lastaddr);
 
 	ssym = lastaddr;
 	printf("\tssym = 0x%016lx\n", (uint64_t)ssym);
@@ -286,16 +269,12 @@ parse_image(struct preloaded_file *img, struct elf_file *ef, void *addr)
 			break;
 	}
 	esym = lastaddr;
-	printf("\tesym = 0x%016lx\n", (uint64_t)esym);
 
 	image_addmetadata(img, MODINFOMD_SSYM, sizeof(ssym), &ssym);
 	image_addmetadata(img, MODINFOMD_ESYM, sizeof(esym), &esym);
 
-	printf("\n");
-
 nosyms:
 	ret = lastaddr - firstaddr;
-
 	php = NULL;
 	for (i = 0; i < ehdr->e_phnum; i++) {
 		if (phdr[i].p_type == PT_DYNAMIC) {
@@ -311,12 +290,9 @@ nosyms:
 	ndp = php->p_filesz / sizeof(Elf_Dyn);
 	if (ndp == 0)
 		goto out;
-	dp = malloc(php->p_filesz);
-	if (dp == NULL)
-		goto out;
-	memcpy(dp, ef->firstpage + php->p_offset, php->p_filesz);
 
 	ef->strsz = 0;
+	dp = (Elf_Dyn *)(ef->firstpage + php->p_offset);
 	for (i = 0; i < ndp; i++) {
 		if (dp[i].d_tag == 0)
 			break;
@@ -350,29 +326,29 @@ nosyms:
 	    ef->strtab == NULL || ef->strsz == 0)
 		goto out;
 
-	memcpy(&ef->nbuckets, (void *)gvatou(ef->hashtab, addr), sizeof(ef->nbuckets));
-	memcpy(&ef->nchains, (void *)gvatou(ef->hashtab + 1, addr), sizeof(ef->nchains));
-	ef->buckets = (Elf_Hashelt *)gvatou(ef->hashtab + 2, addr);
+	memcpy(&ef->nbuckets, (void *)gvatou(ef->hashtab, ef->firstpage), sizeof(ef->nbuckets));
+	memcpy(&ef->nchains, (void *)gvatou(ef->hashtab + 1, ef->firstpage), sizeof(ef->nchains));
+	ef->buckets = (Elf_Hashelt *)gvatou(ef->hashtab + 2, ef->firstpage);
 	ef->chains = ef->buckets + ef->nbuckets;
 
-	if (lookup_symbol(img, ef, "__start_set_modmetadata_set", &sym, addr) != 0) {
+	if (lookup_symbol(img, ef, "__start_set_modmetadata_set", &sym) != 0) {
 		ret = 0;
 		goto out;
 	}
-	p_start = gvatou(sym.st_value, addr);
-	if (lookup_symbol(img, ef, "__stop_set_modmetadata_set", &sym, addr) != 0) {
+	p_start = gvatou(sym.st_value, ef->firstpage);
+	if (lookup_symbol(img, ef, "__stop_set_modmetadata_set", &sym) != 0) {
 		ret = ENOENT;
 		goto out;
 	}
-	p_end = gvatou(sym.st_value, addr);
 
-	parse_metadata(img, ef, p_start, p_end, addr);
+	fprintf(stderr, "\nbefore parse_metadata\n");
 
+	p_end = gvatou(sym.st_value, ef->firstpage);
+	parse_metadata(img, ef, p_start, p_end);
+
+
+	fprintf(stderr, "\nexit\n");
 out:
-	if (dp != NULL)
-		free(dp);
-	if (shdr != NULL)
-		free(shdr);
 	return ret;
 }
 
@@ -410,7 +386,7 @@ elf_hash(const char *name)
 
 static int
 lookup_symbol(struct preloaded_file *imp, struct elf_file *ef,
-			const char *name, Elf_Sym *symp, void *addr)
+			const char *name, Elf_Sym *symp)
 {
 	Elf_Hashelt symnum;
 	Elf_Sym sym;
@@ -426,13 +402,15 @@ lookup_symbol(struct preloaded_file *imp, struct elf_file *ef,
 			return ENOENT;
 		}
 
-		memcpy(&sym, (void *)gvatou(ef->symtab + symnum, addr), sizeof(sym));
+		memcpy(&sym,
+			(void *)gvatou(ef->symtab + symnum, ef->firstpage),
+			sizeof(sym));
 		if (sym.st_name == 0) {
 			fprintf(stderr, "lookup_symbol: corrupt symbol table\n");
 			return ENOENT;
 		}
 
-		strp = strdup((char *)gvatou(ef->strtab + sym.st_name, addr));
+		strp = strdup((char *)gvatou(ef->strtab + sym.st_name, ef->firstpage));
 		if (strcmp(name, strp) == 0) {
 			free(strp);
 			if (sym.st_shndx != SHN_UNDEF ||
@@ -452,7 +430,7 @@ lookup_symbol(struct preloaded_file *imp, struct elf_file *ef,
 
 static void
 parse_metadata(struct preloaded_file *img, struct elf_file *ef,
-			Elf_Addr p_start, Elf_Addr p_end, void *addr)
+			Elf_Addr p_startu, Elf_Addr p_endu)
 {
 	struct mod_metadata md;
 	struct mod_version mver;
@@ -460,36 +438,22 @@ parse_metadata(struct preloaded_file *img, struct elf_file *ef,
 	int modcnt;
 	Elf_Addr v, p;
 
-	fprintf(stderr, "\n\t>> PARSE_METADATA\n\n");
-
 	modcnt = 0;
-	p = p_start;
-	fprintf(stderr, "\np = 0x%016lx\n", (uint64_t)p);
-	fprintf(stderr, "\nsizeof(v) = %lu\n", sizeof(v));
-	while (p < p_end) {
-		fprintf(stderr, "\nbefore memcpy\n");
+	for (p = p_startu; p < p_endu; p += sizeof(Elf_Addr)) {
 		memcpy(&v, (void *)p, sizeof(v));
-		fprintf(stderr, "\np = 0x%016lx\n", (uint64_t)v);
-		memcpy(&md, (void *)gvatou(v, addr), sizeof(md));
-		fprintf(stderr, "\nafter memcpy\n");
-		md.md_data = (void *)(uintptr_t)md.md_data;
-		p += sizeof(Elf_Addr);
+		memcpy(&md, (void *)gvatou(v, ef->firstpage), sizeof(md));
 		if (md.md_type == MDT_VERSION) {
-			fprintf(stderr, "\ntype == MDT_VERSION\n");
-			s = strdup((char *)gvatou(md.md_cval, addr));
-			fprintf(stderr, "\nmd.md_data = 0x%016lx\n", (uint64_t)md.md_data);
-			memcpy(&mver, (void *)gvatou(md.md_data, addr),
-					sizeof(mver));
-			fprintf(stderr, "\nbefore image_addmodule\n");
+			s = strdup((char *)gvatou(md.md_cval, ef->firstpage));
+			memcpy(&mver,
+				(void *)gvatou(md.md_data, ef->firstpage),
+				sizeof(mver));
 			image_addmodule(img, s, mver.mv_version);
-			fprintf(stderr, "\nafter image_addmodule\n");
 			free(s);
 			modcnt++;
 		}
 	}
 
 	if (modcnt == 0) {
-		fprintf(stderr, "\nmodcnt = 0\n");
 		image_addmodule(img, "kernel", 1);
 		free(s);
 	}
