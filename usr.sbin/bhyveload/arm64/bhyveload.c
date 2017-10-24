@@ -255,6 +255,7 @@ main(int argc, char** argv)
 
 	copyenv(&bootparams);
 
+	bootparams.kernel_ipa = kernel_load_address;
 	error = parse_kernel(addr, st.st_size, &bootparams);
 	if (error) {
 		fprintf(stderr, "Error parsing image");
@@ -267,8 +268,7 @@ main(int argc, char** argv)
 	munmap(addr, st.st_size);
 	*/
 
-
-	guest_setreg(VM_REG_ELR_EL2, kernel_load_address + bootparams.entry);
+	guest_setreg(VM_REG_ELR_EL2, kernel_load_address + bootparams.entry_off);
 
 	return 0;
 }

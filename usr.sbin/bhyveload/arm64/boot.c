@@ -58,8 +58,7 @@ struct elf_file {
     size_t	relasz;
     char	*strtab;
     size_t	strsz;
-    caddr_t	firstpage;
-    size_t	firstlen;
+    caddr_t	firstpage_u;	/* Userspace address of mmap'ed guest kernel */
 };
 
 static uint64_t parse_image(struct preloaded_file *img, struct elf_file *ef);
@@ -68,10 +67,10 @@ static void	image_addmetadata(struct preloaded_file *img, int type,
 static int	image_addmodule(struct preloaded_file *img, char *modname, int version);
 static void	parse_metadata(struct preloaded_file *img, struct elf_file *ef,
 			Elf_Addr p_startu, Elf_Addr p_endu);
-static int	lookup_symbol(struct preloaded_file *imp, struct elf_file *ef,
-			const char *name, Elf_Sym *symp);
-static struct kernel_module *image_findmodule(struct preloaded_file *img, char *modname,
+static int	lookup_symbol(struct elf_file *ef, const char *name, Elf_Sym *symp);
+static struct 	kernel_module *image_findmodule(struct preloaded_file *img, char *modname,
 			struct mod_depend *verinfo);
+static uint64_t	module_len(struct preloaded_file *img);
 
 static int
 load_elf_header(struct elf_file *ef)
@@ -79,7 +78,7 @@ load_elf_header(struct elf_file *ef)
 	Elf_Ehdr  *ehdr;
 	int  err;
 
-	ehdr = ef->ehdr = (Elf_Ehdr *)ef->firstpage;
+	ehdr = ef->ehdr = (Elf_Ehdr *)ef->firstpage_u;
 	/* Is it ELF? */
 	if (!IS_ELF(*ehdr)) {
 		err = EFTYPE;
@@ -101,51 +100,65 @@ error:
 }
 
 int
-parse_kernel(void *addr, size_t size, struct vm_bootparams *bootparams)
+parse_kernel(void *addr, size_t img_size, struct vm_bootparams *bootparams)
 {
 	struct elf_file ef;
 	struct preloaded_file img;
-	Elf_Ehdr *ehdr;
+	Elf_Ehdr *ehdr_u;
 	int err;
-	vm_offset_t guest_lastaddr, user_lastaddr;
-	uint64_t kernend;
-	uint64_t envp;
+	vm_offset_t lastaddr_gva;
+	//uint64_t kernend;
+	uint64_t size;
+	int howto;
 
 	memset(&ef, 0, sizeof(struct elf_file));
 	memset(&img, 0, sizeof(struct preloaded_file));
 
-	ef.firstpage = (caddr_t)addr;
+	ef.firstpage_u = (caddr_t)addr;
 	err = load_elf_header(&ef);
 	if (err != 0)
 		goto exit;
 
-	ehdr = ef.ehdr;
-	if (ehdr->e_type != ET_EXEC) {
+	ehdr_u = ef.ehdr;
+	if (ehdr_u->e_type != ET_EXEC) {
 		printf("Image not a kernel\n");
 		err = EPERM;
 		goto exit;
 	}
+	img.f_name = "kernel";
+	img.f_type = "elf kernel";
 
-	img.f_addr = VM_GUEST_BASE_IPA;
-	img.f_size = parse_image(&img, &ef);
-	if (img.f_size == 0) {
+	size = parse_image(&img, &ef);
+	if (size == 0) {
 		err = EIO;
 		goto exit;
 	}
-	bootparams->entry = ehdr->e_entry - KERNBASE;
+	bootparams->entry_off = ehdr_u->e_entry - KERNBASE;
 
-	image_addmetadata(&img, MODINFOMD_ELFHDR, sizeof(*ehdr), ehdr);
+	image_addmetadata(&img, MODINFOMD_ELFHDR, sizeof(*ehdr_u), ehdr_u);
 
-	guest_lastaddr = roundup(img.f_addr + size, PAGE_SIZE);
-	envp = guest_lastaddr;
-	image_addmetadata(img, MODINFOMD_ENVP, sizeof(envp), &envp);
+	/* XXX: Add boothowto options? */
+	howto = 0;
+	image_addmetadata(&img, MODINFOMD_HOWTO, sizeof(howto), &howto);
 
-	guest_lastaddr += bootparams->envlen;
-	guest_lastaddr = roundup(guest_lastaddr, PAGE_SIZE);
+	lastaddr_gva = roundup(img.f_addr + img_size, PAGE_SIZE);
+	image_addmetadata(&img, MODINFOMD_ENVP, sizeof(lastaddr_gva), &lastaddr_gva);
+	bootparams->envp_gva = lastaddr_gva;
 
-	bootparams->modulep = (void *)user_lastaddr;
+	lastaddr_gva += bootparams->envlen;
+	lastaddr_gva = roundup(lastaddr_gva, PAGE_SIZE);
 
-	image_addmetadata(&img, MODINFOMD_KERNEND, sizeof(kernend), &kernend);
+	/* Module data start in the guest kva space */
+	bootparams->modulep_gva = lastaddr_gva;
+	/* Module data start in the bhyveload process address space */
+	bootparams->modulep_u = (uint64_t)img.f_metadata;
+
+	// copy modules
+	// kernend = lastaddr_gva + sizeof(modules);
+	// image_addmetadata(&img, MODINFOMD_KERNEND, sizeof(kernend), &kernend);
+	uint64_t modlen = module_len(&img);
+	fprintf(stderr, "\n\tmodlen = %lu\n", modlen);
+
 exit:
 	return (err);
 }
@@ -182,7 +195,7 @@ parse_image(struct preloaded_file *img, struct elf_file *ef)
 	ret = 0;
 
 	ehdr = ef->ehdr;
-	phdr = (Elf_Phdr *)(ef->firstpage + ehdr->e_phoff);
+	phdr = (Elf_Phdr *)(ef->firstpage_u + ehdr->e_phoff);
 
 	firstaddr = lastaddr = 0;
 	for (i = 0; i < ehdr->e_phnum; i++) {
@@ -206,7 +219,7 @@ parse_image(struct preloaded_file *img, struct elf_file *ef)
 	chunk_len = ehdr->e_shnum * ehdr->e_shentsize;
 	if (chunk_len == 0 || ehdr->e_shoff == 0)
 		goto nosyms;
-	shdr = (Elf_Shdr *)(ef->firstpage + ehdr->e_shoff);
+	shdr = (Elf_Shdr *)(ef->firstpage_u + ehdr->e_shoff);
 	image_addmetadata(img, MODINFOMD_SHDR, chunk_len, shdr);
 
 	/*
@@ -216,7 +229,7 @@ parse_image(struct preloaded_file *img, struct elf_file *ef)
 	 */
 	chunk_len = shdr[ehdr->e_shstrndx].sh_size;
 	if (chunk_len > 0) {
-		shstr_addr = (vm_offset_t)(ef->firstpage + \
+		shstr_addr = (vm_offset_t)(ef->firstpage_u + \
 		    shdr[ehdr->e_shstrndx].sh_offset);
 		shstr = malloc(chunk_len);
 		memcpy(shstr, (void *)shstr_addr, chunk_len);
@@ -301,7 +314,7 @@ nosyms:
 		goto out;
 
 	ef->strsz = 0;
-	dp = (Elf_Dyn *)(ef->firstpage + php->p_offset);
+	dp = (Elf_Dyn *)(ef->firstpage_u + php->p_offset);
 	for (i = 0; i < ndp; i++) {
 		if (dp[i].d_tag == 0)
 			break;
@@ -335,26 +348,46 @@ nosyms:
 	    ef->strtab == NULL || ef->strsz == 0)
 		goto out;
 
-	memcpy(&ef->nbuckets, (void *)gvatou(ef->hashtab, ef->firstpage), sizeof(ef->nbuckets));
-	memcpy(&ef->nchains, (void *)gvatou(ef->hashtab + 1, ef->firstpage), sizeof(ef->nchains));
-	ef->buckets = (Elf_Hashelt *)gvatou(ef->hashtab + 2, ef->firstpage);
+	memcpy(&ef->nbuckets, (void *)gvatou(ef->hashtab, ef->firstpage_u), sizeof(ef->nbuckets));
+	memcpy(&ef->nchains, (void *)gvatou(ef->hashtab + 1, ef->firstpage_u), sizeof(ef->nchains));
+	ef->buckets = (Elf_Hashelt *)gvatou(ef->hashtab + 2, ef->firstpage_u);
 	ef->chains = ef->buckets + ef->nbuckets;
 
-	if (lookup_symbol(img, ef, "__start_set_modmetadata_set", &sym) != 0) {
+	if (lookup_symbol(ef, "__start_set_modmetadata_set", &sym) != 0) {
 		ret = 0;
-		goto nomodmetadata;
+		goto out;
 	}
-	p_start = gvatou(sym.st_value, ef->firstpage);
-	if (lookup_symbol(img, ef, "__stop_set_modmetadata_set", &sym) != 0) {
+	p_start = gvatou(sym.st_value, ef->firstpage_u);
+	if (lookup_symbol(ef, "__stop_set_modmetadata_set", &sym) != 0) {
 		ret = ENOENT;
 		goto out;
 	}
-	p_end = gvatou(sym.st_value, ef->firstpage);
+	p_end = gvatou(sym.st_value, ef->firstpage_u);
 	parse_metadata(img, ef, p_start, p_end);
 
-nomodmetadata:
 out:
 	return ret;
+}
+
+static uint64_t
+module_len(struct preloaded_file *img)
+{
+	struct file_metadata *md;
+	uint64_t len;
+
+	/* Count the kernel image name */
+	len = 8 + roundup(strlen(img->f_name) + 1, sizeof(uint64_t));
+	/* Count the type */
+	len += 8 + roundup(strlen(img->f_type) + 1, sizeof(uint64_t));
+	/* Count the kernel's virtual address */
+	len += 8 + roundup(sizeof(img->f_addr), sizeof(uint64_t));
+	/* Count the kernel's size */
+	len += 8 +roundup(sizeof(img->f_size), sizeof(uint64_t));
+	/* Count the metadata size */
+	for (md = img->f_metadata; md != NULL; md = md->md_next)
+		len += 8 + roundup(md->md_size, sizeof(uint64_t));
+
+	return len;
 }
 
 static void
@@ -390,8 +423,7 @@ elf_hash(const char *name)
 }
 
 static int
-lookup_symbol(struct preloaded_file *imp, struct elf_file *ef,
-			const char *name, Elf_Sym *symp)
+lookup_symbol(struct elf_file *ef, const char *name, Elf_Sym *symp)
 {
 	Elf_Hashelt symnum;
 	Elf_Sym sym;
@@ -408,14 +440,14 @@ lookup_symbol(struct preloaded_file *imp, struct elf_file *ef,
 		}
 
 		memcpy(&sym,
-			(void *)gvatou(ef->symtab + symnum, ef->firstpage),
+			(void *)gvatou(ef->symtab + symnum, ef->firstpage_u),
 			sizeof(sym));
 		if (sym.st_name == 0) {
 			fprintf(stderr, "lookup_symbol: corrupt symbol table\n");
 			return ENOENT;
 		}
 
-		strp = strdup((char *)gvatou(ef->strtab + sym.st_name, ef->firstpage));
+		strp = strdup((char *)gvatou(ef->strtab + sym.st_name, ef->firstpage_u));
 		if (strcmp(name, strp) == 0) {
 			free(strp);
 			if (sym.st_shndx != SHN_UNDEF ||
@@ -446,11 +478,11 @@ parse_metadata(struct preloaded_file *img, struct elf_file *ef,
 	modcnt = 0;
 	for (p = p_startu; p < p_endu; p += sizeof(Elf_Addr)) {
 		memcpy(&v, (void *)p, sizeof(v));
-		memcpy(&md, (void *)gvatou(v, ef->firstpage), sizeof(md));
+		memcpy(&md, (void *)gvatou(v, ef->firstpage_u), sizeof(md));
 		if (md.md_type == MDT_VERSION) {
-			s = strdup((char *)gvatou(md.md_cval, ef->firstpage));
+			s = strdup((char *)gvatou(md.md_cval, ef->firstpage_u));
 			memcpy(&mver,
-				(void *)gvatou(md.md_data, ef->firstpage),
+				(void *)gvatou(md.md_data, ef->firstpage_u),
 				sizeof(mver));
 			image_addmodule(img, s, mver.mv_version);
 			free(s);
