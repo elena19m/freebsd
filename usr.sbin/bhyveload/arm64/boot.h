@@ -29,9 +29,11 @@
 
 struct vm_bootparams {
 	uint64_t entry;
-	struct preloaded_file *img;
+	char *env;
+	int envlen;
+	void *modulep;
 };
 
-int parse_kernel(void *addr, struct vm_bootparams *bootparams);
+int parse_kernel(void *addr, size_t size, struct vm_bootparams *bootparams);
 
 #endif

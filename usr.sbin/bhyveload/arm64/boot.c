@@ -101,12 +101,15 @@ error:
 }
 
 int
-parse_kernel(void *addr, struct vm_bootparams *bootparams)
+parse_kernel(void *addr, size_t size, struct vm_bootparams *bootparams)
 {
 	struct elf_file ef;
 	struct preloaded_file img;
 	Elf_Ehdr *ehdr;
 	int err;
+	vm_offset_t guest_lastaddr, user_lastaddr;
+	uint64_t kernend;
+	uint64_t envp;
 
 	memset(&ef, 0, sizeof(struct elf_file));
 	memset(&img, 0, sizeof(struct preloaded_file));
@@ -133,6 +136,16 @@ parse_kernel(void *addr, struct vm_bootparams *bootparams)
 
 	image_addmetadata(&img, MODINFOMD_ELFHDR, sizeof(*ehdr), ehdr);
 
+	guest_lastaddr = roundup(img.f_addr + size, PAGE_SIZE);
+	envp = guest_lastaddr;
+	image_addmetadata(img, MODINFOMD_ENVP, sizeof(envp), &envp);
+
+	guest_lastaddr += bootparams->envlen;
+	guest_lastaddr = roundup(guest_lastaddr, PAGE_SIZE);
+
+	bootparams->modulep = (void *)user_lastaddr;
+
+	image_addmetadata(&img, MODINFOMD_KERNEND, sizeof(kernend), &kernend);
 exit:
 	return (err);
 }
@@ -196,9 +209,6 @@ parse_image(struct preloaded_file *img, struct elf_file *ef)
 	shdr = (Elf_Shdr *)(ef->firstpage + ehdr->e_shoff);
 	image_addmetadata(img, MODINFOMD_SHDR, chunk_len, shdr);
 
-	printf("\tshdr = 0x%016lx\n", (uint64_t)shdr);
-	printf("\tshdr[1].sh_type = %d\n", shdr[1].sh_type);
-
 	/*
 	 * Read the section string table and look for the .ctors section.
 	 * We need to tell the kernel where it is so that it can call the
@@ -252,10 +262,7 @@ parse_image(struct preloaded_file *img, struct elf_file *ef)
 	if (symtabindex < 0 || symstrindex < 0)
 		goto nosyms;
 
-	printf("\tsymtabindex = %d\n", symtabindex);
-
 	ssym = lastaddr;
-	printf("\tssym = 0x%016lx\n", (uint64_t)ssym);
 	i = symtabindex;
 	for (;;) {
 		size = shdr[i].sh_size;
@@ -275,6 +282,8 @@ parse_image(struct preloaded_file *img, struct elf_file *ef)
 
 nosyms:
 	ret = lastaddr - firstaddr;
+	img->f_addr = firstaddr;
+
 	php = NULL;
 	for (i = 0; i < ehdr->e_phnum; i++) {
 		if (phdr[i].p_type == PT_DYNAMIC) {
@@ -333,21 +342,17 @@ nosyms:
 
 	if (lookup_symbol(img, ef, "__start_set_modmetadata_set", &sym) != 0) {
 		ret = 0;
-		goto out;
+		goto nomodmetadata;
 	}
 	p_start = gvatou(sym.st_value, ef->firstpage);
 	if (lookup_symbol(img, ef, "__stop_set_modmetadata_set", &sym) != 0) {
 		ret = ENOENT;
 		goto out;
 	}
-
-	fprintf(stderr, "\nbefore parse_metadata\n");
-
 	p_end = gvatou(sym.st_value, ef->firstpage);
 	parse_metadata(img, ef, p_start, p_end);
 
-
-	fprintf(stderr, "\nexit\n");
+nomodmetadata:
 out:
 	return ret;
 }

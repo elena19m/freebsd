@@ -144,8 +144,6 @@ arm_init(int ipinum)
 		return (ENXIO);
 	}
 
-	printf("\n");
-
 	/*
 	printf("\tboot_x0 = 0x%lx\n", boot_x0);
 	printf("\tboot_x28 = 0x%lx\n", boot_x28);
