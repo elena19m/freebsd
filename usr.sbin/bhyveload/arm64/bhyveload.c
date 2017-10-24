@@ -31,6 +31,7 @@
 #include <sys/disk.h>
 #include <sys/queue.h>
 #include <sys/mman.h>
+#include <sys/queue.h>
 
 #include <machine/vmm.h>
 
@@ -57,8 +58,47 @@
 #define	BSP	0
 #define KERNEL_IMAGE_NAME_LEN	32
 
+struct env {
+	const char *str;
+	SLIST_ENTRY(env) next;
+};
+static SLIST_HEAD(envhead, env) envhead;
+
 static char *vmname, *progname;
 static struct vmctx *ctx;
+
+static void
+addenv(const char *str)
+{
+	struct env *env;
+
+	env = malloc(sizeof(*env));
+	env->str = str;
+	SLIST_INSERT_HEAD(&envhead, env, next);
+}
+
+static void
+copyenv(struct vm_bootparams *bootparams)
+{
+	struct env *env;
+	int i;
+
+	bootparams->envlen = 0;
+	SLIST_FOREACH(env, &envhead, next)
+		bootparams->envlen += strlen(env->str) + 1;
+	if (bootparams->envlen == 0)
+		return;
+
+	bootparams->envlen++;
+	bootparams->env = malloc(bootparams->envlen * sizeof(char));
+	i = 0;
+	SLIST_FOREACH(env, &envhead, next) {
+		strncpy(&bootparams->env[i], env->str, strlen(env->str));
+		i += strlen(env->str);
+		bootparams->env[i++] = '\0';
+	}
+	bootparams->env[i] = '\0';
+}
 
 /*
  * Guest virtual machinee
@@ -104,7 +144,7 @@ usage(void)
 {
 	fprintf(stderr,
 	    "usage: %s [-k <kernel-image>] -l <kernel-load-address>, -b <memory-base-address>\n"
-	    "       %*s [-m mem-size] [-p periphbase] <vmname>\n",
+	    "       %*s [-m mem-size] [-p periphbase] [-e name=value] <vmname>\n",
 	    progname,
 	    (int)strlen(progname), "");
 	exit(1);
@@ -130,8 +170,9 @@ main(int argc, char** argv)
 	kernel_load_address = memory_base_address;
 	periphbase = 0x2c000000UL;
 	strncpy(kernel_image_name, "kernel.bin", KERNEL_IMAGE_NAME_LEN);
+	memset(&bootparams, 0, sizeof(struct vm_bootparams));
 
-	while ((opt = getopt(argc, argv, "k:l:b:m:p")) != -1) {
+	while ((opt = getopt(argc, argv, "k:l:b:m:p:e:")) != -1) {
 		switch (opt) {
 		case 'k':
 			strncpy(kernel_image_name, optarg, KERNEL_IMAGE_NAME_LEN);
@@ -147,6 +188,10 @@ main(int argc, char** argv)
 			break;
 		case 'p':
 			periphbase = strtoul(optarg, NULL, 0);
+			break;
+		case 'e':
+			addenv(optarg);
+			break;
 		case '?':
 			usage();
 		}
@@ -208,7 +253,9 @@ main(int argc, char** argv)
 	uint32_t *first_instruction = vm_map_ipa(ctx, 0x1000, 0);
 	printf("first instruction = 0x%x\n", *first_instruction);
 
-	error = parse_kernel(addr, &bootparams);
+	copyenv(&bootparams);
+
+	error = parse_kernel(addr, st.st_size, &bootparams);
 	if (error) {
 		fprintf(stderr, "Error parsing image");
 		exit(1);
@@ -220,6 +267,8 @@ main(int argc, char** argv)
 	munmap(addr, st.st_size);
 	*/
 
+
 	guest_setreg(VM_REG_ELR_EL2, kernel_load_address + bootparams.entry);
+
 	return 0;
 }
