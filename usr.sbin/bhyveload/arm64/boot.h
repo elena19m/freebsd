@@ -28,10 +28,13 @@
 #define	_BOOT_H_
 
 struct vm_bootparams {
-	uint64_t entry;
+	uint64_t entry_off;
 	char *env;
+	uint64_t modulep_gva;	/* Guest virtual address of modulep */
+	uint64_t modulep_u;	/* Guest virtual address of modulep */
+	uint64_t kernel_ipa;	/* Guest kernel IPA */
+	uint64_t envp_gva;	/* Guest virtual address for env */
 	int envlen;
-	void *modulep;
 };
 
 int parse_kernel(void *addr, size_t size, struct vm_bootparams *bootparams);
