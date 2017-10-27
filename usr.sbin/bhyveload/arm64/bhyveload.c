@@ -67,37 +67,52 @@ static SLIST_HEAD(envhead, env) envhead;
 static char *vmname, *progname;
 static struct vmctx *ctx;
 
-static void
-addenv(const char *str)
+static int
+env_add(const char *str)
 {
 	struct env *env;
 
 	env = malloc(sizeof(*env));
+	if (env == NULL)
+		return (ENOMEM);
 	env->str = str;
 	SLIST_INSERT_HEAD(&envhead, env, next);
+
+	return (0);
 }
 
-static void
-copyenv(struct vm_bootparams *bootparams)
+static int
+env_tostr(char **envstrp, int *envlen)
 {
 	struct env *env;
 	int i;
 
-	bootparams->envlen = 0;
+	*envlen = 0;
 	SLIST_FOREACH(env, &envhead, next)
-		bootparams->envlen += strlen(env->str) + 1;
-	if (bootparams->envlen == 0)
-		return;
+		*envlen = *envlen + strlen(env->str) + 1;
+	/* Make room for the two ending zeroes */
+	if (*envlen == 0)
+		*envlen = 2;
+	else
+		(*envlen)++;
 
-	bootparams->envlen++;
-	bootparams->env = malloc(bootparams->envlen * sizeof(char));
+	*envstrp = malloc(*envlen * sizeof(char));
+	if (*envstrp == NULL)
+		return (ENOMEM);
+
 	i = 0;
 	SLIST_FOREACH(env, &envhead, next) {
-		strncpy(&bootparams->env[i], env->str, strlen(env->str));
+		strncpy(*envstrp + i, env->str, strlen(env->str));
 		i += strlen(env->str);
-		bootparams->env[i++] = '\0';
+		(*envstrp)[i++] = '\0';
 	}
-	bootparams->env[i] = '\0';
+	(*envstrp)[i] = '\0';
+
+	if (*envlen == 2)
+		/* Make sure we have two zeroes for an empty environment */
+		(*envstrp)[1] = '\0';
+
+	return (0);
 }
 
 /*
@@ -162,6 +177,8 @@ main(int argc, char** argv)
 	char kernel_image_name[KERNEL_IMAGE_NAME_LEN];
 	struct stat st;
 	void *addr;
+	char *envstr;
+	int envlen;
 
 	progname = basename(argv[0]);
 
@@ -190,7 +207,11 @@ main(int argc, char** argv)
 			periphbase = strtoul(optarg, NULL, 0);
 			break;
 		case 'e':
-			addenv(optarg);
+			error = env_add(optarg);
+			if (error) {
+				perror("env_add");
+				exit(1);
+			}
 			break;
 		case '?':
 			usage();
@@ -253,12 +274,17 @@ main(int argc, char** argv)
 	uint32_t *first_instruction = vm_map_ipa(ctx, 0x1000, 0);
 	printf("first instruction = 0x%x\n", *first_instruction);
 
-	copyenv(&bootparams);
-
-	bootparams.kernel_ipa = kernel_load_address;
-	error = parse_kernel(addr, st.st_size, &bootparams);
+	error = env_tostr(&envstr, &envlen);
 	if (error) {
-		fprintf(stderr, "Error parsing image");
+		perror("parse boot environment\n");
+		exit(1);
+	}
+
+	bootparams.envstr = envstr;
+	bootparams.envlen = envlen;
+	error = parse_kernel(addr, st.st_size, ctx, &bootparams);
+	if (error) {
+		fprintf(stderr, "Error parsing image\n");
 		exit(1);
 	}
 	/*
