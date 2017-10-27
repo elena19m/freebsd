@@ -71,33 +71,27 @@ static void	parse_metadata(struct preloaded_file *img, struct elf_file *ef,
 static int	lookup_symbol(struct elf_file *ef, const char *name, Elf_Sym *symp);
 static struct 	kernel_module *image_findmodule(struct preloaded_file *img, char *modname,
 			struct mod_depend *verinfo);
-static uint64_t	module_len(struct preloaded_file *img);
+static uint64_t	moddata_len(struct preloaded_file *img);
+static void	moddata_copy(void *dest, struct preloaded_file *img);
 
 static int
 load_elf_header(struct elf_file *ef)
 {
 	Elf_Ehdr  *ehdr;
-	int  err;
 
 	ehdr = ef->ehdr = (Elf_Ehdr *)ef->firstpage_u;
 	/* Is it ELF? */
-	if (!IS_ELF(*ehdr)) {
-		err = EFTYPE;
-		goto error;
-	}
-	if (ehdr->e_ident[EI_CLASS] != ELF_TARG_CLASS || /* Layout ? */
+	if (!IS_ELF(*ehdr))
+		return (EFTYPE);
+
+	if (ehdr->e_ident[EI_CLASS] != ELF_TARG_CLASS ||/* Layout ? */
 	    ehdr->e_ident[EI_DATA] != ELF_TARG_DATA ||
-	    ehdr->e_ident[EI_VERSION] != EV_CURRENT || /* Version ? */
+	    ehdr->e_ident[EI_VERSION] != EV_CURRENT ||	/* Version ? */
 	    ehdr->e_version != EV_CURRENT ||
-	    ehdr->e_machine != ELF_TARG_MACH) { /* Machine ? */
-		err = EFTYPE;
-		goto error;
-	}
+	    ehdr->e_machine != ELF_TARG_MACH) 		/* Machine ? */
+		return (EFTYPE);
 
 	return (0);
-
-error:
-	return (err);
 }
 
 int
@@ -147,26 +141,26 @@ parse_kernel(void *addr, size_t img_size, struct vmctx *ctx,
 	image_addmetadata(&img, MODINFOMD_ENVP, sizeof(lastaddr_gva), &lastaddr_gva);
 	bootparams->envp_gva = lastaddr_gva;
 
-	fprintf(stderr, "\tlastaddr_gva = 0x%016lx\n", (uint64_t)lastaddr_gva);
-
-	bootparams->envp = malloc(PAGE_SIZE);
-	if (bootparams->envp == NULL)
-		return (ENOMEM);
-	memcpy(bootparams->envp, bootparams->envstr, bootparams->envlen);
-
 	lastaddr_gva += bootparams->envlen;
 	lastaddr_gva = roundup(lastaddr_gva, PAGE_SIZE);
-	fprintf(stderr, "\tlastaddr_gva = 0x%016lx\n", (uint64_t)lastaddr_gva);
 
 	/* Module data start in the guest kva space */
 	bootparams->modulep_gva = lastaddr_gva;
-	/* Module data start in the bhyveload process address space */
-	bootparams->modulep_u = (uint64_t)img.f_metadata;
 
+	//
 	// copy modules
 	// kernend = lastaddr_gva + sizeof(modules);
 	// image_addmetadata(&img, MODINFOMD_KERNEND, sizeof(kernend), &kernend);
-	modlen = module_len(&img);
+	//
+	modlen = moddata_len(&img);
+	bootparams->module_len = roundup(modlen, PAGE_SIZE);
+	bootparams->modulep = calloc(bootparams->module_len, 1);
+	if (bootparams->modulep == NULL) {
+		perror("calloc");
+		return (ENOMEM);
+	}
+
+	moddata_copy(bootparams->modulep, &img);
 
 	return (0);
 }
@@ -376,7 +370,7 @@ out:
 }
 
 static uint64_t
-module_len(struct preloaded_file *img)
+moddata_len(struct preloaded_file *img)
 {
 	struct file_metadata *md;
 	uint64_t len;
@@ -394,6 +388,12 @@ module_len(struct preloaded_file *img)
 		len += 8 + roundup(md->md_size, sizeof(uint64_t));
 
 	return len;
+}
+
+static void
+moddata_copy(void *dest, struct preloaded_file *img)
+{
+	return;
 }
 
 static void

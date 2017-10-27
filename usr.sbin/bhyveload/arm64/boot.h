@@ -30,14 +30,13 @@
 
 
 struct vm_bootparams {
-	uint64_t entry_off;
-	uint64_t modulep_gva;	/* Guest virtual address of modulep */
-	uint64_t modulep_u;	/* Guest virtual address of modulep */
-	uint64_t kernel_ipa;	/* Guest kernel IPA */
-	uint64_t envp_gva;	/* Guest virtual address for env */
-	void * envp;
-	char *envstr;
-	int envlen;
+	uint64_t	entry_off;
+	uint64_t 	modulep_gva;	/* Guest virtual address of modulep data */
+	uint64_t 	envp_gva;	/* Guest virtual address for env */
+	char 		*envstr;
+	int 		envlen;
+	int 		module_len;
+	void 		*modulep;	/* Bhyveload address of modulep data */
 };
 
 int parse_kernel(void *addr, size_t img_size, struct vmctx *ctx,
