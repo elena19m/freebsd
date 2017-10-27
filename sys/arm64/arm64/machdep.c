@@ -993,11 +993,15 @@ print_efi_map_entries(struct efi_map_header *efihdr)
 	foreach_efi_map_entry(efihdr, print_efi_map_entry);
 }
 
+// TODO: delete me
+vm_offset_t dtbp;
+
 #ifdef FDT
 static void
 try_load_dtb(caddr_t kmdp)
 {
-	vm_offset_t dtbp;
+	// TODO: uncomment me
+	//vm_offset_t dtbp;
 
 	dtbp = MD_FETCH(kmdp, MODINFOMD_DTBP, vm_offset_t);
 #if defined(FDT_DTB_STATIC)
@@ -1154,7 +1158,8 @@ initarm(struct arm64_bootparams *abp)
 	struct mem_region mem_regions[FDT_MEM_REGIONS];
 	int mem_regions_sz;
 #endif
-	vm_offset_t lastaddr;
+	// TODO: Uncomment me
+	//vm_offset_t lastaddr;
 	caddr_t kmdp;
 	bool valid;
 
@@ -1172,6 +1177,7 @@ initarm(struct arm64_bootparams *abp)
 	update_special_regs(0);
 
 	link_elf_ireloc(kmdp);
+	envp = MD_FETCH(kmdp, MODINFOMD_ENVP, vm_offset_t);
 	try_load_dtb(kmdp);
 
 	efi_systbl_phys = MD_FETCH(kmdp, MODINFOMD_FW_HANDLE, vm_paddr_t);
