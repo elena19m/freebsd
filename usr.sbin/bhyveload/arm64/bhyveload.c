@@ -34,6 +34,7 @@
 #include <sys/queue.h>
 
 #include <machine/vmm.h>
+#include <machine/vmparam.h>
 
 #include <dirent.h>
 #include <dlfcn.h>
@@ -53,6 +54,9 @@
 
 #include "boot.h"
 
+#define gvatovm(addr)	((uint64_t)(addr) - KERNBASE + \
+			kernel_load_address - memory_base_address)
+
 #define	MB	(1024 * 1024UL)
 #define	GB	(1024 * 1024 * 1024UL)
 #define	BSP	0
@@ -63,6 +67,8 @@ struct env {
 	SLIST_ENTRY(env) next;
 };
 static SLIST_HEAD(envhead, env) envhead;
+
+static uint64_t memory_base_address, kernel_load_address;
 
 static char *vmname, *progname;
 static struct vmctx *ctx;
@@ -111,6 +117,10 @@ env_tostr(char **envstrp, int *envlen)
 	if (*envlen == 2)
 		/* Make sure we have two zeroes for an empty environment */
 		(*envstrp)[1] = '\0';
+
+	for (i = 0; i < *envlen; i++)
+		printf("%d ", (int)(*envstrp)[i]);
+	printf("\n");
 
 	return (0);
 }
@@ -172,13 +182,13 @@ main(int argc, char** argv)
 	uint64_t mem_size;
 	int opt, error;
 	int kernel_image_fd;
-	uint64_t kernel_load_address, memory_base_address;
 	uint64_t periphbase;
 	char kernel_image_name[KERNEL_IMAGE_NAME_LEN];
 	struct stat st;
 	void *addr;
 	char *envstr;
 	int envlen;
+	void *ptr;
 
 	progname = basename(argv[0]);
 
@@ -223,6 +233,11 @@ main(int argc, char** argv)
 
 	if (argc != 1)
 		usage();
+
+	if (kernel_load_address < memory_base_address) {
+		fprintf(stderr, "Kernel load address is below memory base address\n");
+		exit(1);
+	}
 
 	vmname = argv[0];
 
@@ -287,6 +302,20 @@ main(int argc, char** argv)
 		fprintf(stderr, "Error parsing image\n");
 		exit(1);
 	}
+
+	ptr = calloc(1, PAGE_SIZE);
+	if (ptr == NULL) {
+		perror("malloc");
+		exit(1);
+	}
+	/* Copy the environment string in the guest memory */
+	memcpy(ptr, envstr, envlen);
+	error = guest_copyin(ptr, gvatovm(bootparams.envp_gva), PAGE_SIZE);
+	if (error) {
+		perror("guest_copyin");
+		exit(1);
+	}
+
 	/*
 	error = vm_attach_vgic(ctx, periphbase + 0x1000, periphbase + 0x2000);
 	if (error) {
