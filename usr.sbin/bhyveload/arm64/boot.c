@@ -38,6 +38,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <vmmapi.h>
 
 #include "boot.h"
 
@@ -100,7 +101,8 @@ error:
 }
 
 int
-parse_kernel(void *addr, size_t img_size, struct vm_bootparams *bootparams)
+parse_kernel(void *addr, size_t img_size, struct vmctx *ctx,
+		struct vm_bootparams *bootparams)
 {
 	struct elf_file ef;
 	struct preloaded_file img;
@@ -109,7 +111,10 @@ parse_kernel(void *addr, size_t img_size, struct vm_bootparams *bootparams)
 	vm_offset_t lastaddr_gva;
 	//uint64_t kernend;
 	uint64_t size;
+	uint64_t modlen;
 	int howto;
+
+	fprintf(stderr, "[PARSE_KERNEL]\n\n");
 
 	memset(&ef, 0, sizeof(struct elf_file));
 	memset(&img, 0, sizeof(struct preloaded_file));
@@ -117,22 +122,19 @@ parse_kernel(void *addr, size_t img_size, struct vm_bootparams *bootparams)
 	ef.firstpage_u = (caddr_t)addr;
 	err = load_elf_header(&ef);
 	if (err != 0)
-		goto exit;
+		return (err);
 
 	ehdr_u = ef.ehdr;
 	if (ehdr_u->e_type != ET_EXEC) {
-		printf("Image not a kernel\n");
-		err = EPERM;
-		goto exit;
+		fprintf(stderr, "Image not a kernel\n");
+		return (EPERM);
 	}
 	img.f_name = "kernel";
 	img.f_type = "elf kernel";
 
 	size = parse_image(&img, &ef);
-	if (size == 0) {
-		err = EIO;
-		goto exit;
-	}
+	if (size == 0)
+		return (ENOEXEC);
 	bootparams->entry_off = ehdr_u->e_entry - KERNBASE;
 
 	image_addmetadata(&img, MODINFOMD_ELFHDR, sizeof(*ehdr_u), ehdr_u);
@@ -145,8 +147,16 @@ parse_kernel(void *addr, size_t img_size, struct vm_bootparams *bootparams)
 	image_addmetadata(&img, MODINFOMD_ENVP, sizeof(lastaddr_gva), &lastaddr_gva);
 	bootparams->envp_gva = lastaddr_gva;
 
+	fprintf(stderr, "\tlastaddr_gva = 0x%016lx\n", (uint64_t)lastaddr_gva);
+
+	bootparams->envp = malloc(PAGE_SIZE);
+	if (bootparams->envp == NULL)
+		return (ENOMEM);
+	memcpy(bootparams->envp, bootparams->envstr, bootparams->envlen);
+
 	lastaddr_gva += bootparams->envlen;
 	lastaddr_gva = roundup(lastaddr_gva, PAGE_SIZE);
+	fprintf(stderr, "\tlastaddr_gva = 0x%016lx\n", (uint64_t)lastaddr_gva);
 
 	/* Module data start in the guest kva space */
 	bootparams->modulep_gva = lastaddr_gva;
@@ -156,11 +166,9 @@ parse_kernel(void *addr, size_t img_size, struct vm_bootparams *bootparams)
 	// copy modules
 	// kernend = lastaddr_gva + sizeof(modules);
 	// image_addmetadata(&img, MODINFOMD_KERNEND, sizeof(kernend), &kernend);
-	uint64_t modlen = module_len(&img);
-	fprintf(stderr, "\n\tmodlen = %lu\n", modlen);
+	modlen = module_len(&img);
 
-exit:
-	return (err);
+	return (0);
 }
 
 static uint64_t
@@ -187,8 +195,6 @@ parse_image(struct preloaded_file *img, struct elf_file *ef)
 	int ndp;
 	int i;
 	unsigned int j;
-
-	printf("\n\t\tLOADIMAGE\n\n");
 
 	dp = NULL;
 	shdr = NULL;
@@ -439,9 +445,7 @@ lookup_symbol(struct elf_file *ef, const char *name, Elf_Sym *symp)
 			return ENOENT;
 		}
 
-		memcpy(&sym,
-			(void *)gvatou(ef->symtab + symnum, ef->firstpage_u),
-			sizeof(sym));
+		memcpy(&sym, (void *)gvatou(ef->symtab + symnum, ef->firstpage_u), sizeof(sym));
 		if (sym.st_name == 0) {
 			fprintf(stderr, "lookup_symbol: corrupt symbol table\n");
 			return ENOENT;
