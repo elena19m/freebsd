@@ -126,10 +126,14 @@ extern uint32_t boot_far_el1;
 extern uint32_t boot_sctlr_el1;
 extern uint32_t boot_spsr_el1;
 
-extern uint64_t boot_x0;
 extern uint64_t boot_x28;
 extern uint64_t boot_x29;
 */
+extern uint64_t boot_x0;
+extern vm_offset_t lastaddr;
+extern vm_offset_t dtbp;
+extern vm_offset_t envp;
+extern int boothowto;
 
 static int
 arm_init(int ipinum)
@@ -144,8 +148,13 @@ arm_init(int ipinum)
 		return (ENXIO);
 	}
 
+	printf("\tboot_x0 = 0x%016lx\n", boot_x0);
+	printf("\tlastaddr = 0x%016lx\n", (uint64_t)lastaddr);
+	printf("\tdtbp = 0x%016lx\n", (uint64_t)dtbp);
+	printf("\tenvp = 0x%016lx\n", (uint64_t)envp);
+	printf("\tboothowto = %d\n", boothowto);
+	printf("\n");
 	/*
-	printf("\tboot_x0 = 0x%lx\n", boot_x0);
 	printf("\tboot_x28 = 0x%lx\n", boot_x28);
 	printf("\tboot_x29 = 0x%lx\n", boot_x29);
 
