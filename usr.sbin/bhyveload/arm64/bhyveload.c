@@ -96,7 +96,7 @@ env_tostr(char **envstrp, int *envlen)
 	*envlen = 0;
 	SLIST_FOREACH(env, &envhead, next)
 		*envlen = *envlen + strlen(env->str) + 1;
-	/* Make room for the two ending zeroes */
+	/* Make room for the two terminating zeroes */
 	if (*envlen == 0)
 		*envlen = 2;
 	else
@@ -110,13 +110,16 @@ env_tostr(char **envstrp, int *envlen)
 	SLIST_FOREACH(env, &envhead, next) {
 		strncpy(*envstrp + i, env->str, strlen(env->str));
 		i += strlen(env->str);
-		(*envstrp)[i++] = '\0';
+		(*envstrp)[i++] = 0;
 	}
-	(*envstrp)[i] = '\0';
+	(*envstrp)[i] = 0;
 
-	if (*envlen == 2)
-		/* Make sure we have two zeroes for an empty environment */
-		(*envstrp)[1] = '\0';
+	/*
+	 * At this point we have envstr[0] == 0 if the environment is empty.
+	 * Add the second 0 to properly terminate the environment string.
+	 */
+	if (SLIST_EMPTY(&envhead))
+		(*envstrp)[1] = 0;
 
 	for (i = 0; i < *envlen; i++)
 		printf("%d ", (int)(*envstrp)[i]);
@@ -303,15 +306,25 @@ main(int argc, char** argv)
 		exit(1);
 	}
 
-	ptr = calloc(1, PAGE_SIZE);
+	ptr = calloc(1, roundup(envlen, PAGE_SIZE));
 	if (ptr == NULL) {
-		perror("malloc");
+		perror("calloc");
 		exit(1);
 	}
 	/* Copy the environment string in the guest memory */
 	memcpy(ptr, envstr, envlen);
-	error = guest_copyin(ptr, gvatovm(bootparams.envp_gva), PAGE_SIZE);
-	if (error) {
+	if (guest_copyin(ptr, gvatovm(bootparams.envp_gva), PAGE_SIZE) != 0) {
+		perror("guest_copyin");
+		exit(1);
+	}
+
+	ptr = calloc(1, bootparams.module_len);
+	if (ptr == NULL) {
+		perror("calloc");
+		exit(1);
+	}
+	memcpy(ptr, bootparams.modulep, bootparams.module_len);
+	if (guest_copyin(ptr, gvatovm(bootparams.modulep_gva), bootparams.module_len) != 0) {
 		perror("guest_copyin");
 		exit(1);
 	}
@@ -324,6 +337,7 @@ main(int argc, char** argv)
 	*/
 
 	guest_setreg(VM_REG_ELR_EL2, kernel_load_address + bootparams.entry_off);
+	guest_setreg(VM_REG_GUEST_X0, bootparams.modulep_gva);
 
 	return 0;
 }
