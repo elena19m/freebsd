@@ -72,7 +72,7 @@ static int	lookup_symbol(struct elf_file *ef, const char *name, Elf_Sym *symp);
 static struct 	kernel_module *image_findmodule(struct preloaded_file *img, char *modname,
 			struct mod_depend *verinfo);
 static uint64_t	moddata_len(struct preloaded_file *img);
-static void	moddata_copy(void *dest, struct preloaded_file *img);
+static void	moddata_copy(vm_offset_t dest, struct preloaded_file *img);
 
 static int
 load_elf_header(struct elf_file *ef)
@@ -103,10 +103,10 @@ parse_kernel(void *addr, size_t img_size, struct vmctx *ctx,
 	Elf_Ehdr *ehdr_u;
 	int err;
 	vm_offset_t lastaddr_gva;
-	//uint64_t kernend;
+	uint64_t kernend;
 	uint64_t size;
 	uint64_t modlen;
-	int howto;
+	int boothowto;
 
 	fprintf(stderr, "[PARSE_KERNEL]\n\n");
 
@@ -125,6 +125,7 @@ parse_kernel(void *addr, size_t img_size, struct vmctx *ctx,
 	}
 	img.f_name = "kernel";
 	img.f_type = "elf kernel";
+	img.f_size = img_size;
 
 	size = parse_image(&img, &ef);
 	if (size == 0)
@@ -134,33 +135,35 @@ parse_kernel(void *addr, size_t img_size, struct vmctx *ctx,
 	image_addmetadata(&img, MODINFOMD_ELFHDR, sizeof(*ehdr_u), ehdr_u);
 
 	/* XXX: Add boothowto options? */
-	howto = 0;
-	image_addmetadata(&img, MODINFOMD_HOWTO, sizeof(howto), &howto);
+	boothowto = 0;
+	image_addmetadata(&img, MODINFOMD_HOWTO, sizeof(boothowto), &boothowto);
 
-	lastaddr_gva = roundup(img.f_addr + img_size, PAGE_SIZE);
+	lastaddr_gva = roundup(img.f_addr + img.f_size, PAGE_SIZE);
 	image_addmetadata(&img, MODINFOMD_ENVP, sizeof(lastaddr_gva), &lastaddr_gva);
 	bootparams->envp_gva = lastaddr_gva;
 
-	lastaddr_gva += bootparams->envlen;
-	lastaddr_gva = roundup(lastaddr_gva, PAGE_SIZE);
-
-	/* Module data start in the guest kva space */
+	lastaddr_gva = roundup(lastaddr_gva + bootparams->envlen, PAGE_SIZE);
+	/* Module data start in the guest kernel virtual address space */
 	bootparams->modulep_gva = lastaddr_gva;
 
-	//
-	// copy modules
-	// kernend = lastaddr_gva + sizeof(modules);
-	// image_addmetadata(&img, MODINFOMD_KERNEND, sizeof(kernend), &kernend);
-	//
 	modlen = moddata_len(&img);
+	kernend = roundup(bootparams->modulep_gva + modlen, PAGE_SIZE);
+	image_addmetadata(&img, MODINFOMD_KERNEND, sizeof(kernend), &kernend);
+
 	bootparams->module_len = roundup(modlen, PAGE_SIZE);
-	bootparams->modulep = calloc(bootparams->module_len, 1);
+	bootparams->modulep = calloc(1, bootparams->module_len);
 	if (bootparams->modulep == NULL) {
 		perror("calloc");
 		return (ENOMEM);
 	}
 
-	moddata_copy(bootparams->modulep, &img);
+	moddata_copy((vm_offset_t)bootparams->modulep, &img);
+
+	/*
+	fprintf(stderr, "\tstrlen(f_name) = %u\n", ((uint32_t *)bootparams->modulep)[1]);
+	fprintf(stderr, "\tf_name = %s\n", ((char *)bootparams->modulep) + 8);
+	fprintf(stderr, "\tf_name = %s\n", ((char *)bootparams->modulep) + 8 + roundup(strlen(img.f_name) + 1, 8) + 8);
+	*/
 
 	return (0);
 }
@@ -377,12 +380,12 @@ moddata_len(struct preloaded_file *img)
 
 	/* Count the kernel image name */
 	len = 8 + roundup(strlen(img->f_name) + 1, sizeof(uint64_t));
-	/* Count the type */
+	/* Count the kernel's type */
 	len += 8 + roundup(strlen(img->f_type) + 1, sizeof(uint64_t));
 	/* Count the kernel's virtual address */
 	len += 8 + roundup(sizeof(img->f_addr), sizeof(uint64_t));
 	/* Count the kernel's size */
-	len += 8 +roundup(sizeof(img->f_size), sizeof(uint64_t));
+	len += 8 + roundup(sizeof(img->f_size), sizeof(uint64_t));
 	/* Count the metadata size */
 	for (md = img->f_metadata; md != NULL; md = md->md_next)
 		len += 8 + roundup(md->md_size, sizeof(uint64_t));
@@ -390,10 +393,42 @@ moddata_len(struct preloaded_file *img)
 	return len;
 }
 
+#define	COPY32(dest, what) 						\
+	do {								\
+		uint32_t w = (what);					\
+		memcpy((void *)dest, &w, sizeof(w));			\
+		dest += sizeof(w);					\
+	} while (0)
+
+#define	COPY_MODINFO(modinfo, dest, val, len)				\
+	do {								\
+		COPY32(dest, modinfo);					\
+		COPY32(dest, len);					\
+		memcpy((void *)dest, val, len);				\
+		dest += roundup(len, sizeof(uint64_t));			\
+	} while (0)
+
+#define COPY_MODEND(dest)						\
+	do {								\
+		COPY32(dest, MODINFO_END);				\
+		COPY32(dest, 0);					\
+	} while (0);
+
 static void
-moddata_copy(void *dest, struct preloaded_file *img)
+moddata_copy(vm_offset_t dest, struct preloaded_file *img)
 {
-	return;
+	struct file_metadata *md;
+
+	COPY_MODINFO(MODINFO_NAME, dest, img->f_name, strlen(img->f_name) + 1);
+	COPY_MODINFO(MODINFO_TYPE, dest, img->f_type, strlen(img->f_type) + 1);
+	COPY_MODINFO(MODINFO_ADDR, dest, &img->f_addr, sizeof(img->f_addr));
+	COPY_MODINFO(MODINFO_SIZE, dest, &img->f_size, sizeof(img->f_size));
+
+	for (md = img->f_metadata; md != NULL; md = md->md_next)
+		COPY_MODINFO(MODINFO_METADATA | md->md_type, dest,
+				md->md_data, md->md_size);
+
+	COPY_MODEND(dest);
 }
 
 static void
