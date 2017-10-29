@@ -680,7 +680,7 @@ pmap_bootstrap_l2(vm_offset_t l1pt, vm_offset_t va, vm_offset_t l2_start)
 	memset((void *)l2_start, 0, l2pt - l2_start);
 
 	// FAILS because l2_start is zero.
-	__asm __volatile("hvc 0x201");
+	//__asm __volatile("hvc 0x201");
 
 	// FAILS HERE
 
@@ -847,7 +847,7 @@ pmap_bootstrap(vm_offset_t l0pt, vm_offset_t l1pt, vm_paddr_t kernstart,
 	freemempos = pmap_bootstrap_l2(l1pt, va, freemempos);
 
 	// TODO: delete me
-	__asm __volatile("hvc 0x200");
+	//__asm __volatile("hvc 0x200");
 
 	// FREEZES HERE
 

@@ -54,8 +54,7 @@
 
 #include "boot.h"
 
-#define gvatovm(addr)	((uint64_t)(addr) - KERNBASE + \
-			kernel_load_address - memory_base_address)
+#define gvatovm(addr)	((uint64_t)(addr) - KERNBASE + memory_base_address)
 
 #define	MB	(1024 * 1024UL)
 #define	GB	(1024 * 1024 * 1024UL)
@@ -191,7 +190,6 @@ main(int argc, char** argv)
 	void *addr;
 	char *envstr;
 	int envlen;
-	void *ptr;
 
 	progname = basename(argv[0]);
 
@@ -289,6 +287,7 @@ main(int argc, char** argv)
 		perror("guest_copyin");
 		exit(1);
 	}
+
 	uint32_t *first_instruction = vm_map_ipa(ctx, 0x1000, 0);
 	printf("first instruction = 0x%x\n", *first_instruction);
 
@@ -306,28 +305,37 @@ main(int argc, char** argv)
 		exit(1);
 	}
 
-	ptr = calloc(1, roundup(envlen, PAGE_SIZE));
-	if (ptr == NULL) {
-		perror("calloc");
-		exit(1);
-	}
 	/* Copy the environment string in the guest memory */
-	memcpy(ptr, envstr, envlen);
-	if (guest_copyin(ptr, gvatovm(bootparams.envp_gva), PAGE_SIZE) != 0) {
+	if (guest_copyin((void *)envstr, gvatovm(bootparams.envp_gva), envlen) != 0) {
 		perror("guest_copyin");
 		exit(1);
 	}
 
-	ptr = calloc(1, bootparams.module_len);
-	if (ptr == NULL) {
-		perror("calloc");
-		exit(1);
-	}
-	memcpy(ptr, bootparams.modulep, bootparams.module_len);
-	if (guest_copyin(ptr, gvatovm(bootparams.modulep_gva), bootparams.module_len) != 0) {
+	if (guest_copyin(bootparams.modulep, gvatovm(bootparams.modulep_gva), bootparams.module_len) != 0) {
 		perror("guest_copyin");
 		exit(1);
 	}
+
+	fprintf(stderr, "bootparams.envp_gva = 0x%016lx\n", bootparams.envp_gva);
+	fprintf(stderr, "gvatom(bootparams.envp_gva) = 0x%016lx\n", gvatovm(bootparams.envp_gva));
+	fprintf(stderr, "\n");
+
+	fprintf(stderr, "bootparams.mudulep_gva = 0x%016lx\n", bootparams.modulep_gva);
+	fprintf(stderr, "gvatom(bootparams.modulep_gva) = 0x%016lx\n", gvatovm(bootparams.modulep_gva));
+	fprintf(stderr, "\n");
+
+	fprintf(stderr, "bootparams.module_len = %d\n", bootparams.module_len);
+	fprintf(stderr, "\n");
+
+	char *envp = vm_map_ipa(ctx, gvatovm(bootparams.envp_gva), 0);
+	fprintf(stderr, "environment:\n");
+	while (1) {
+		if (*envp == 0 && *(envp + 1) == 0)
+			break;
+		printf("%d ", *envp);
+		envp++;
+	}
+	printf("\n");
 
 	/*
 	error = vm_attach_vgic(ctx, periphbase + 0x1000, periphbase + 0x2000);
