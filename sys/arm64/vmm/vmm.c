@@ -307,7 +307,6 @@ vm_run(struct vm *vm, struct vm_run *vmrun)
 	register_t pc;
 	struct vcpu *vcpu;
 	struct vm_exit *vme;
-	//struct hyp *hyp;
 	bool retu;
 	void *rvc, *sc;
 
@@ -322,6 +321,23 @@ vm_run(struct vm *vm, struct vm_run *vmrun)
 
 	vcpu = &vm->vcpu[vcpuid];
 	vme = &vcpu->exitinfo;
+
+	vm_paddr_t pa = hypmap_get(vm->cookie, VM_GUEST_BASE_IPA + 0x1000);
+	printf("pa = 0x%016lx\n", (uint64_t)pa);
+	uint32_t *instr = (uint32_t *)PHYS_TO_DMAP(pa);
+	printf("first instruction = 0x%08x\n", *instr);
+	/*
+	char  *envp = (char *)PHYS_TO_DMAP(pa);
+	while (true) {
+		printf("%d ", *envp);
+		if (*envp == 0 && *(envp + 1) == 0) {
+			printf("%d ", *envp);
+			break;
+		}
+		envp++;
+	}
+	printf("\n");
+	*/
 
 	rvc = sc = NULL;
 restart:

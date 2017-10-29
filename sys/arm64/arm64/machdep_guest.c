@@ -970,8 +970,6 @@ initarm(struct arm64_bootparams *abp)
 	bool valid;
 	int i;
 
-	__asm __volatile("hvc 0x42");
-
 	/* Set the module data location */
 	preload_metadata = (caddr_t)(uintptr_t)(abp->modulep);
 
@@ -1051,7 +1049,7 @@ initarm(struct arm64_bootparams *abp)
 	pmap_bootstrap(abp->kern_l0pt, abp->kern_l1pt,
 	    KERNBASE - abp->kern_delta, lastaddr - KERNBASE);
 
-	__asm __volatile("hvc 0x100");
+	__asm __volatile("hvc 0x42");
 
 	// FREEZES HERE //
 
