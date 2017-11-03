@@ -130,6 +130,15 @@ extern uint64_t boot_x28;
 extern uint64_t boot_x29;
 */
 extern uint64_t boot_x0;
+extern uint64_t boot_x1;
+extern uint64_t boot_x2;
+extern uint64_t boot_x3;
+extern uint64_t boot_x4;
+extern uint64_t boot_x5;
+extern uint64_t boot_x6;
+extern uint64_t boot_x7;
+extern uint64_t boot_x8;
+extern uint64_t boot_x24;
 extern vm_offset_t lastaddr;
 extern vm_offset_t dtbp;
 extern vm_offset_t envp;
@@ -149,6 +158,18 @@ arm_init(int ipinum)
 	}
 
 	printf("\tboot_x0 = 0x%016lx\n", boot_x0);
+	printf("\taddress of TTBR1 table (x24 reg) = 0x%016lx\n", boot_x24);
+	printf("\tLend - KERNBASE = 0x%016lx\n", boot_x8);
+	printf("\n");
+	printf("\tboot_x2 = 0x%016lx (kva of virt_map)\n", boot_x2);
+
+	printf("\n");
+	printf("\tboot_x4 = 0x%016lx (address of l1 table)\n", boot_x4);
+
+	printf("\n");
+	printf("\tboot_x3 = 0x%016lx (l2 table descriptor)\n", boot_x3);
+	printf("\n");
+
 	printf("\tlastaddr = 0x%016lx\n", (uint64_t)lastaddr);
 	printf("\tdtbp = 0x%016lx\n", (uint64_t)dtbp);
 	printf("\tenvp = 0x%016lx\n", (uint64_t)envp);
@@ -630,7 +651,11 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 		printf("hpfar_el2 = 0x%x\n", hypctx->exit_info.hpfar_el2);
 		printf("sctlr_el1 = 0x%x\n", hypctx->sctlr_el1);
 		printf("par_el1 = 0x%lx\n", hypctx->par_el1);
-		printf("x0 = 0x%lx\n", hypctx->regs.x[0]);
+		printf("\n");
+
+		printf("x0 = 0x%016lx\n", hypctx->regs.x[0]);
+		printf("x28 = 0x%016lx\n", hypctx->regs.x[28]);
+		printf("x29 = 0x%016lx\n", hypctx->regs.x[29]);
 
 		vmexit->inst_length = 4;
 
