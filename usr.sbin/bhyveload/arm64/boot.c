@@ -94,6 +94,40 @@ load_elf_header(struct elf_file *ef)
 	return (0);
 }
 
+static caddr_t
+preload_search_by_type(const char *type, caddr_t preload_metadata)
+{
+    caddr_t	curp, lname;
+    uint32_t	*hdr;
+    int		next;
+
+    if (preload_metadata != NULL) {
+
+	curp = preload_metadata;
+	lname = NULL;
+	for (;;) {
+	    hdr = (uint32_t *)curp;
+	    if (hdr[0] == 0 && hdr[1] == 0)
+		break;
+
+	    /* remember the start of each record */
+	    if (hdr[0] == MODINFO_NAME)
+		lname = curp;
+
+	    /* Search for a MODINFO_TYPE field */
+	    if ((hdr[0] == MODINFO_TYPE) &&
+		!strcmp(type, curp + sizeof(uint32_t) * 2))
+		return(lname);
+
+	    /* skip to next field */
+	    next = sizeof(uint32_t) * 2 + hdr[1];
+	    next = roundup(next, sizeof(u_long));
+	    curp += next;
+	}
+    }
+    return(NULL);
+}
+
 int
 parse_kernel(void *addr, size_t img_size, struct vmctx *ctx,
 		struct vm_bootparams *bootparams)
@@ -123,7 +157,7 @@ parse_kernel(void *addr, size_t img_size, struct vmctx *ctx,
 		fprintf(stderr, "Image not a kernel\n");
 		return (EPERM);
 	}
-	img.f_name = "kernel";
+	img.f_name = "elf kernel";
 	img.f_type = "elf kernel";
 	img.f_size = img_size;
 
@@ -138,7 +172,8 @@ parse_kernel(void *addr, size_t img_size, struct vmctx *ctx,
 	boothowto = 0;
 	image_addmetadata(&img, MODINFOMD_HOWTO, sizeof(boothowto), &boothowto);
 
-	lastaddr_gva = roundup(img.f_addr + img.f_size, PAGE_SIZE);
+	//lastaddr_gva = roundup(img.f_addr + img.f_size, PAGE_SIZE);
+	lastaddr_gva = roundup(img.f_addr + img.f_size + 0x3fd000, PAGE_SIZE);
 	image_addmetadata(&img, MODINFOMD_ENVP, sizeof(lastaddr_gva), &lastaddr_gva);
 	bootparams->envp_gva = lastaddr_gva;
 
@@ -157,7 +192,12 @@ parse_kernel(void *addr, size_t img_size, struct vmctx *ctx,
 		return (ENOMEM);
 	}
 
+	fprintf(stderr, "user space address of modulep = 0x%016lx\n", (uint64_t)bootparams->modulep);
 	moddata_copy((vm_offset_t)bootparams->modulep, &img);
+	fprintf(stderr, "\n");
+
+	fprintf(stderr, "preload_search_by_type = 0x%016lx\n", (uint64_t)preload_search_by_type("elf kernel", (caddr_t)bootparams->modulep));
+	fprintf(stderr, "\n");
 
 	/*
 	fprintf(stderr, "\tstrlen(f_name) = %u\n", ((uint32_t *)bootparams->modulep)[1]);
@@ -419,8 +459,20 @@ moddata_copy(vm_offset_t dest, struct preloaded_file *img)
 {
 	struct file_metadata *md;
 
+	fprintf(stderr, "start addr = 0x%016lx\n", (uint64_t)dest);
+	fprintf(stderr, "img->f_name = %s\n", img->f_name);
+	fprintf(stderr, "strlen(img->f_name) + 1 = %lu\n", strlen(img->f_name) + 1);
+
 	COPY_MODINFO(MODINFO_NAME, dest, img->f_name, strlen(img->f_name) + 1);
+
+	fprintf(stderr, "next address = 0x%016lx\n", (uint64_t)dest);
+	fprintf(stderr, "img->f_type = %s\n", img->f_name);
+	fprintf(stderr, "strlen(img->f_type) + 1 = %lu\n", strlen(img->f_type) + 1);
+
 	COPY_MODINFO(MODINFO_TYPE, dest, img->f_type, strlen(img->f_type) + 1);
+
+	fprintf(stderr, "next address = 0x%016lx\n", (uint64_t)dest);
+
 	COPY_MODINFO(MODINFO_ADDR, dest, &img->f_addr, sizeof(img->f_addr));
 	COPY_MODINFO(MODINFO_SIZE, dest, &img->f_size, sizeof(img->f_size));
 
