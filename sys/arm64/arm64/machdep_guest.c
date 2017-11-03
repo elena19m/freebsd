@@ -973,14 +973,23 @@ initarm(struct arm64_bootparams *abp)
 	/* Set the module data location */
 	preload_metadata = (caddr_t)(uintptr_t)(abp->modulep);
 
-	// At this point: preload_metadata = NULL
+	// At this point:
+	// preload_metadata = bootparams.modulep_gva = 0xffff000000e8a000 + 0x3fd000
 
 	/* Find the kernel address */
 	kmdp = preload_search_by_type("elf kernel");
 	if (kmdp == NULL)
 		kmdp = preload_search_by_type("elf64 kernel");
 
-	// At this point: kmdp = NULL
+	// At this point:
+	// kmdb != NULL
+
+	/*
+	if (kmdp != NULL)
+		__asm __volatile("hvc 0x42");
+	else
+		__asm __volatile("hvc 0x666");
+		*/
 
 	boothowto = MD_FETCH(kmdp, MODINFOMD_HOWTO, int);
 	init_static_kenv(MD_FETCH(kmdp, MODINFOMD_ENVP, char *), 0);
@@ -990,8 +999,17 @@ initarm(struct arm64_bootparams *abp)
 #endif
 
 	/* Find the address to start allocating from */
-	//lastaddr = MD_FETCH(kmdp, MODINFOMD_KERNEND, vm_offset_t);
-	lastaddr = 0xe89000;
+	lastaddr = MD_FETCH(kmdp, MODINFOMD_KERNEND, vm_offset_t);
+
+	// At this point:
+	// lastaddr == 0xffff000000e8b000 + 0x3fd000
+
+	/*
+	if (lastaddr == (0xffff000000e8b000 + 0x3fd000))
+		__asm __volatile("hvc 0x42");
+	else
+		__asm __volatile("hvc 0x666");
+		*/
 
 	/* Load the physical memory ranges */
 	physmap_idx = 0;
@@ -1049,24 +1067,32 @@ initarm(struct arm64_bootparams *abp)
 	pmap_bootstrap(abp->kern_l0pt, abp->kern_l1pt,
 	    KERNBASE - abp->kern_delta, lastaddr - KERNBASE);
 
-	__asm __volatile("hvc 0x42");
-
-	// FREEZES HERE //
+	// WORKS HERE
 
 	devmap_bootstrap(0, NULL);
 
 	valid = bus_probe();
 
+	// WORKS HERE
 	cninit();
+	// FREEZES HERE
 
-	if (!valid)
+	__asm __volatile("hvc 0x11");
+
+	if (!valid) {
+		__asm __volatile("hvc 0x12");
 		panic("Invalid bus configuration: %s",
 		    kern_getenv("kern.cfg.order"));
+	}
+
+	__asm __volatile("hvc 0x21");
 
 	init_proc0(abp->kern_stack);
 	msgbufinit(msgbufp, msgbufsize);
 	mutex_init();
 	init_param2(physmem);
+
+	__asm __volatile("hvc 0x22");
 
 	dbg_monitor_init();
 	kdb_init();
