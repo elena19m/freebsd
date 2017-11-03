@@ -300,6 +300,43 @@ vm_name(struct vm *vm)
 	return (vm->name);
 }
 
+#include <sys/queue.h>
+#include <sys/linker.h>
+
+static caddr_t
+search_by_type(const char *type, caddr_t preload_metadata)
+{
+    caddr_t	curp, lname;
+    uint32_t	*hdr;
+    int		next;
+
+    if (preload_metadata != NULL) {
+
+	curp = preload_metadata;
+	lname = NULL;
+	for (;;) {
+	    hdr = (uint32_t *)curp;
+	    if (hdr[0] == 0 && hdr[1] == 0)
+		break;
+
+	    /* remember the start of each record */
+	    if (hdr[0] == MODINFO_NAME)
+		lname = curp;
+
+	    /* Search for a MODINFO_TYPE field */
+	    if ((hdr[0] == MODINFO_TYPE) &&
+		!strcmp(type, curp + sizeof(uint32_t) * 2))
+		return(lname);
+
+	    /* skip to next field */
+	    next = sizeof(uint32_t) * 2 + hdr[1];
+	    next = roundup(next, sizeof(u_long));
+	    curp += next;
+	}
+    }
+    return(NULL);
+}
+
 int
 vm_run(struct vm *vm, struct vm_run *vmrun)
 {
@@ -323,11 +360,14 @@ vm_run(struct vm *vm, struct vm_run *vmrun)
 	vme = &vcpu->exitinfo;
 
 	vm_paddr_t pa = hypmap_get(vm->cookie, VM_GUEST_BASE_IPA + 0x1000);
-	printf("pa = 0x%016lx\n", (uint64_t)pa);
 	uint32_t *instr = (uint32_t *)PHYS_TO_DMAP(pa);
-	printf("first instruction = 0x%08x\n", *instr);
-	/*
+	printf("first instruction:\n");
+       	printf("0x%08x\n", *instr);
+	printf("\n");
+
+	pa = hypmap_get(vm->cookie, VM_GUEST_BASE_IPA + 0xe89000 + 0x3fd000);
 	char  *envp = (char *)PHYS_TO_DMAP(pa);
+	printf("env:\n");
 	while (true) {
 		printf("%d ", *envp);
 		if (*envp == 0 && *(envp + 1) == 0) {
@@ -336,8 +376,14 @@ vm_run(struct vm *vm, struct vm_run *vmrun)
 		}
 		envp++;
 	}
+	printf("\n\n");
+
+	pa = hypmap_get(vm->cookie, VM_GUEST_BASE_IPA + 0xe8a000 + 0x3fd000);
+	char  *preload_metadata = (char *)PHYS_TO_DMAP(pa);
+	printf("preload_search_by_type(\"elf kernel\") = 0x%016lx\n",
+			(uint64_t)search_by_type("elf kernel", preload_metadata));
 	printf("\n");
-	*/
+
 
 	rvc = sc = NULL;
 restart:
