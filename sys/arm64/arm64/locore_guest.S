@@ -142,7 +142,7 @@ virtdone:
 	bl	initarm
 
 	// TODO: delete me
-	hvc	0x600
+	hvc	0x42
 
 	bl	mi_startup
 
@@ -310,11 +310,14 @@ get_virt_delta:
 	adr	x29, virt_map
 	/* Load the virtual address of virt_map stored in virt_map */
 	ldr	x28, [x29]
+
 	/* Find PA - VA as PA' = VA' - VA + PA = VA' + (PA - VA) = VA' + x29 */
 	sub	x29, x29, x28
 	/* Find the load address for the kernel */
 	mov	x28, #(KERNBASE)
 	add	x28, x28, x29
+
+
 	ret
 
 	.align 3
