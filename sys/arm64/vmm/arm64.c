@@ -144,6 +144,8 @@ extern vm_offset_t dtbp;
 extern vm_offset_t envp;
 extern int boothowto;
 
+extern char *cn_name;
+
 static int
 arm_init(int ipinum)
 {
@@ -174,6 +176,9 @@ arm_init(int ipinum)
 	printf("\tdtbp = 0x%016lx\n", (uint64_t)dtbp);
 	printf("\tenvp = 0x%016lx\n", (uint64_t)envp);
 	printf("\tboothowto = %d\n", boothowto);
+	printf("\n");
+
+	printf("last cn_name = %s\n", cn_name);
 	printf("\n");
 	/*
 	printf("\tboot_x28 = 0x%lx\n", boot_x28);
@@ -313,13 +318,13 @@ arm_vminit(struct vm *vm)
 		 * HCR_FB: broadcast maintenance operations
 		 * HCR_BSU_IS: barrier instructions apply to the inner shareable
 		 * domain
-		 * HCR_AMO: route physical SError interrupts to EL2 ** DISABLED FOR NOW **
-		 * HCR_IMO: route physical IRQ interrupts to EL2 ** DISABLED FOR NOW **
-		 * HCR_FMO: route physical FIQ interrupts to EL2 ** DISABLED FOR NOW **
+		 * HCR_AMO: route physical SError interrupts to EL2
+		 * HCR_IMO: route physical IRQ interrupts to EL2
+		 * HCR_FMO: route physical FIQ interrupts to EL2
 		 * HCR_VM: use stage 2 translation
 		 */
 		hypctx->hcr_el2 = HCR_RW | HCR_TSC | HCR_BSU_IS | \
-				HCR_SWIO | HCR_FB | HCR_VM;// | HCR_AMO | HCR_IMO | HCR_FMO;
+				HCR_SWIO | HCR_FB | HCR_VM| HCR_AMO | HCR_IMO | HCR_FMO;
 
 		/* The guest will detect a uniprocessor system */
 		hypctx->vmpidr_el2 = get_mpidr();
@@ -580,16 +585,13 @@ handle_world_switch(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 	return (handled);
 }
 
-static void
-arm_vmcleanup(void *arg);
-
 static int
 arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	void *rendezvous_cookie, void *suspend_cookie)
 {
 	uint64_t excp_type;
 	int handled;
-	//register_t daif;
+	register_t daif;
 	struct hyp *hyp;
 	struct hypctx *hypctx;
 	struct vm *vm;
@@ -627,10 +629,10 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 		printf("\n");
 		printf("[ENTER GUEST] PC = 0x%lx\n", hypctx->elr_el2);
 
-		//daif = intr_disable();
+		daif = intr_disable();
 		excp_type = vmm_call_hyp((void *)ktohyp(vmm_enter_guest),
 				ktohyp(hypctx));
-		//intr_restore(daif);
+		intr_restore(daif);
 
 		printf("[EXIT GUEST] PC = 0x%lx\n", hypctx->elr_el2);
 
@@ -641,16 +643,41 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 		vmexit->u.hyp.far_el2 = hypctx->exit_info.far_el2;
 		vmexit->u.hyp.hpfar_el2 = hypctx->exit_info.hpfar_el2;
 
-		if (vmexit->u.hyp.exception_nr == 1)
-			printf("excp_type = EXCP_TYPE_EL1_IRQ\n");
-		else
-			printf("excp_type = %d\n", vmexit->u.hyp.exception_nr);
+		switch (vmexit->u.hyp.exception_nr) {
+		case 0:
+			printf("EXCP_TYPE_EL1_SYNC\n");
+			break;
+		case 1:
+			printf("EXCP_TYPE_EL1_IRQ\n");
+			break;
+		case 2:
+			printf("EXCP_TYPE_EL1_FIQ\n");
+			break;
+		case 3:
+			printf("EXCP_TYPE_EL1_ERROR\n");
+			break;
+		case 4:
+			printf("EXCP_TYPE_EL2_SYNC\n");
+			break;
+		case 5:
+			printf("EXCP_TYPE_EL2_IRQ\n");
+			break;
+		case 6:
+			printf("EXCP_TYPE_EL2_FIQ\n");
+			break;
+		case 7:
+			printf("EXCP_TYPE_EL2_ERROR\n");
+			break;
+		}
+
 		printf("\n");
-		printf("esr_el2 = 0x%x\n", hypctx->exit_info.esr_el2);
-		printf("far_el2 = 0x%x\n", hypctx->exit_info.far_el2);
-		printf("hpfar_el2 = 0x%x\n", hypctx->exit_info.hpfar_el2);
-		printf("sctlr_el1 = 0x%x\n", hypctx->sctlr_el1);
-		printf("par_el1 = 0x%lx\n", hypctx->par_el1);
+		printf("esr_el2 = 0x%08x\n", hypctx->exit_info.esr_el2);
+		printf("far_el2 = 0x%08x\n", hypctx->exit_info.far_el2);
+		printf("hpfar_el2 = 0x08%x\n", hypctx->exit_info.hpfar_el2);
+		printf("par_el1 = 0x%016lx\n", hypctx->par_el1);
+		printf("spsr_el2 = 0x%08x\n", hypctx->spsr_el2);
+		printf("sctlr_el1 = 0x%08x\n", hypctx->sctlr_el1);
+		printf("sp = 0x%016lx\n", hypctx->regs.sp);
 		printf("\n");
 
 		printf("x0 = 0x%016lx\n", hypctx->regs.x[0]);
@@ -667,10 +694,14 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 
 		handled = HANDLED;
 
-		if (excp_type == EXCP_TYPE_EL1_IRQ)
+		if (excp_type == EXCP_TYPE_EL1_IRQ) {
+			hypctx->elr_el2 += 4;
+			printf("new PC = 0x%016lx\n", hypctx->elr_el2);
+			printf("\n");
 			handled = HANDLED;
-		else
+		} else {
 			handled = UNHANDLED;
+		}
 
 	} while (handled == HANDLED);
 
