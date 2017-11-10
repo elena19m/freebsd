@@ -172,7 +172,6 @@ parse_kernel(void *addr, size_t img_size, struct vmctx *ctx,
 	boothowto = 0;
 	image_addmetadata(&img, MODINFOMD_HOWTO, sizeof(boothowto), &boothowto);
 
-	//lastaddr_gva = roundup(img.f_addr + img.f_size, PAGE_SIZE);
 	lastaddr_gva = roundup(img.f_addr + img.f_size + 0x3fd000, PAGE_SIZE);
 	image_addmetadata(&img, MODINFOMD_ENVP, sizeof(lastaddr_gva), &lastaddr_gva);
 	bootparams->envp_gva = lastaddr_gva;
@@ -198,12 +197,6 @@ parse_kernel(void *addr, size_t img_size, struct vmctx *ctx,
 
 	fprintf(stderr, "preload_search_by_type = 0x%016lx\n", (uint64_t)preload_search_by_type("elf kernel", (caddr_t)bootparams->modulep));
 	fprintf(stderr, "\n");
-
-	/*
-	fprintf(stderr, "\tstrlen(f_name) = %u\n", ((uint32_t *)bootparams->modulep)[1]);
-	fprintf(stderr, "\tf_name = %s\n", ((char *)bootparams->modulep) + 8);
-	fprintf(stderr, "\tf_name = %s\n", ((char *)bootparams->modulep) + 8 + roundup(strlen(img.f_name) + 1, 8) + 8);
-	*/
 
 	return (0);
 }

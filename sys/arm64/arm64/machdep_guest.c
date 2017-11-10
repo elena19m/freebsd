@@ -984,13 +984,6 @@ initarm(struct arm64_bootparams *abp)
 	// At this point:
 	// kmdb != NULL
 
-	/*
-	if (kmdp != NULL)
-		__asm __volatile("hvc 0x42");
-	else
-		__asm __volatile("hvc 0x666");
-		*/
-
 	boothowto = MD_FETCH(kmdp, MODINFOMD_HOWTO, int);
 	init_static_kenv(MD_FETCH(kmdp, MODINFOMD_ENVP, char *), 0);
 
@@ -1003,13 +996,6 @@ initarm(struct arm64_bootparams *abp)
 
 	// At this point:
 	// lastaddr == 0xffff000000e8b000 + 0x3fd000
-
-	/*
-	if (lastaddr == (0xffff000000e8b000 + 0x3fd000))
-		__asm __volatile("hvc 0x42");
-	else
-		__asm __volatile("hvc 0x666");
-		*/
 
 	/* Load the physical memory ranges */
 	physmap_idx = 0;
