@@ -230,10 +230,9 @@
 #define	SAVE_GUEST_REGS()				\
 	SAVE_GUEST_X_REGS();				\
 							\
-	mov	x1, #HYPCTX_REGS_SP;			\
-	add	x1, x1, x0;				\
-	ldr	x2, [x1];				\
-	msr	sp_el1, x2;				\
+	mrs	x1, sp_el1;				\
+	mov	x2, #HYPCTX_REGS_SP;			\
+	str	x1, [x0, x2];				\
 							\
 	SAVE_SYSTEM_REG64(ACTLR_EL1);			\
 	SAVE_SYSTEM_REG64(AMAIR_EL1);			\
