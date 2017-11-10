@@ -659,30 +659,17 @@ pmap_bootstrap_l2(vm_offset_t l1pt, vm_offset_t va, vm_offset_t l2_start)
 	l1_slot = pmap_l1_index(va);
 	l2pt = l2_start;
 
-	// WORKS HERE
-
 	for (; va < VM_MAX_KERNEL_ADDRESS; l1_slot++, va += L1_SIZE) {
 		KASSERT(l1_slot < Ln_ENTRIES, ("Invalid L1 index"));
-
 		pa = pmap_early_vtophys(l1pt, l2pt);
-
-		// WORKS HERE
-
 		pmap_load_store(&l1[l1_slot],
 		    (pa & ~Ln_TABLE_MASK) | L1_TABLE);
 		l2pt += PAGE_SIZE;
-
-		// WORKS HERE
 	}
 
 
 	/* Clean the L2 page table */
 	memset((void *)l2_start, 0, l2pt - l2_start);
-
-	// FAILS because l2_start is zero.
-	//__asm __volatile("hvc 0x201");
-
-	// FAILS HERE
 
 	return l2pt;
 }
@@ -827,29 +814,10 @@ pmap_bootstrap(vm_offset_t l0pt, vm_offset_t l1pt, vm_paddr_t kernstart,
 
 	va = roundup2(va, L1_SIZE);
 
-	// WORKS HERE
-
-
 	freemempos = KERNBASE + kernlen;
-	/*
-	if (kernlen == 0)
-		__asm __volatile("hvc 0x200");
-	if (KERNBASE == 0)
-		__asm __volatile("hvc 0x201");
-	if (freemempos == 0)
-		__asm __volatile("hvc 0x202");
-	freemempos = roundup2(freemempos, PAGE_SIZE);
-	if (freemempos == 0)
-		__asm __volatile("hvc 0x203");
-		*/
 
 	/* Create the l2 tables up to VM_MAX_KERNEL_ADDRESS */
 	freemempos = pmap_bootstrap_l2(l1pt, va, freemempos);
-
-	// TODO: delete me
-	//__asm __volatile("hvc 0x200");
-
-	// FREEZES HERE
 
 	/* And the l3 tables for the early devmap */
 	freemempos = pmap_bootstrap_l3(l1pt,
