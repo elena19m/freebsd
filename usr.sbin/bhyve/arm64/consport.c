@@ -1,6 +1,4 @@
-/*
- * Copyright (C) 2015 Mihai Carabas <mihai.carabas@gmail.com>
- * All rights reserved.
+/* * Copyright (C) 2015 Mihai Carabas <mihai.carabas@gmail.com> * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -35,7 +33,7 @@
 
 #include "mem.h"
 
-#define	BVM_CONSOLE_PORT	0x1c090000
+#define	BVM_CONS_PORT		0x090000
 #define	BVM_CONS_SIG		('b' << 8 | 'v')
 
 static struct termios tio_orig, tio_new;
@@ -133,7 +131,7 @@ struct mem_range consport ={
 	console_handler,
 	NULL,
 	0,
-	BVM_CONSOLE_PORT,
+	BVM_CONS_PORT,
 	sizeof(int)
 };
 
