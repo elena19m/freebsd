@@ -996,6 +996,7 @@ initarm(struct arm64_bootparams *abp)
 
 	// At this point:
 	// lastaddr == 0xffff000000e8b000 + 0x3fd000
+	// WORKS HERE
 
 	/* Load the physical memory ranges */
 	physmap_idx = 0;
@@ -1014,8 +1015,6 @@ initarm(struct arm64_bootparams *abp)
 		    &physmap_idx);
 #endif
 	}
-
-	// WORKS HERE
 
 	/* Print the memory map */
 	mem_len = 0;

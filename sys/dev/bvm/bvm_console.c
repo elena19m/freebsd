@@ -209,37 +209,40 @@ bvm_cnprobe(struct consdev *cp)
 
 		if (inw(bvm_cons_port) == BVM_CONS_SIG)
 #elif defined(__arm__) || defined(__aarch64__)
-		bvm_cons_port = (int) pmap_mapdev(bvm_cons_port, 0x1000);
-		if ((*(short *)(size_t)bvm_cons_port) == BVM_CONS_SIG)
+		bvm_cons_port = (int)pmap_mapdev(bvm_cons_port, 0x1000);
+		if ((*(short *)(size_t)bvm_cons_port) == BVM_CONS_SIG) {
+			__asm __volatile("hvc 0x889");
 #endif
 			cp->cn_pri = CN_REMOTE;
 		}
+		__asm __volatile("hvc 0x890");
 	}
+}
 
-	static void
-	bvm_cninit(struct consdev *cp)
-	{
-		int i;
-		const char *bootmsg = "Using bvm console.\n";
+static void
+bvm_cninit(struct consdev *cp)
+{
+	int i;
+	const char *bootmsg = "Using bvm console.\n";
 
-		if (boothowto & RB_VERBOSE) {
-			for (i = 0; i < strlen(bootmsg); i++)
-				bvm_cnputc(cp, bootmsg[i]);
-		}
+	if (boothowto & RB_VERBOSE) {
+		for (i = 0; i < strlen(bootmsg); i++)
+			bvm_cnputc(cp, bootmsg[i]);
 	}
+}
 
-	static void
-	bvm_cnterm(struct consdev *cp)
-	{
+static void
+bvm_cnterm(struct consdev *cp)
+{
 
-	}
+}
 
-	static int
-	bvm_cngetc(struct consdev *cp)
-	{
-		unsigned char ch;
+static int
+bvm_cngetc(struct consdev *cp)
+{
+	unsigned char ch;
 
-		if (bvm_rcons(&ch) == 0) {
+	if (bvm_rcons(&ch) == 0) {
 #if defined(KDB)
 		kdb_alt_break(ch, &alt_break_state);
 #endif

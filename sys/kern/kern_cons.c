@@ -126,6 +126,7 @@ kbdinit(void)
 {
 
 }
+char *cn_name;
 
 void
 cninit(void)
@@ -173,6 +174,7 @@ cninit(void)
 			cn->cn_ops->cn_init(cn);
 			cnadd(cn);
 		}
+		cn_name = cn->cn_name;
 	}
 	if (best_cn == NULL)
 		return;

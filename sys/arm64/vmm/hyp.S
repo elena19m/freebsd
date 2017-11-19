@@ -57,7 +57,7 @@ _C_LABEL(hyp_debug2):
 	.zero 8
 
 ENTRY(vmm_call_hyp)
-	hvc	#0
+	hvc	#0x42
 	ret
 END(vmm_call_hyp)
 
