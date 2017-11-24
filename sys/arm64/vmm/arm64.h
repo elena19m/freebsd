@@ -41,6 +41,7 @@ struct hypctx {
 	uint64_t	actlr_el1;	/* Auxiliary Control Register */
 	uint64_t	amair_el1;	/* Auxiliary Memory Attribute Indirection Register */
 	uint64_t	elr_el1;	/* Exception Link Register */
+	uint64_t	far_el1;	/* Fault Address Register */
 	uint64_t	mair_el1;	/* Memory Attribute Indirection Register */
 	uint64_t	par_el1;	/* Physical Address Register */
 	uint64_t	tcr_el1;	/* Translation Control Register */
@@ -53,7 +54,6 @@ struct hypctx {
 	uint32_t	contextidr_el1;	/* Current Process Identifier */
 	uint32_t	cpacr_el1;	/* Arhitectural Feature Access Control Register */
 	uint32_t	esr_el1;	/* Exception Syndrome Register */
-	uint32_t	far_el1;	/* Fault Address Register */
 	uint32_t	sctlr_el1;	/* System Control Register */
 	uint32_t	spsr_el1;	/* Saved Program Status Register */
 

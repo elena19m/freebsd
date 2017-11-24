@@ -316,6 +316,11 @@ ENTRY(call_function)
 	br 	x9
 END(call_function)
 
+/*
+ * We only trap IRQ, FIQ and SError exceptions when a guest is running. Do a
+ * world switch to host to handle these exceptions.
+ */
+
 ENTRY(handle_el1_irq)
 	do_world_switch_to_host
 	mov	x0, #EXCP_TYPE_EL1_IRQ
