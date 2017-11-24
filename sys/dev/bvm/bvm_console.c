@@ -79,7 +79,7 @@ static int			alt_break_state;
 #define	BVM_CONS_PORT	0x090000
 #endif
 
-static int bvm_cons_port = BVM_CONS_PORT;
+static vm_offset_t bvm_cons_port = BVM_CONS_PORT;
 
 #define BVM_CONS_SIG	('b' << 8 | 'v')
 
@@ -103,7 +103,7 @@ bvm_rcons(u_char *ch)
 #if defined(__i386__) || defined(__amd64__)
 	c = inl(bvm_cons_port);
 #elif defined(__arm__) || defined(__aarch64__)
-	c = (*(int *)(size_t)bvm_cons_port);
+	c = *(int *)bvm_cons_port;
 #endif
 
 	if (c != -1) {
@@ -119,7 +119,7 @@ bvm_wcons(u_char ch)
 #if defined(__i386__) || defined(__amd64__)
 	outl(bvm_cons_port, ch);
 #elif defined(__arm__) || defined(__aarch64__)
-	(*(int *)(size_t)bvm_cons_port) = ch;
+	*(int *)bvm_cons_port = ch;
 #endif
 }
 
@@ -207,9 +207,8 @@ bvm_cnprobe(struct consdev *cp)
 
 		if (inw(bvm_cons_port) == BVM_CONS_SIG)
 #elif defined(__arm__) || defined(__aarch64__)
-		bvm_cons_port = (int)pmap_mapdev(bvm_cons_port, 0x1000);
-		if ((*(short *)(size_t)bvm_cons_port) == BVM_CONS_SIG) {
-			__asm __volatile("hvc 0x889");
+		bvm_cons_port = (vm_offset_t)pmap_mapdev(bvm_cons_port, 0x1000);
+		if ((*(short *)bvm_cons_port) == BVM_CONS_SIG) {
 #endif
 			cp->cn_pri = CN_REMOTE;
 		}
