@@ -591,7 +591,7 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 {
 	uint64_t excp_type;
 	int handled;
-	register_t daif;
+	//register_t daif;
 	struct hyp *hyp;
 	struct hypctx *hypctx;
 	struct vm *vm;
@@ -629,10 +629,10 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 		printf("\n");
 		printf("[ENTER GUEST] PC = 0x%lx\n", hypctx->elr_el2);
 
-		daif = intr_disable();
+		//daif = intr_disable();
 		excp_type = vmm_call_hyp((void *)ktohyp(vmm_enter_guest),
 				ktohyp(hypctx));
-		intr_restore(daif);
+		//intr_restore(daif);
 
 		printf("[EXIT GUEST] PC = 0x%lx\n", hypctx->elr_el2);
 
