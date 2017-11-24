@@ -333,8 +333,8 @@ struct vm_exit {
 		struct {
 			uint32_t	exception_nr;
 			uint32_t	esr_el2;	/* Exception Syndrome Register */
-			uint32_t	far_el2;	/* Fault Address Register */
-			uint32_t	hpfar_el2;	/* Hypervisor IPA Fault Address Register */
+			uint64_t	far_el2;	/* Fault Address Register */
+			uint64_t	hpfar_el2;	/* Hypervisor IPA Fault Address Register */
 		} hyp;
 
 		struct {
