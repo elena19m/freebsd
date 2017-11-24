@@ -672,16 +672,19 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 
 		printf("\n");
 		printf("esr_el2 = 0x%08x\n", hypctx->exit_info.esr_el2);
-		printf("far_el2 = 0x%08x\n", hypctx->exit_info.far_el2);
-		printf("hpfar_el2 = 0x08%x\n", hypctx->exit_info.hpfar_el2);
+		printf("far_el2 = 0x%016lx\n", hypctx->exit_info.far_el2);
+		printf("hpfar_el2 = 0x%016lx\n", hypctx->exit_info.hpfar_el2);
 
 		printf("\n");
+		printf("far_el1 = 0x%016lx\n", hypctx->far_el1);
 		printf("par_el1 = 0x%016lx\n", hypctx->par_el1);
+
+		printf("\n");
 		printf("spsr_el2 = 0x%08x\n", hypctx->spsr_el2);
 		printf("sctlr_el1 = 0x%08x\n", hypctx->sctlr_el1);
 		printf("sp_el1 = 0x%016lx\n", hypctx->regs.sp);
-		printf("\n");
 
+		printf("\n");
 		printf("x0 = 0x%016lx\n", hypctx->regs.x[0]);
 		printf("x28 = 0x%016lx\n", hypctx->regs.x[28]);
 		printf("x29 = 0x%016lx\n", hypctx->regs.x[29]);

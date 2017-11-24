@@ -69,8 +69,8 @@ struct hypctx {
 	struct hyp	*hyp;
 	struct {
 		uint32_t	esr_el2;	/* Exception Syndrome Register */
-		uint32_t	far_el2;	/* Fault Address Register */
-		uint32_t	hpfar_el2;	/* Hypervisor IPA Fault Address Register */
+		uint64_t	far_el2;	/* Fault Address Register */
+		uint64_t	hpfar_el2;	/* Hypervisor IPA Fault Address Register */
 	} exit_info;
 	struct vtimer_cpu vtimer_cpu;
 	struct vgic_cpu_int	vgic_cpu_int;
