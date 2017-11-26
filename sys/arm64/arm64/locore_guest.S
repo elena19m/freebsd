@@ -142,7 +142,7 @@ virtdone:
 	bl	initarm
 
 	// TODO: delete me
-	hvc	0x789
+	//hvc	0x789
 
 	bl	mi_startup
 
