@@ -121,9 +121,11 @@ env_tostr(char **envstrp, int *envlen)
 	if (SLIST_EMPTY(&envhead))
 		(*envstrp)[1] = 0;
 
+	/*
 	for (i = 0; i < *envlen; i++)
 		printf("%d ", (int)(*envstrp)[i]);
 	printf("\n");
+	*/
 
 	return (0);
 }
@@ -289,8 +291,10 @@ main(int argc, char** argv)
 		exit(1);
 	}
 
+	/*
 	uint32_t *first_instruction = vm_map_ipa(ctx, 0x1000, 0);
 	printf("first instruction = 0x%x\n", *first_instruction);
+	*/
 
 	error = env_tostr(&envstr, &envlen);
 	if (error) {
@@ -306,6 +310,7 @@ main(int argc, char** argv)
 		exit(1);
 	}
 
+	/*
 	fprintf(stderr, "bootparams.envp_gva = 0x%016lx\n", bootparams.envp_gva);
 	fprintf(stderr, "gvatom(bootparams.envp_gva) = 0x%016lx\n", gvatovm(bootparams.envp_gva));
 	fprintf(stderr, "vm_map_ipa() = 0x%016lx\n", (uint64_t)vm_map_ipa(ctx, gvatovm(bootparams.envp_gva), PAGE_SIZE));
@@ -318,6 +323,7 @@ main(int argc, char** argv)
 
 	fprintf(stderr, "bootparams.module_len = %d\n", bootparams.module_len);
 	fprintf(stderr, "\n");
+	*/
 
 	/* Copy the environment string in the guest memory */
 	if (guest_copyin((void *)envstr, gvatovm(bootparams.envp_gva), envlen) != 0) {
@@ -330,6 +336,7 @@ main(int argc, char** argv)
 		exit(1);
 	}
 
+	/*
 	char *envp = vm_map_ipa(ctx, gvatovm(bootparams.envp_gva), PAGE_SIZE);
 	fprintf(stderr, "env:\n");
 	while (1) {
@@ -339,6 +346,7 @@ main(int argc, char** argv)
 		envp++;
 	}
 	printf("0 0\n");
+	*/
 
 	/*
 	error = vm_attach_vgic(ctx, periphbase + 0x1000, periphbase + 0x2000);

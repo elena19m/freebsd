@@ -1062,26 +1062,28 @@ initarm(struct arm64_bootparams *abp)
 	cninit();
 	// FREEZES HERE
 
-	__asm __volatile("hvc 0x11");
+	//__asm __volatile("hvc 0x11");
 
 	if (!valid) {
-		__asm __volatile("hvc 0x12");
+		//__asm __volatile("hvc 0x12");
 		panic("Invalid bus configuration: %s",
 		    kern_getenv("kern.cfg.order"));
 	}
 
-	__asm __volatile("hvc 0x21");
+	//__asm __volatile("hvc 0x21");
 
 	init_proc0(abp->kern_stack);
 	msgbufinit(msgbufp, msgbufsize);
 	mutex_init();
 	init_param2(physmem);
 
-	__asm __volatile("hvc 0x22");
+	//__asm __volatile("hvc 0x22");
 
 	dbg_monitor_init();
 	kdb_init();
 	pan_enable();
+
+	printf("\nHello, World from guest!\n\n");
 
 	early_boot = 0;
 }

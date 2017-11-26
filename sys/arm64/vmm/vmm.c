@@ -209,8 +209,10 @@ vmm_handler(module_t mod, int what, void *arg)
 	switch (what) {
 	case MOD_LOAD:
 
+		/*
 		printf("VMM_HANDLER:\n");
 		printf("\thypmode_enabled = %lu\n", hypmode_enabled);
+		*/
 
 		vmmdev_init();
 		error = vmm_init();
@@ -359,6 +361,7 @@ vm_run(struct vm *vm, struct vm_run *vmrun)
 	vcpu = &vm->vcpu[vcpuid];
 	vme = &vcpu->exitinfo;
 
+	/*
 	vm_paddr_t pa = hypmap_get(vm->cookie, VM_GUEST_BASE_IPA + 0x1000);
 	uint32_t *instr = (uint32_t *)PHYS_TO_DMAP(pa);
 	printf("first instruction:\n");
@@ -383,6 +386,7 @@ vm_run(struct vm *vm, struct vm_run *vmrun)
 	printf("preload_search_by_type(\"elf kernel\") = 0x%016lx\n",
 			(uint64_t)search_by_type("elf kernel", preload_metadata));
 	printf("\n");
+	*/
 
 
 	rvc = sc = NULL;
@@ -391,8 +395,8 @@ restart:
 	error = VMRUN(vm->cookie, vcpuid, pc, NULL, rvc, sc);
 	critical_exit();
 
-	VMCLEANUP(vm->cookie);
-	panic("\n\n\ncleanup successful!\n\n");
+	//VMCLEANUP(vm->cookie);
+	//panic("\n\n\ncleanup successful!\n\n");
 
 	if (error == 0) {
 		switch (vme->exitcode) {
@@ -400,7 +404,8 @@ restart:
 			/* Check if we need to do in-kernel emulation */
 			pc = vme->pc + vme->inst_length;
 			retu = true;
-			error = vgic_emulate_distributor(vm->cookie, vcpuid, vme, &retu);
+			//error = vgic_emulate_distributor(vm->cookie, vcpuid, vme, &retu);
+			error = 0;
 			break;
 
 		case VM_EXITCODE_WFI:

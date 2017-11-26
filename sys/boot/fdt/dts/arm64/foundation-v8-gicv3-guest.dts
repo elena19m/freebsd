@@ -125,50 +125,5 @@
 			clock-frequency = <32768>;
 			clock-output-names = "v2m:refclk32khz";
 		};
-
-		iofpga@3,00000000 {
-			compatible = "simple-bus";
-			#address-cells = <1>;
-			#size-cells = <1>;
-			ranges = <0 3 0 0x200000>;
-
-			v2m_sysreg: sysreg@010000 {
-				compatible = "arm,vexpress-sysreg";
-				reg = <0x010000 0x1000>;
-			};
-
-			v2m_serial0: uart@090000 {
-				compatible = "arm,pl011", "arm,primecell";
-				reg = <0x090000 0x1000>;
-				interrupts = <0 5 4>;
-				clocks = <&v2m_clk24mhz>, <&v2m_clk24mhz>;
-				clock-names = "uartclk", "apb_pclk";
-			};
-
-			v2m_serial1: uart@0a0000 {
-				compatible = "arm,pl011", "arm,primecell";
-				reg = <0x0a0000 0x1000>;
-				interrupts = <0 6 4>;
-				clocks = <&v2m_clk24mhz>, <&v2m_clk24mhz>;
-				clock-names = "uartclk", "apb_pclk";
-			};
-
-			v2m_serial2: uart@0b0000 {
-				compatible = "arm,pl011", "arm,primecell";
-				reg = <0x0b0000 0x1000>;
-				interrupts = <0 7 4>;
-				clocks = <&v2m_clk24mhz>, <&v2m_clk24mhz>;
-				clock-names = "uartclk", "apb_pclk";
-			};
-
-			v2m_serial3: uart@0c0000 {
-				compatible = "arm,pl011", "arm,primecell";
-				reg = <0x0c0000 0x1000>;
-				interrupts = <0 8 4>;
-				clocks = <&v2m_clk24mhz>, <&v2m_clk24mhz>;
-				clock-names = "uartclk", "apb_pclk";
-			};
-
-		};
 	};
 };

@@ -214,7 +214,6 @@ bvm_cnprobe(struct consdev *cp)
 #endif
 			cp->cn_pri = CN_REMOTE;
 		}
-		__asm __volatile("hvc 0x890");
 	}
 }
 

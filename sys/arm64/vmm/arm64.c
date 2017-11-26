@@ -152,13 +152,14 @@ arm_init(int ipinum)
 	char *stack_top;
 	size_t hyp_code_len;
 
-	printf("ARM_INIT:\n");
+	//printf("ARM_INIT:\n");
 
 	if (!hypmode_enabled) {
 		printf("arm_init: processor didn't boot in EL2 (no support)\n");
 		return (ENXIO);
 	}
 
+	/*
 	printf("\tboot_x0 = 0x%016lx\n", boot_x0);
 	printf("\taddress of TTBR1 table (x24 reg) = 0x%016lx\n", boot_x24);
 	printf("\tLend - KERNBASE = 0x%016lx\n", boot_x8);
@@ -180,7 +181,6 @@ arm_init(int ipinum)
 
 	printf("last cn_name = %s\n", cn_name);
 	printf("\n");
-	/*
 	printf("\tboot_x28 = 0x%lx\n", boot_x28);
 	printf("\tboot_x29 = 0x%lx\n", boot_x29);
 
@@ -214,7 +214,7 @@ arm_init(int ipinum)
 	 * Install the temporary vectors which will be responsible for
 	 * initializing the VMM when we next trap into EL2.
 	 */
-	printf("\tBefore vmm_call_hyp(hyp_init_vectors)\n");
+	//printf("\tBefore vmm_call_hyp(hyp_init_vectors)\n");
 	vmm_call_hyp((void *)vtophys(hyp_init_vectors));
 
 	/*
@@ -223,17 +223,17 @@ arm_init(int ipinum)
 	hyp_pmap = malloc(sizeof(*hyp_pmap), M_HYP, M_WAITOK | M_ZERO);
 	hypmap_init(hyp_pmap, PT_STAGE1);
 	hyp_code_len = (size_t)hyp_code_end - (size_t)hyp_code_start;
-	printf("\tBefore hypmap_map(hyp_pmap)\n");
+	//printf("\tBefore hypmap_map(hyp_pmap)\n");
 	hypmap_map(hyp_pmap, (vm_offset_t)hyp_code_start, hyp_code_len, VM_PROT_EXECUTE);
 
 	/* We need an identity mapping for when we activate the MMU */
-	printf("\tBefore hypmap_map_identity(hyp_pmap)\n");
+	//printf("\tBefore hypmap_map_identity(hyp_pmap)\n");
 	hypmap_map_identity(hyp_pmap, (vm_offset_t)hyp_code_start, hyp_code_len, VM_PROT_EXECUTE);
 
 	/* Create and map the hypevisor stack */
 	stack = malloc(PAGE_SIZE, M_HYP, M_WAITOK | M_ZERO);
 	stack_top = stack + PAGE_SIZE;
-	printf("\tBefore hypmap_map(stack)\n");
+	//printf("\tBefore hypmap_map(stack)\n");
 	hypmap_map(hyp_pmap, (vm_offset_t)stack, PAGE_SIZE, VM_PROT_READ | VM_PROT_WRITE);
 
 	/*
@@ -243,10 +243,10 @@ arm_init(int ipinum)
 	 * x1 - the physical address of the hypervisor translation table
 	 * x2 - stack top address
 	 */
-	printf("\tBefore vmm_call_hyp(hyp_vectors, hyp_pmap, stack_top)\n");
+	//printf("\tBefore vmm_call_hyp(hyp_vectors, hyp_pmap, stack_top)\n");
 	uint64_t rc;
 	rc = vmm_call_hyp((void *)vtophys(hyp_vectors), vtophys(hyp_pmap->pm_l0), ktohyp(stack_top));
-	printf("\trc = 0x%lx\n", rc);
+	//printf("\trc = 0x%lx\n", rc);
 
 	/* Initialize VGIC infrastructure */
 	//if (vgic_hyp_init())
@@ -453,19 +453,21 @@ get_vm_reg_name(uint32_t reg_nr, uint32_t mode __attribute__((unused)))
 static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 {
 	int handled;
-	//int hsr_ec, hsr_il, hsr_iss;
+	uint32_t esr_ec, esr_iss, esr_sas;
 	//struct hypctx *hypctx = &hyp->ctx[vcpu];
 
 	handled = UNHANDLED;
-#if 0
-	hsr_ec = HSR_EC(vmexit->u.hyp.hsr);
-	hsr_il = HSR_IL(vmexit->u.hyp.hsr);
-	hsr_iss = HSR_ISS(vmexit->u.hyp.hsr);
 
-	switch(hsr_ec) {
-		case HSR_EC_UNKN:
+	esr_ec = ESR_ELx_EXCEPTION(vmexit->u.hyp.esr_el2);
+	esr_iss = vmexit->u.hyp.esr_el2 & ESR_ELx_ISS_MASK;
+
+	switch(esr_ec) {
+		case EXCP_UNKNOWN:
 			printf("%s:%d Unknown exception\n",__func__, __LINE__);
 			break;
+
+		/* TODO: Not implemented yet */
+#if 0
 		case HSR_EC_WFI_WFE:
 			vmexit->exitcode = VM_EXITCODE_WFI;
 			vmexit->u.wfi.hypctx = hypctx;
@@ -506,10 +508,6 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 			panic("%s:%d SVC called from hyp-mode\n",
 			    __func__, __LINE__);
 			break;
-		case HSR_EC_HVC:
-			printf("%s:%d HVC called from hyp-mode - unsupported\n",
-			    __func__, __LINE__);
-			break;
 		case HSR_EC_SMC:
 			printf("%s:%d SMC called from hyp-mode - unsupported\n",
 			    __func__, __LINE__);
@@ -522,40 +520,46 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 			printf("%s:%d PABT taken from HYP mode at %x with HSR: %x\n",
 			    __func__, __LINE__, vmexit->u.hyp.hifar, vmexit->u.hyp.hsr);
 			break;
-		case HSR_EC_DABT:
-			if (HSR_ISS_ISV(hsr_iss)) {
-				//if (LPAE_TRANSLATION_FAULT(HSR_ISS_DFSC(hsr_iss))) {
-				if (0) {
-					/*
-					 * The page is not mapped and a possible MMIO access
-					 * Build the instruction info and return to user to emulate
-					 */
+#endif
+		case EXCP_HVC:
+			printf("%s:%d HVC called from guest, esr_el2: 0x%08x - unsupported\n",
+			    __func__, __LINE__, vmexit->u.hyp.esr_el2);
+			break;
+		case EXCP_DATA_ABORT_L:
+			/* Check if instruction syndrome is valid */
+			if ((esr_iss & ISS_DATA_ISV) == ISS_DATA_ISV) {
+				if ((esr_iss & ISS_DATA_DFSC_TF_L1) == ISS_DATA_DFSC_TF_L1) {
 					vmexit->exitcode = VM_EXITCODE_INST_EMUL;
-					vmexit->u.inst_emul.gpa = ((uint64_t)(vmexit->u.hyp.hpfar >> 4) << 12) |
-						(vmexit->u.hyp.hdfar & ((1 << 12) - 1));
-					vmexit->u.inst_emul.vie.access_size = HSR_ISS_ACCESS_SIZE(HSR_ISS_SAS(hsr_iss));
-					vmexit->u.inst_emul.vie.sign_extend = HSR_ISS_SSE(hsr_iss);
-					vmexit->u.inst_emul.vie.dir = HSR_ISS_WnR(hsr_iss);
-					vmexit->u.inst_emul.vie.reg = get_vm_reg_name(HSR_ISS_SRT(hsr_iss),
-					    vmexit->u.hyp.mode);
+					vmexit->u.inst_emul.gpa = (vmexit->u.hyp.hpfar_el2 >> 4) << 12;
+
+					esr_sas = (esr_iss & ISS_DATA_SAS_MASK) >> 22;
+					vmexit->u.inst_emul.vie.access_size = 1 << esr_sas;
+
+					vmexit->u.inst_emul.vie.sign_extend = ((esr_iss & ISS_DATA_SSE) == ISS_DATA_SSE);
+					vmexit->u.inst_emul.vie.dir = ((esr_iss & ISS_DATA_WnR) == ISS_DATA_WnR);
+					vmexit->u.inst_emul.vie.reg = get_vm_reg_name((esr_iss & ISS_DATA_SRT_MASK) >> 16, 0);
 				} else {
-					printf("%s:%d DABT from guest at address %x with hsr %x with a stage-2 fault != translation\n",
-					    __func__, __LINE__, vmexit->u.hyp.hdfar, vmexit->u.hyp.hsr);
+					printf("%s:%d DATA ABORT from guest at address 0x%016lx with esr 0x%08x with a stage-2 fault != translation\n",
+					    __func__, __LINE__, vmexit->u.hyp.hpfar_el2, vmexit->u.hyp.esr_el2);
 				}
 			} else {
-				printf("%s:%d DABT from guest at address %x with hsr %x, hpfar: %x without a stage-2 fault translation\n",
-				    __func__, __LINE__, vmexit->u.hyp.hdfar, vmexit->u.hyp.hsr, vmexit->u.hyp.hpfar);
+				printf("%s:%d DATA ABORT from guest at address 0x%016lx with esr 0x%08x, hpfar: 0x%016lx without a stage-2 fault translation\n",
+				    __func__, __LINE__, vmexit->u.hyp.hpfar_el2, vmexit->u.hyp.esr_el2, vmexit->u.hyp.hpfar_el2);
 			}
 			break;
+
+		/* TODO: not implemented yet. */
+#if 0
 		case HSR_EC_DABT_HYP:
 			printf("%s:%d DABT taken from HYP mode at %x with HSR: %x\n",
 			    __func__, __LINE__, vmexit->u.hyp.hdfar, vmexit->u.hyp.hsr);
 			break;
+#endif
 		default:
-			printf("%s:%d Unknown HSR_EC code: %x\n",__func__, __LINE__, hsr_ec);
+			printf("%s:%d Unknown ESR_EC code: 0x%x\n",__func__, __LINE__, esr_ec);
 			break;
 	}
-#endif
+
 	return handled;
 }
 
@@ -567,7 +571,7 @@ handle_world_switch(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 	handled = UNHANDLED;
 
 	vmexit->exitcode = VM_EXITCODE_BOGUS;
-	switch(vmexit->u.hyp.exception_nr) {
+	switch (vmexit->u.hyp.exception_nr) {
 	case EXCP_TYPE_EL1_SYNC:
 		vmexit->exitcode = VM_EXITCODE_HYP;
 		handled = handle_el1_sync_exception(hyp, vcpu, vmexit);
@@ -591,7 +595,7 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 {
 	uint64_t excp_type;
 	int handled;
-	//register_t daif;
+	register_t daif;
 	struct hyp *hyp;
 	struct hypctx *hypctx;
 	struct vm *vm;
@@ -604,6 +608,7 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	hypctx = &hyp->ctx[vcpu];
 	hypctx->elr_el2 = (uint64_t)pc;
 
+	/*
 	printf("vttbr = 0x%lx\n", hyp->vttbr);
 	printf("vtophys(stage2_map) = 0x%lx\n", (uint64_t)vtophys(hyp->stage2_map->pm_l0));
 
@@ -619,6 +624,7 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	printf("\n");
 	printf("elr_el2 = 0x%016lx\n", hypctx->elr_el2);
 	printf("\n");
+	*/
 
 	do {
 		handled = UNHANDLED;
@@ -626,15 +632,15 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 		//vgic_flush_hwstate(hypctx);
 		//vtimer_flush_hwstate(hypctx);
 
-		printf("\n");
-		printf("[ENTER GUEST] PC = 0x%lx\n", hypctx->elr_el2);
+		//printf("\n");
+		//printf("[ENTER GUEST] PC = 0x%lx\n", hypctx->elr_el2);
 
-		//daif = intr_disable();
+		daif = intr_disable();
 		excp_type = vmm_call_hyp((void *)ktohyp(vmm_enter_guest),
 				ktohyp(hypctx));
-		//intr_restore(daif);
+		intr_restore(daif);
 
-		printf("[EXIT GUEST] PC = 0x%lx\n", hypctx->elr_el2);
+		//printf("[EXIT GUEST] PC = 0x%lx\n", hypctx->elr_el2);
 
 		vmexit->pc = hypctx->elr_el2;
 
@@ -643,6 +649,7 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 		vmexit->u.hyp.far_el2 = hypctx->exit_info.far_el2;
 		vmexit->u.hyp.hpfar_el2 = hypctx->exit_info.hpfar_el2;
 
+		/*
 		switch (vmexit->u.hyp.exception_nr) {
 		case 0:
 			printf("EXCP_TYPE_EL1_SYNC\n");
@@ -688,24 +695,22 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 		printf("x0 = 0x%016lx\n", hypctx->regs.x[0]);
 		printf("x28 = 0x%016lx\n", hypctx->regs.x[28]);
 		printf("x29 = 0x%016lx\n", hypctx->regs.x[29]);
+		*/
 
 		vmexit->inst_length = 4;
-
 		handled = handle_world_switch(hyp, vcpu, vmexit);
 		//hypctx->elr_el2 += vmexit->inst_length;
 
 		//vtimer_sync_hwstate(hypctx);
 		//vgic_sync_hwstate(hypctx);
 
-		handled = HANDLED;
-
 		if (excp_type == EXCP_TYPE_EL1_IRQ) {
-			//hypctx->elr_el2 += 0;
-			printf("new PC = 0x%016lx\n", hypctx->elr_el2);
-			printf("\n");
+			//printf("new PC = 0x%016lx\n", hypctx->elr_el2);
+			//printf("\n");
 			handled = HANDLED;
 		} else {
-			handled = UNHANDLED;
+			/* Resume guest execution from the next instruction */
+			hypctx->elr_el2 += vmexit->inst_length;
 		}
 
 	} while (handled == HANDLED);
