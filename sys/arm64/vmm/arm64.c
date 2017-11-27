@@ -429,7 +429,9 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 			if (((esr_iss & ISS_DATA_ISV) >> ISS_DATA_ISV_SHIFT) == 1) {
 				if ((esr_iss & ISS_DATA_DFSC_MASK) == ISS_DATA_DFSC_TF_L1) {
 					vmexit->exitcode = VM_EXITCODE_INST_EMUL;
-					vmexit->u.inst_emul.gpa = (vmexit->u.hyp.hpfar_el2 >> 4) << 12;
+
+					/* FIPA holds bits [47:12] of the IPA */
+					vmexit->u.inst_emul.gpa = (vmexit->u.hyp.hpfar_el2 >> HPFAR_EL2_FIPA_SHIFT) << 12;
 
 					esr_sas = (esr_iss & ISS_DATA_SAS_MASK) >> ISS_DATA_SAS_SHIFT;
 					vmexit->u.inst_emul.vie.access_size = 1 << esr_sas;
