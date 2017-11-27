@@ -103,6 +103,4 @@ uint64_t vmm_enter_guest(struct hypctx *hypctx);
 #define MPIDR_AFF1_LEVEL(x) 	((x >> 2) << 8)
 #define MPIDR_AFF0_LEVEL(x) 	((x & 0x3) << 0)
 
-#define STAGE1_TF_L1(iss)	((iss) & ISS_DATA_DFSC_TF_L1 == ISS_DATA_DFSC_TF_L1)
-
 #endif /* !_VMM_ARM64_H_ */
