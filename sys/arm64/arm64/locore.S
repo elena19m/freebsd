@@ -67,82 +67,7 @@
  *  We are loaded at a 2MiB aligned address
  */
 
-
 	.text
-
-// TODO: delete me
-.macro save_reg reg
-	.align 7
-	adr	x3, boot_\reg
-	str	\reg, [x3]
-.endm
-
-// TODO: delete me
-	.align 3
-	.globl _C_LABEL(boot_x28)
-_C_LABEL(boot_x28):
-	.zero 8
-
-// TODO: delete me
-	.align 3
-	.globl _C_LABEL(boot_x8)
-_C_LABEL(boot_x8):
-	.zero 8
-
-// TODO: delete me
-	.align 3
-	.globl _C_LABEL(boot_x1)
-_C_LABEL(boot_x1):
-	.zero 8
-
-// TODO: delete me
-	.align 3
-	.globl _C_LABEL(boot_x2)
-_C_LABEL(boot_x2):
-	.zero 8
-
-// TODO: delete me
-	.align 3
-	.globl _C_LABEL(boot_x3)
-_C_LABEL(boot_x3):
-	.zero 8
-
-// TODO: delete me
-	.align 3
-	.globl _C_LABEL(boot_x4)
-_C_LABEL(boot_x4):
-	.zero 8
-
-// TODO: delete me
-	.align 3
-	.globl _C_LABEL(boot_x5)
-_C_LABEL(boot_x5):
-	.zero 8
-
-// TODO: delete me
-	.align 3
-	.globl _C_LABEL(boot_x6)
-_C_LABEL(boot_x6):
-	.zero 8
-
-// TODO: delete me
-	.align 3
-	.globl _C_LABEL(boot_x7)
-_C_LABEL(boot_x7):
-	.zero 8
-
-// TODO: delete me
-	.align 3
-	.globl _C_LABEL(boot_x29)
-_C_LABEL(boot_x29):
-	.zero 8
-
-// TODO: delete me
-	.align 3
-	.globl _C_LABEL(boot_x24)
-_C_LABEL(boot_x24):
-	.zero 8
-
 	.globl _start
 _start:
 #if defined(LINUX_BOOT_ABI)
@@ -188,10 +113,6 @@ _start:
 	 * x28 = Our physical load address
 	 */
 
-//TODO: delete me
-	save_reg 	x29
-	save_reg	x28
-
 	/* Create the page tables */
 	bl	create_pagetables
 
@@ -201,33 +122,6 @@ _start:
 	 * x26 = Kernel L1 table
 	 * x24 = TTBR1 table
 	 */
-
-//TODO: delete below
-	save_reg	x24
-
-	/* Create the kva = 0xffff 0000 0000 1190 */
-	mov	x2, xzr
-	mov	x2, 0xffff
-	lsl	x2, x2, 48
-	mov	x3, 0x1190
-	add	x2, x2, x3
-	save_reg	x2
-
-	/* Get the descriptor for L1 table */
-	ldr	x3, [x24]
-	save_reg	x3
-
-	/* Make bits 63:48 zero */
-	lsl	x4, x3, 16
-	/* Make bits 11:0 zero */
-	lsr 	x4, x4, 28
-	lsl	x4, x4, 12
-	save_reg	x4
-
-	/* Get the descriptor for L2 table */
-	ldr	x3, [x4]
-	save_reg	x3
-//TODO: delete above
 
 	/* Enable the mmu */
 	bl	start_mmu
@@ -348,104 +242,6 @@ END(mpentry)
 _C_LABEL(hypmode_enabled):
 	.zero 8
 
-/* TODO: delete me */
-.macro	save_reg64 reg
-	.align 7
-	mrs	x2, \reg
-	adr	x3, boot_\reg
-	str	x2, [x3]
-.endm
-
-.macro	save_reg32 reg
-	.align 7
-	mrs	x2, \reg
-	adr	x3, boot_\reg
-	str	w2, [x3]
-.endm
-
-
-/* TODO: delete me */
-	.align 3
-	.globl _C_LABEL(boot_actlr_el1)
-_C_LABEL(boot_actlr_el1):
-	.zero 8
-	.align 3
-	.globl _C_LABEL(boot_amair_el1)
-_C_LABEL(boot_amair_el1):
-	.zero 8
-	.align 3
-	.globl _C_LABEL(boot_elr_el1)
-_C_LABEL(boot_elr_el1):
-	.zero 8
-	.align 3
-	.globl _C_LABEL(boot_mair_el1)
-_C_LABEL(boot_mair_el1):
-	.zero 8
-	.align 3
-	.globl _C_LABEL(boot_par_el1)
-_C_LABEL(boot_par_el1):
-	.zero 8
-	.align 3
-	.globl _C_LABEL(boot_tcr_el1)
-_C_LABEL(boot_tcr_el1):
-	.zero 8
-	.align 3
-	.globl _C_LABEL(boot_tpidr_el1)
-_C_LABEL(boot_tpidr_el1):
-	.zero 8
-	.align 3
-	.globl _C_LABEL(boot_ttbr0_el1)
-_C_LABEL(boot_ttbr0_el1):
-	.zero 8
-	.align 3
-	.globl _C_LABEL(boot_ttbr1_el1)
-_C_LABEL(boot_ttbr1_el1):
-	.zero 8
-	.align 3
-	.globl _C_LABEL(boot_vbar_el1)
-_C_LABEL(boot_vbar_el1):
-	.zero 8
-
-	.align 3
-	.globl _C_LABEL(boot_afsr0_el1)
-_C_LABEL(boot_afsr0_el1):
-	.zero 4
-	.align 3
-	.globl _C_LABEL(boot_afsr1_el1)
-_C_LABEL(boot_afsr1_el1):
-	.zero 4
-	.align 3
-	.globl _C_LABEL(boot_contextidr_el1)
-_C_LABEL(boot_contextidr_el1):
-	.zero 4
-	.align 3
-	.globl _C_LABEL(boot_cpacr_el1)
-_C_LABEL(boot_cpacr_el1):
-	.zero 4
-	.align 3
-	.globl _C_LABEL(boot_esr_el1)
-_C_LABEL(boot_esr_el1):
-	.zero 4
-	.align 3
-	.globl _C_LABEL(boot_far_el1)
-_C_LABEL(boot_far_el1):
-	.zero 4
-	.align 3
-	.globl _C_LABEL(boot_sctlr_el1)
-_C_LABEL(boot_sctlr_el1):
-	.zero 4
-	.align 3
-	.globl _C_LABEL(boot_spsr_el1)
-_C_LABEL(boot_spsr_el1):
-	.zero 4
-
-	.align 3
-	.globl _C_LABEL(boot_x0)
-_C_LABEL(boot_x0):
-	.zero 8
-
-
-	.align 2
 /*
  * If we are started in EL2, configure the required hypervisor
  * registers and drop to EL1.
@@ -517,27 +313,6 @@ drop_to_el1:
 	adr	x2, hypmode_enabled
 	str 	x1, [x2]
 
-	/* TODO: delete me */
-	save_reg64	actlr_el1
-	save_reg64	amair_el1
-	save_reg64	elr_el1
-	save_reg64	mair_el1
-	save_reg64	par_el1
-	save_reg64	tcr_el1
-	save_reg64	tpidr_el1
-	save_reg64	ttbr0_el1
-	save_reg64	ttbr1_el1
-	save_reg64	vbar_el1
-
-	save_reg32	afsr0_el1
-	save_reg32	afsr1_el1
-	save_reg32	contextidr_el1
-	save_reg32	cpacr_el1
-	save_reg32	esr_el1
-	save_reg32	far_el1
-	save_reg32	sctlr_el1
-	save_reg32	spsr_el1
-
 	mov	x2, #(PSR_F | PSR_I | PSR_A | PSR_D | PSR_M_EL1h)
 	msr	spsr_el2, x2
 
@@ -554,7 +329,6 @@ drop_to_el1:
 	orr	x2, x2, #ICC_SRE_EL2_SRE	/* Enable system registers */
 	msr	icc_sre_el2, x2
 2:
-
 	/* Set the address to return to our return address */
 	msr	elr_el2, x30
 	isb
