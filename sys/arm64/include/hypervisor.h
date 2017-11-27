@@ -212,4 +212,8 @@
 #define  VTCR_EL2_PS_48BIT	0x00050000
 #define  VTCR_EL2_PS_52BIT	0x00060000 /* ARMv8.2-LPA not supported */
 
+/* HPFAR_EL2 - Hypervisor IPA Fault Address Register */
+#define	HPFAR_EL2_FIPA_SHIFT	4
+#define HPFAR_EL2_FIPA_MASK	0xfffffffff0
+
 #endif /* !_MACHINE_HYPERVISOR_H_ */
