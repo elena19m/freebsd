@@ -421,8 +421,9 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 			break;
 #endif
 		case EXCP_HVC:
-			printf("%s:%d HVC called from guest, esr_el2: 0x%08x - unsupported\n",
-			    __func__, __LINE__, vmexit->u.hyp.esr_el2);
+			printf("%s:%d HVC called from guest - unsupported\n",
+			    __func__, __LINE__);
+			printf("\tESR_EL2: 0x%08x\n", vmexit->u.hyp.esr_el2);
 			break;
 		case EXCP_DATA_ABORT_L:
 			/* Check if instruction syndrome is valid */
@@ -441,12 +442,16 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 					vmexit->u.inst_emul.vie.reg = get_vm_reg_name(
 							(esr_iss & ISS_DATA_SRT_MASK) >> ISS_DATA_SRT_SHIFT, 0);
 				} else {
-					printf("%s:%d DATA ABORT from guest at address 0x%016lx with esr 0x%08x with a stage-2 fault != translation\n",
-					    __func__, __LINE__, vmexit->u.hyp.hpfar_el2, vmexit->u.hyp.esr_el2);
+					printf("%s:%d Data abort from guest not on a stage 2 translation fault\n",
+					    __func__, __LINE__);
+					printf("\tHPFAR_EL2: 0x%016lx\n", vmexit->u.hyp.hpfar_el2);
+					printf("\tESR_EL2:   0x%08x\n", vmexit->u.hyp.esr_el2);
 				}
 			} else {
-				printf("%s:%d DATA ABORT from guest at address 0x%016lx with esr 0x%08x, hpfar: 0x%016lx without a stage-2 fault translation\n",
-				    __func__, __LINE__, vmexit->u.hyp.hpfar_el2, vmexit->u.hyp.esr_el2, vmexit->u.hyp.hpfar_el2);
+				printf("%s:%d Data abort from guest with invalid instruction syndrome\n",
+				    __func__, __LINE__);
+				printf("\tHPFAR_EL2: 0x%016lx\n", vmexit->u.hyp.hpfar_el2);
+				printf("\tESR_EL2:   0x%08x\n", vmexit->u.hyp.esr_el2);
 			}
 			break;
 
