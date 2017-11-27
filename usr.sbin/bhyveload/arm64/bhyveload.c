@@ -291,11 +291,6 @@ main(int argc, char** argv)
 		exit(1);
 	}
 
-	/*
-	uint32_t *first_instruction = vm_map_ipa(ctx, 0x1000, 0);
-	printf("first instruction = 0x%x\n", *first_instruction);
-	*/
-
 	error = env_tostr(&envstr, &envlen);
 	if (error) {
 		perror("parse boot environment\n");
@@ -320,9 +315,6 @@ main(int argc, char** argv)
 	fprintf(stderr, "gvatom(bootparams.modulep_gva) = 0x%016lx\n", gvatovm(bootparams.modulep_gva));
 	fprintf(stderr, "vm_map_ipa() = 0x%016lx\n", (uint64_t)vm_map_ipa(ctx, gvatovm(bootparams.modulep_gva), PAGE_SIZE));
 	fprintf(stderr, "\n");
-
-	fprintf(stderr, "bootparams.module_len = %d\n", bootparams.module_len);
-	fprintf(stderr, "\n");
 	*/
 
 	/* Copy the environment string in the guest memory */
@@ -331,6 +323,7 @@ main(int argc, char** argv)
 		exit(1);
 	}
 
+	/* Copy the module data in the guest memory */
 	if (guest_copyin(bootparams.modulep, gvatovm(bootparams.modulep_gva), bootparams.module_len) != 0) {
 		perror("guest_copyin");
 		exit(1);
