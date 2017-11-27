@@ -565,10 +565,8 @@ phandle_t
 OF_finddevice(const char *device)
 {
 
-	if (ofw_def_impl == NULL) {
-		__asm __volatile("hvc 0x66");
+	if (ofw_def_impl == NULL)
 		return (-1);
-	}
 
 	return (OFW_FINDDEVICE(ofw_obj, device));
 }
