@@ -681,6 +681,19 @@ vm_attach_vgic(struct vm *vm, uint64_t distributor_paddr, uint64_t cpu_int_paddr
 	return vgic_attach_to_vm(vm->cookie, distributor_paddr, cpu_int_paddr);
 }
 
+int
+vm_assert_irq(struct vm *vm, uint32_t irq, bool level)
+{
+	struct hyp *hyp;
+	struct hypctx *hypctx;
+
+	hyp = vm->cookie;
+	/* all interrupts will be routed to cpu0 */
+	hypctx = &hyp->ctx[0];
+
+	return vgic_inject_irq(hypctx, irq, level);
+}
+
 static int
 vm_handle_wfi(struct vm *vm, int vcpuid, struct vm_exit *vme, bool *retu)
 {

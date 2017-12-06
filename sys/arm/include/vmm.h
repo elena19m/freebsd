@@ -158,6 +158,7 @@ int vm_get_capability(struct vm *vm, int vcpu, int type, int *val);
 int vm_set_capability(struct vm *vm, int vcpu, int type, int val);
 int vm_activate_cpu(struct vm *vm, int vcpu);
 int vm_attach_vgic(struct vm *vm, uint64_t distributor_paddr, uint64_t cpu_int_paddr);
+int vm_assert_irq(struct vm *vm, uint32_t irq, bool assert);
 struct vm_exit *vm_exitinfo(struct vm *vm, int vcpuid);
 void vm_exit_suspended(struct vm *vm, int vcpuid, uint64_t rip);
 void vm_exit_rendezvous(struct vm *vm, int vcpuid, uint64_t rip);
