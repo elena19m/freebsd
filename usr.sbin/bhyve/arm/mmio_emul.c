@@ -315,7 +315,7 @@ mmio_emul_init(struct vmctx *ctx, struct mmio_devemu *me, struct mmio_info *mmi)
 	mi->mi_vmctx = ctx;
 	snprintf(mi->mi_name, MI_NAMESZ, "%s-mmio", me->me_emu);
 	mi->mi_lintr.state = IDLE;
-	mi->mi_lintr.irq = 0;
+	mi->mi_lintr.irq = me->me_irq;
 	pthread_mutex_init(&mi->mi_lintr.lock, NULL);
 	mi->mi_cfgspace = mi->mi_cfgregs + MMIO_REGNUM;
 	mi->addr.baddr = mmi->baddr;
@@ -420,10 +420,9 @@ mmio_lintr_deassert(struct mmio_devinst *mi)
 	pthread_mutex_lock(&mi->mi_lintr.lock);
 	if (mi->mi_lintr.state == ASSERTED) {
 		mmio_irq_deassert(mi);
-		mi->mi_lintr.state = PENDING;
+		mi->mi_lintr.state = IDLE;
 	} else if (mi->mi_lintr.state == PENDING) {
-		mi->mi_lintr.state = ASSERTED;
-		mmio_irq_assert(mi);
+		mi->mi_lintr.state = IDLE;
 	}
 	pthread_mutex_unlock(&mi->mi_lintr.lock);
 }

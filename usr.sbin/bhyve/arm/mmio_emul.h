@@ -10,6 +10,7 @@ struct mmio_devinst;
 
 struct mmio_devemu {
 	char *me_emu;		/* Device emulation name */
+	uint32_t me_irq;	/* Device irq number */
 
 	/* Instance creation */
 	int (*me_init)(struct vmctx *ctx, struct mmio_devinst *mi,
