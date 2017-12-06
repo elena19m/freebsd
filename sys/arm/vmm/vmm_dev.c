@@ -54,6 +54,7 @@ struct vmmdev_softc {
 	int		flags;
 };
 #define	VSC_LINKED		0x01
+#define	IRQ_LEVEL		1
 
 static SLIST_HEAD(, vmmdev_softc) head;
 
@@ -106,6 +107,7 @@ vmmdev_ioctl(struct cdev *cdev, u_long cmd, caddr_t data, int fflag,
 	struct vm_register *vmreg;
 	struct vm_activate_cpu *vac;
 	struct vm_attach_vgic *vav;
+	struct vm_irq *vi;
 
 	sc = vmmdev_lookup2(cdev);
 	if (sc == NULL)
@@ -196,9 +198,14 @@ vmmdev_ioctl(struct cdev *cdev, u_long cmd, caddr_t data, int fflag,
 		vav = (struct vm_attach_vgic *)data;
 		error = vm_attach_vgic(sc->vm, vav->distributor_paddr,
 					vav->cpu_int_paddr);
+		break;
 	case VM_ASSERT_IRQ:
+		vi = (struct vm_irq *)data;
+		error = vm_assert_irq(sc->vm, vi->irq, IRQ_LEVEL);
+		break;
 	case VM_DEASSERT_IRQ:
-		/* TODO */
+		vi = (struct vm_irq *)data;
+		error = vm_assert_irq(sc->vm, vi->irq, !IRQ_LEVEL);
 		break;
 	default:
 		error = ENOTTY;
