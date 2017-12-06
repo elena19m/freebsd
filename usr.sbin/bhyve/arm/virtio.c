@@ -144,7 +144,7 @@ vi_vq_init(struct virtio_softc *vs, uint32_t pfn)
 	vq = &vs->vs_queues[vs->vs_curq];
 	vq->vq_pfn = pfn;
 	phys = (uint64_t)pfn << VRING_PFN;
-	size = vring_size(vq->vq_qsize);
+	size = vring_size(vq->vq_qsize, vs->vs_align);
 	base = paddr_guest2host(vs->vs_mi->mi_vmctx, phys, size);
 
 	/* First page(s) are descriptors... */
@@ -156,7 +156,7 @@ vi_vq_init(struct virtio_softc *vs, uint32_t pfn)
 	base += (2 + vq->vq_qsize + 1) * sizeof(uint16_t);
 
 	/* Then it's rounded up to the next page... */
-	base = (char *)roundup2((uintptr_t)base, VRING_ALIGN);
+	base = (char *)roundup2((uintptr_t)base, vs->vs_align);
 
 	/* ... and the last page(s) are the used ring. */
 	vq->vq_used = (struct vring_used *)base;
@@ -550,7 +550,6 @@ vi_mmio_write(struct vmctx *ctx, int vcpu, struct mmio_devinst *mi,
 		goto bad;
 
 	switch (offset) {
-		/* TODO: QUEUE_ALIGN */
 	case VIRTIO_MMIO_HOST_FEATURES_SEL:
 		DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_HOST_FEATURES_SEL value = %llx\r\n", __FILE__, __func__, value);
 		mmio_set_cfgreg(mi, offset, value);
@@ -595,7 +594,11 @@ vi_mmio_write(struct vmctx *ctx, int vcpu, struct mmio_devinst *mi,
 		 */
 		vs->vs_curq = value;
 		break;
-	/* TODO: add VIRTIO_MMIO_QUEUE_ALIGN */
+	case VIRTIO_MMIO_QUEUE_ALIGN:
+		DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_QUEUE_ALIGN value = %llx\r\n", __FILE__, __func__, value);
+		mmio_set_cfgreg(mi, offset, value);
+		vs->vs_align = value;
+		break;
 	case VIRTIO_MMIO_QUEUE_PFN:
 		DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_QUEUE_PFN value = %llx\r\n", __FILE__, __func__, value);
 		mmio_set_cfgreg(mi, offset, value);

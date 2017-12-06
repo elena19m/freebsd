@@ -249,17 +249,17 @@ struct vring_used {
 
 /* From section 2.3, "Virtqueue Configuration", of the virtio specification */
 static inline size_t
-vring_size(u_int qsz)
+vring_size(u_int qsz, uint32_t align)
 {
 	size_t size;
 
 	/* constant 3 below = va_flags, va_idx, va_used_event */
 	size = sizeof(struct virtio_desc) * qsz + sizeof(uint16_t) * (3 + qsz);
-	size = roundup2(size, VRING_ALIGN);
+	size = roundup2(size, align);
 
 	/* constant 3 below = vu_flags, vu_idx, vu_avail_event */
 	size += sizeof(uint16_t) * 3 + sizeof(struct virtio_used) * qsz;
-	size = roundup2(size, VRING_ALIGN);
+	size = roundup2(size, align);
 
 	return (size);
 }
@@ -308,6 +308,7 @@ struct virtio_softc {
 	pthread_mutex_t *vs_mtx;	/* POSIX mutex, if any */
 	struct mmio_devinst *vs_mi;	/* MMIO device instance */
 	uint32_t vs_negotiated_caps;	/* negotiated capabilities */
+	uint32_t vs_align;		/* virtual queue alignment */
 	struct vqueue_info *vs_queues;	/* one per vc_nvq */
 	int	vs_curq;		/* current queue */
 	int	irq;			/* interrupt */
