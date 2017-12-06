@@ -171,7 +171,7 @@ static void mmio_vtcon_open_port(struct mmio_vtcon_port *, bool);
 
 static struct virtio_consts vtcon_vi_consts = {
 	"vtcon",			/* name */
-	VTCON_MAXQ,			/* sipporting VTCON_MAXQ queues */
+	VTCON_MAXQ,			/* supporting VTCON_MAXQ queues */
 	sizeof(struct mmio_vtcon_config), /* config reg size */
 	mmio_vtcon_reset,		/* reset callback */
 	NULL,				/* no device-wide qnotify */
