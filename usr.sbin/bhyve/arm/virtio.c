@@ -37,6 +37,7 @@ __FBSDID("$FreeBSD$");
 
 #include "bhyverun.h"
 #include "mmio_emul.h"
+#include "mmio_irq.h"
 #include "virtio.h"
 #include "virtio_mmio.h"
 #include "vmmapi.h"
@@ -560,6 +561,7 @@ vi_mmio_write(struct vmctx *ctx, int vcpu, struct mmio_devinst *mi,
 		break;
 	case VIRTIO_MMIO_INTERRUPT_ACK:
 		DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_INTERRUPT_ACK value = %llx\r\n", __FILE__, __func__, value);
+		mmio_lintr_deassert(mi);
 		mmio_set_cfgreg(mi, offset, value);
 		break;
 	case VIRTIO_MMIO_STATUS:

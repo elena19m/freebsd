@@ -379,7 +379,6 @@ struct vqueue_info {
 	volatile struct virtio_desc *vq_desc;	/* descriptor array */
 	volatile struct vring_avail *vq_avail;	/* the "avail" ring */
 	volatile struct vring_used *vq_used;	/* the "used" ring */
-
 };
 /* as noted above, these are sort of backwards, name-wise */
 #define VQ_AVAIL_EVENT_IDX(vq) \
@@ -426,6 +425,9 @@ vq_interrupt(struct virtio_softc *vs, struct vqueue_info *vq)
 		VS_UNLOCK(vs);
 	}
 #endif
+	VS_LOCK(vs);
+	mmio_lintr_assert(vs->vs_mi);
+	VS_UNLOCK(vs);
 }
 
 struct iovec;

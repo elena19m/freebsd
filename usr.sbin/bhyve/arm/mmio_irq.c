@@ -11,6 +11,7 @@ __FBSDID("$FreeBSD$");
 
 #include "mmio_emul.h"
 #include "mmio_irq.h"
+#include "virtio_mmio.h"
 
 /* IRQ count to disable IRQ */
 #define IRQ_DISABLED	    0xff
@@ -55,15 +56,24 @@ void
 mmio_irq_assert(struct mmio_devinst *mi)
 {
 	struct mmio_irq *irq;
+	uint32_t irq_status;
 
 	assert(mi->mi_lintr.irq <= nitems(irqs));
 	irq = &irqs[mi->mi_lintr.irq];
-	
+
 	pthread_mutex_lock(&irq->lock);
 	irq->active_count++;
 
+	pthread_mutex_lock(&mi->mi_lintr.lock);
+
+	irq_status = mmio_get_cfgreg(mi, VIRTIO_MMIO_INTERRUPT_STATUS);
+	irq_status |= VIRTIO_MMIO_INT_VRING;
+	mmio_set_cfgreg(mi, VIRTIO_MMIO_INTERRUPT_STATUS, irq_status);
+
 	if (irq->active_count == 1)
-		vm_assert_irq(mi->mi_vmctx);
+		vm_assert_irq(mi->mi_vmctx, mi->mi_lintr.irq);
+
+	pthread_mutex_unlock(&mi->mi_lintr.lock);
 
 	pthread_mutex_unlock(&irq->lock);
 }
@@ -72,15 +82,27 @@ void
 mmio_irq_deassert(struct mmio_devinst *mi)
 {
 	struct mmio_irq *irq;
+	uint32_t irq_status;
 
 	assert(mi->mi_lintr.irq <= nitems(irqs));
 	irq = &irqs[mi->mi_lintr.irq];
 
 	pthread_mutex_lock(&irq->lock);
 	irq->active_count--;
-	
+
+	pthread_mutex_lock(&mi->mi_lintr.lock);
+
+	irq_status = mmio_get_cfgreg(mi, VIRTIO_MMIO_INTERRUPT_STATUS);
+	irq_status &= ~VIRTIO_MMIO_INT_VRING;
+	mmio_set_cfgreg(mi, VIRTIO_MMIO_INTERRUPT_STATUS, irq_status);
+
+#if 0
+	/* MMIO devices do not require deassertions */
 	if (irq->active_count == 0)
-		vm_deassert_irq(mi->mi_vmctx);
+		vm_deassert_irq(mi->mi_vmctx, mi->mi_lintr.irq);
+#endif
+
+	pthread_mutex_unlock(&mi->mi_lintr.lock);
 
 	pthread_mutex_unlock(&irq->lock);
 }
