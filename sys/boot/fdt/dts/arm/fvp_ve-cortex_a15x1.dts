@@ -100,5 +100,12 @@
 		interrupt-parent=<&gic>;
 		interrupts = <0 3 0x4>;
 	};
+
+	net {
+		compatible = "smsc,lan91c111";
+		reg = <0x1a000000 0x1000000>;
+		interrupts = <0 15 0x4>;
+		interrupt-parent = <&gic>;
+	};
 };
 
