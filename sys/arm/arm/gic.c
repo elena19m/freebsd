@@ -554,6 +554,7 @@ arm_gic_read_ivar(device_t dev, device_t child, int which, uintptr_t *result)
 		return (0);
 	case GIC_IVAR_VIRTUAL_CPU_INT_PADDR:
 		*result = rman_get_start(sc->gic_res[VIRT_CPU_INTERFACE_RES_IDX]);
+		return (0);
 	case GIC_IVAR_VIRTUAL_CPU_INT_SIZE:
 		*result = rman_get_size(sc->gic_res[VIRT_CPU_INTERFACE_RES_IDX]);
 		return (0);
