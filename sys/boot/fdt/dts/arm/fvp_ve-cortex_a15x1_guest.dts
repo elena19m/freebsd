@@ -95,10 +95,11 @@
 		interrupts = <35>;
 	};
 
-	virtio_random@4000 {
+	virtio_console@5000 {
 		compatible = "virtio,mmio";
-		reg = <0x4000 0x100>;
-		interrupts = <0>;
-	}
+		reg = <0x5000 0x200>;
+		interrupt-parent=<&gic>;
+		interrupts = <22>;
+	};
 };
 
