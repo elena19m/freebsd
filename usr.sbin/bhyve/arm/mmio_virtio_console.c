@@ -672,6 +672,7 @@ mmio_vtcon_init(struct vmctx *ctx, struct mmio_devinst *mi, char *opts)
 
 struct mmio_devemu mmio_de_vcon = {
 	.me_emu =	"virtio-console",
+	.me_irq =	22,
 	.me_init =	mmio_vtcon_init,
 	.me_write =	vi_mmio_write,
 	.me_read =	vi_mmio_read
