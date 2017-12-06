@@ -135,7 +135,7 @@ vgic_dist_mmio_read(void *vm, int vcpuid, uint64_t gpa, uint64_t *rval, int size
 	offset = gpa - dist->distributor_base;
 	base_offset = offset - (offset & 3);
 	byte_offset = (offset - base_offset) * 8;
-	mask = (1 << size * 8) - 1;
+	mask = (1ULL << size * 8) - 1;
 
 	if (base_offset >= GICD_CTLR && base_offset < GICD_TYPER) {
 
@@ -252,7 +252,7 @@ vgic_dist_mmio_write(void *vm, int vcpuid, uint64_t gpa, uint64_t val, int size,
 	offset = gpa - dist->distributor_base;
 	base_offset = offset - (offset & 3);
 	byte_offset = (offset - base_offset) * 8;
-	mask = (1 << size * 8) - 1;
+	mask = (1ULL << size * 8) - 1;
 
 	if (base_offset >= GICD_CTLR && base_offset < GICD_TYPER) {
 
