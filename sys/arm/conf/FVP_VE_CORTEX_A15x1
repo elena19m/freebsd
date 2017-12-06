@@ -46,7 +46,7 @@ options 	INVARIANT_SUPPORT	# Extra sanity checks of internal structures, require
 #options 	DIAGNOSTIC
 
 options                MD_ROOT
-makeoptions            MFS_IMAGE=/root/bhyvearm/ramdisk/ramdisk.img
+makeoptions            MFS_IMAGE=/root/bhyvearm-utils/ramdisk/ramdisk.img
 options                ROOTDEVNAME=\"ffs:/dev/md0\"
 
 # Pseudo devices
@@ -57,6 +57,11 @@ device		random
 device		pty
 device		md
 device		bpf
+device		mii
+device		miibus
+
+device		smc
+device		smcphy
 
 # Serial ports
 device		uart
