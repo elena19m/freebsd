@@ -342,13 +342,21 @@ vm_attach_vgic(struct vmctx *ctx, uint64_t distributor_paddr, uint64_t cpu_int_p
 }
 
 int
-vm_assert_irq(struct vmctx *ctx)
+vm_assert_irq(struct vmctx *ctx, uint32_t irq)
 {
-	return (ioctl(ctx->fd, VM_ASSERT_IRQ, NULL));
+	struct vm_irq vi;
+
+	bzero(&vi, sizeof(vi));
+	vi.irq = irq;
+	return (ioctl(ctx->fd, VM_ASSERT_IRQ, &vi));
 }
 
 int
-vm_deassert_irq(struct vmctx *ctx)
+vm_deassert_irq(struct vmctx *ctx, uint32_t irq)
 {
-	return (ioctl(ctx->fd, VM_DEASSERT_IRQ, NULL));
+	struct vm_irq vi;
+
+	bzero(&vi, sizeof(vi));
+	vi.irq = irq;
+	return (ioctl(ctx->fd, VM_DEASSERT_IRQ, &vi));
 }
