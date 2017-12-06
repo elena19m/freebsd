@@ -160,6 +160,7 @@ mmio_vtrnd_init(struct vmctx *ctx, struct mmio_devinst *mi, char *opts)
 
 struct mmio_devemu mmio_de_vrnd = {
 	.me_emu		= "virtio-rnd",
+	.me_irq		= 0,
 	.me_init	= mmio_vtrnd_init,
 	.me_write	= vi_mmio_write,
 	.me_read	= vi_mmio_read
