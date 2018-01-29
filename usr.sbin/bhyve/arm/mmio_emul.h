@@ -73,21 +73,20 @@ void mmio_lintr_deassert(struct mmio_devinst *mi);
 static __inline void
 mmio_set_cfgspace1(struct mmio_devinst *mi, size_t offset, uint8_t val)
 {
-	assert(offset > MMIO_REGMAX);
 	*(uint8_t *)(mi->mi_cfgspace + offset) = val;
 }
 
 static __inline void
 mmio_set_cfgspace2(struct mmio_devinst *mi, size_t offset, uint16_t val)
 {
-	assert(offset > MMIO_REGMAX && (offset & 1) == 0);
+	assert((offset & 1) == 0);
 	*(uint16_t *)(mi->mi_cfgspace + offset) = val;
 }
 
 static __inline void
 mmio_set_cfgspace4(struct mmio_devinst *mi, size_t offset, uint32_t val)
 {
-	assert(offset > MMIO_REGMAX && (offset & 3) == 0);
+	assert((offset & 3) == 0);
 	*(uint32_t *)(mi->mi_cfgspace + offset) = val;
 }
 
