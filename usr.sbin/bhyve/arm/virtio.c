@@ -471,7 +471,7 @@ vi_mmio_read(struct vmctx *ctx, int vcpu, struct mmio_devinst *mi,
 		goto bad;
 
 
-	/* TODO: determine config size for mmio devices */
+	/* TODO: determine config size for mmio devices; done in default? */
 	switch (offset) {
 	case VIRTIO_MMIO_MAGIC_VALUE:
 		value = mmio_get_cfgreg(mi, offset);
@@ -508,7 +508,7 @@ vi_mmio_read(struct vmctx *ctx, int vcpu, struct mmio_devinst *mi,
 		DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_QUEUE_NUM_MAX value = %llx\r\n", __FILE__, __func__, value);
 		break;
 	default:
-		if (offset > VIRTIO_MMIO_CONFIG) {
+		if (offset >= VIRTIO_MMIO_CONFIG) {
 			value = mmio_get_cfgspace(mi,
 						  offset - VIRTIO_MMIO_CONFIG,
 						  size);
@@ -629,7 +629,7 @@ vi_mmio_write(struct vmctx *ctx, int vcpu, struct mmio_devinst *mi,
 				name, (int)value);
 		break;
 	default:
-		if (offset > VIRTIO_MMIO_CONFIG) {
+		if (offset >= VIRTIO_MMIO_CONFIG) {
 			mmio_set_cfgspace(mi, offset - VIRTIO_MMIO_CONFIG,
 					  value, size);
 			DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_CONFIG offset = %llx; value = %llx\r\n", __FILE__, __func__, offset, value);

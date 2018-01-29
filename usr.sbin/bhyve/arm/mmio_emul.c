@@ -266,7 +266,7 @@ mmio_emul_alloc_mem(struct mmio_devinst *mi)
 	size = mi->addr.size;
 	limit = MMIO_EMUL_MEMLIMIT;
 	/* XXX: a define for this might be useful.
-	 * Value basen on PCIM_BAR_MEM_BASE
+	 * Value based on PCIM_BAR_MEM_BASE
 	 */
 	mask = ~0xfUL;
 
