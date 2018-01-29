@@ -50,7 +50,6 @@ makeoptions            MFS_IMAGE=/root/bhyvearm-utils/ramdisk/ramdisk.img
 options                ROOTDEVNAME=\"ffs:/dev/md0\"
 
 # Pseudo devices
-
 device		loop
 device		ether
 device		random
@@ -59,6 +58,10 @@ device		md
 device		bpf
 device		mii
 device		miibus
+
+# Network devices
+device		if_bridge
+device		tap
 
 device		smc
 device		smcphy

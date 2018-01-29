@@ -95,7 +95,7 @@
 		interrupts = <35>;
 	};
 
-	virtio_console@5000 {
+	virtio_net@5000 {
 		compatible = "virtio,mmio";
 		reg = <0x5000 0x200>;
 		interrupt-parent=<&gic>;
