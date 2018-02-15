@@ -620,10 +620,9 @@ mmio_vtcon_init(struct vmctx *ctx, struct mmio_devinst *mi, char *opts)
 	sc = calloc(1, sizeof(struct mmio_vtcon_softc));
 	/* map these to the beginning of the config space, where the driver
 	 * expects to find them
-	 * TODO: might be wiser to alloc the extra config space now as required?
 	 */
-	sc->vsc_config = (struct mmio_vtcon_config *) mi->mi_cfgspace;
-		       /* calloc(1, sizeof(struct mmio_vtcon_config)); */
+	//sc->vsc_config = (struct mmio_vtcon_config *) mi->mi_cfgspace;
+	sc->vsc_config = calloc(1, sizeof(struct mmio_vtcon_config));
 	sc->vsc_config->max_nr_ports = VTCON_MAXPORTS;
 	sc->vsc_config->cols = 80;
 	sc->vsc_config->rows = 25;
