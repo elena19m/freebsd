@@ -604,7 +604,7 @@ vi_mmio_write(struct vmctx *ctx, int vcpu, struct mmio_devinst *mi,
 		DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_QUEUE_PFN value = %llx\r\n", __FILE__, __func__, value);
 		mmio_set_cfgreg(mi, offset, value);
 		if (vs->vs_curq >= vc->vc_nvq)
-			fprintf(stderr, "%s: curq %d >= max %d",
+			fprintf(stderr, "%s: curq %d >= max %d\r\n",
 				name, vs->vs_curq, vc->vc_nvq);
 		else
 			vi_vq_init(vs, value);
@@ -612,7 +612,7 @@ vi_mmio_write(struct vmctx *ctx, int vcpu, struct mmio_devinst *mi,
 	case VIRTIO_MMIO_QUEUE_NOTIFY:
 		DPRINTF("{device}[%s][%s]: VIRTIO_MMIO_QUEUE_NOTIFY value = %llx\r\n", __FILE__, __func__, value);
 		if (value >= vc->vc_nvq) {
-			fprintf(stderr, "%s: queue %d notify out of range",
+			fprintf(stderr, "%s: queue %d notify out of range\r\n",
 				name, (int)value);
 			break;
 		}
