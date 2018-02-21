@@ -10,6 +10,7 @@ SRCS=				\
 	mevent.c		\
 	mmio_emul.c		\
 	mmio_irq.c		\
+	mmio_virtio_block.c	\
 	mmio_virtio_console.c	\
 	mmio_virtio_net.c	\
 	mmio_virtio_rnd.c	\
