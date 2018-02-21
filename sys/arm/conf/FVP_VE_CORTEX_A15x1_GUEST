@@ -78,6 +78,7 @@ device		virtio_mmio
 #device		virtio_random
 #device		virtio_console
 device		vtnet
+device		virtio_blk
 
 # Flattened Device Tree
 options 	FDT			# Configure using FDT/DTB data
