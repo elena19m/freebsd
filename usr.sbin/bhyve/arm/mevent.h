@@ -23,7 +23,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: src/usr.sbin/bhyve/arm/mevent.h 4 2017-04-18 20:28:32Z mihai.carabas $
+ * $FreeBSD$
  */
 
 #ifndef	_MEVENT_H_
@@ -32,7 +32,8 @@
 enum ev_type {
 	EVF_READ,
 	EVF_WRITE,
-	EVF_TIMER
+	EVF_TIMER,
+	EVF_SIGNAL
 };
 
 struct mevent;
