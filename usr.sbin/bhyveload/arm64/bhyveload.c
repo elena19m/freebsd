@@ -170,18 +170,19 @@ guest_setreg(enum vm_reg_name vmreg, uint64_t v)
 }
 
 static void
-usage(void)
+usage(int code)
 {
 	fprintf(stderr,
-	    "Usage: %s [-k <kernel-image>] [-e <name=value>] [-b base-address]\n"
-	    "       %*s [-m mem-size] [-l kernel-load-address] <vmname>\n"
+	    "Usage: %s [-h] [-k <kernel-image>] [-e <name=value>] [-b base-address]\n"
+	    "       %*s [-m mem-size] [-l load-address] <vmname>\n"
 	    "       -k: path to guest kernel image\n"
 	    "       -e: guest boot environment\n"
 	    "       -b: memory base address\n"
 	    "       -m: memory size\n"
-	    "       -l: kernel load address\n",
+	    "       -l: kernel load address in the guest physical memory\n"
+	    "       -h: help\n",
 	    progname, (int)strlen(progname), "");
-	exit(1);
+	exit(code);
 }
 
 int
@@ -207,7 +208,7 @@ main(int argc, char** argv)
 	strncpy(kernel_image_name, "kernel.bin", KERNEL_IMAGE_NAME_LEN);
 	memset(&bootparams, 0, sizeof(struct vm_bootparams));
 
-	while ((opt = getopt(argc, argv, "k:l:b:m:e:")) != -1) {
+	while ((opt = getopt(argc, argv, "hk:l:b:m:e:")) != -1) {
 		switch (opt) {
 		case 'k':
 			strncpy(kernel_image_name, optarg, KERNEL_IMAGE_NAME_LEN);
@@ -228,8 +229,10 @@ main(int argc, char** argv)
 				exit(1);
 			}
 			break;
-		case '?':
-			usage();
+		case 'h':
+			usage(0);
+		default:
+			usage(1);
 		}
 	}
 
@@ -237,7 +240,7 @@ main(int argc, char** argv)
 	argv += optind;
 
 	if (argc != 1)
-		usage();
+		usage(1);
 
 	if (kernel_load_address < memory_base_address) {
 		fprintf(stderr, "Kernel load address is below memory base address\n");
