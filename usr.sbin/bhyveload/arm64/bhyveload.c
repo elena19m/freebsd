@@ -173,10 +173,14 @@ static void
 usage(void)
 {
 	fprintf(stderr,
-	    "usage: %s [-k <kernel-image>] -l <kernel-load-address>, -b <memory-base-address>\n"
-	    "       %*s [-m mem-size] [-p periphbase] [-e name=value] <vmname>\n",
-	    progname,
-	    (int)strlen(progname), "");
+	    "Usage: %s [-k <kernel-image>] [-e <name=value>] [-b base-address]\n"
+	    "       %*s [-m mem-size] [-l kernel-load-address] <vmname>\n"
+	    "       -k: path to guest kernel image\n"
+	    "       -e: guest boot environment\n"
+	    "       -b: memory base address\n"
+	    "       -m: memory size\n"
+	    "       -l: kernel load address\n",
+	    progname, (int)strlen(progname), "");
 	exit(1);
 }
 
@@ -203,7 +207,7 @@ main(int argc, char** argv)
 	strncpy(kernel_image_name, "kernel.bin", KERNEL_IMAGE_NAME_LEN);
 	memset(&bootparams, 0, sizeof(struct vm_bootparams));
 
-	while ((opt = getopt(argc, argv, "k:l:b:m:p:e:")) != -1) {
+	while ((opt = getopt(argc, argv, "k:l:b:m:e:")) != -1) {
 		switch (opt) {
 		case 'k':
 			strncpy(kernel_image_name, optarg, KERNEL_IMAGE_NAME_LEN);
@@ -216,9 +220,6 @@ main(int argc, char** argv)
 			break;
 		case 'm':
 			mem_size = strtoul(optarg, NULL, 0) * MB;
-			break;
-		case 'p':
-			periphbase = strtoul(optarg, NULL, 0);
 			break;
 		case 'e':
 			error = env_add(optarg);
