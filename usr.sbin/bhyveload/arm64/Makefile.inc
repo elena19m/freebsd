@@ -1,4 +1,6 @@
 # $FreeBSD$
+LIBADD+=  util
+
 .PATH: ${BHYVELOAD_SRCTOP}/arm64/
 
 SRCS=	bhyveload.c \
