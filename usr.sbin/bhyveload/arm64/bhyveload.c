@@ -25,7 +25,6 @@
  */
 
 #include <sys/cdefs.h>
-
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/disk.h>
@@ -52,13 +51,14 @@
 #include <unistd.h>
 #include <vmmapi.h>
 
+#include <libutil.h>
+
 #include "boot.h"
 
 #define gvatovm(addr)		((uint64_t)(addr) - KERNBASE + \
 				kernel_load_address - memory_base_address)
 
 #define	MB			(1024 * 1024UL)
-#define	GB			(1024 * 1024 * 1024UL)
 #define	BSP			0
 #define KERNEL_IMAGE_NAME_LEN	32
 
@@ -164,9 +164,29 @@ guest_setreg(enum vm_reg_name vmreg, uint64_t v)
 	int error;
 
 	error = vm_set_register(ctx, BSP, vmreg, v);
-	if (error) {
+	if (error)
 		perror("vm_set_register");
+}
+
+static int
+parse_memsize(const char *optarg, size_t *ret_memsize)
+{
+	char *endptr;
+	size_t optval;
+	int error;
+
+	optval = strtoul(optarg, &endptr, 0);
+	if (*optarg != '\0' && *endptr == '\0') {
+		/* Memory size must be at least one megabyte. */
+		if (optval < MB)
+			optval = optval * MB;
+		*ret_memsize = optval;
+		error = 0;
+	} else {
+		error = expand_number(optarg, ret_memsize);
 	}
+
+	return (error);
 }
 
 static void
@@ -220,7 +240,11 @@ main(int argc, char** argv)
 			memory_base_address = strtoul(optarg, NULL, 0);
 			break;
 		case 'm':
-			mem_size = strtoul(optarg, NULL, 0) * MB;
+			error = parse_memsize(optarg, &mem_size);
+			if (error) {
+				fprintf(stderr, "Invalid memsize '%s'\n", optarg);
+				exit(1);
+			}
 			break;
 		case 'e':
 			error = env_add(optarg);
