@@ -51,42 +51,14 @@
 #include <machine/vmm.h>
 #include <machine/vmm_instruction_emul.h>
 
-
-/*
- * TODO: include the arm64/arm64/gic_v3_{var,reg}.h
- */
+#include <arm64/arm64/gic_v3_reg.h>
 #include <arm64/arm64/gic_v3_var.h>
+#include <arm/arm/gic_common.h>
+
 #if 0
 #include <arm/arm/gic.h>
-#include <arm/arm/gic_common.h>
 #endif
-/*
- * TODO: patch to have the defines needed, taken from arm/arm/gic_common.h
- */
-#define	GICH_HCR		0x0
-#define	GICH_VTR		0x4
-#define	GICH_VMCR		0x8
-#define	GICH_MISR		0x10
-#define	GICH_EISR0		0x20
-#define	GICH_EISR1		0x24
-#define	GICH_ELSR0		0x30
-#define	GICH_ELSR1		0x34
-#define	GICH_APR		0xF0
-#define	GICH_LR0		0x100
 
-#define	GICH_HCR_EN		(1 << 0)
-#define GICH_HCR_UIE		(1 << 1)
-
-#define GICH_LR_VIRTID		(0x3FF << 0)
-#define GICH_LR_PHYSID_CPUID_SHIFT	10
-#define GICH_LR_PHYSID_CPUID		(7 << GICH_LR_PHYSID_CPUID_SHIFT)
-#define GICH_LR_STATE		(3 << 28)
-#define GICH_LR_PENDING		(1 << 28)
-#define GICH_LR_ACTIVE		(1 << 29)
-#define GICH_LR_EOI			(1 << 19)
-
-#define GICH_MISR_EOI		(1 << 0)
-#define GICH_MISR_U		(1 << 1)
 
 #include "hyp.h"
 #include "mmu.h"
