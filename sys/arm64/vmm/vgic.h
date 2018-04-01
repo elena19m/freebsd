@@ -120,7 +120,7 @@ int vgic_vcpu_pending_irq(void *arg);
 
 int vgic_inject_irq(void *arg, unsigned int irq, bool level);
 
-struct arm_vgic_softc {
+struct vgic_v3_softc {
 	device_t vgic_dev;
 	device_t gic_dev;
 };

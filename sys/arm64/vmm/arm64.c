@@ -110,7 +110,7 @@ arm_init(int ipinum)
 	size_t hyp_code_len;
 
 	if (!hypmode_enabled) {
-		printf("arm_init: processor didn't boot in EL2 (no support)\n");
+		printf("arm_init: Processor doesn't have support for virtualization.\n");
 		return (ENXIO);
 	}
 
@@ -148,8 +148,8 @@ arm_init(int ipinum)
 	vmm_call_hyp((void *)vtophys(hyp_vectors), vtophys(hyp_pmap->pm_l0), ktohyp(stack_top));
 
 	/* Initialize VGIC infrastructure */
-	//if (vgic_hyp_init())
-	//	return (ENXIO);
+	if (vgic_hyp_init())
+		return (ENXIO);
 
 	//vtimer_hyp_init();
 

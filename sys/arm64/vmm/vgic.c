@@ -51,19 +51,19 @@
 #include <machine/vmm.h>
 #include <machine/vmm_instruction_emul.h>
 
+
+#include <arm/arm/gic_common.h>
 #include <arm64/arm64/gic_v3_reg.h>
 #include <arm64/arm64/gic_v3_var.h>
-#include <arm/arm/gic_common.h>
-
-#if 0
-#include <arm/arm/gic.h>
-#endif
 
 
 #include "hyp.h"
 #include "mmu.h"
 #include "vgic.h"
 #include "arm64.h"
+
+#define VGIC_V3_DEVNAME	"vgic"
+#define VGIC_V3_DEVSTR	"ARM Virtual Generic Interrupt Controller v3"
 
 static uint64_t virtual_int_ctrl_vaddr;
 static uint64_t virtual_int_ctrl_paddr;
@@ -74,15 +74,11 @@ static uint32_t virtual_cpu_int_size;
 
 static uint32_t lr_num;
 
-/*
- * Stop unused function warnings.
- */
-//static void *arm_vgic_maintenance_intr_ihl[1];
+static void *arm_vgic_maintenance_intr_ihl[1];
 
 extern uint64_t hypmode_enabled;
 
-static struct arm_vgic_softc sc =
-{
+static struct vgic_v3_softc softc = {
 	.vgic_dev = NULL,
 	.gic_dev  = NULL,
 };
@@ -93,10 +89,10 @@ static void vgic_update_state(struct hyp *hyp);
 static void vgic_retire_disabled_irqs(struct hypctx *hypctx);
 static void vgic_dispatch_sgi(struct hypctx *hypctx);
 
+#if 0
 /*
- * Stop unused function warnings.
+ * TODO
  */
-/*
 static uint32_t vgic_dist_conf_expand(uint16_t val)
 {
 	uint32_t res;
@@ -111,12 +107,7 @@ static uint32_t vgic_dist_conf_expand(uint16_t val)
 
 	return res;
 }
-*/
 
-/*
- * Stop unused function warnings.
- */
-/*
 static uint16_t vgic_dist_conf_compress(uint32_t val)
 {
 	uint32_t res;
@@ -132,7 +123,7 @@ static uint16_t vgic_dist_conf_compress(uint32_t val)
 
 	return res;
 }
-*/
+#endif
 
 /*
  * TODO
@@ -291,12 +282,12 @@ vgic_dist_mmio_write(void *vm, int vcpuid, uint64_t gpa, uint64_t val, int size,
 
 		/* private set-enable irq */
 		dist->irq_enabled_prv[vcpuid][0] |= (val & mask) << byte_offset;
-
+		
 	} else if (base_offset >= GICD_ISENABLER(VGIC_NR_PRV_IRQ) && base_offset < GICD_ICENABLER(0)) {
 
 		/* shared set-enable irq */
 		dist->irq_enabled_shr[(base_offset - GICD_ISENABLER(VGIC_NR_PRV_IRQ)) / sizeof(uint32_t)] |= (val & mask) << byte_offset;
-
+		
 	} else if (base_offset >= GICD_ICENABLER(0) && base_offset < GICD_ICENABLER(VGIC_NR_PRV_IRQ)) {
 
 		/* private clear-enable irq */
@@ -421,7 +412,6 @@ vgic_emulate_distributor(void *arg, int vcpuid, struct vm_exit *vme, bool *retu)
 	    vgic_dist_mmio_read, vgic_dist_mmio_write, retu);
 
 	return (error);
-	return (0);
 }
 
 int
@@ -433,14 +423,14 @@ vgic_attach_to_vm(void *arg, uint64_t distributor_paddr, uint64_t cpu_int_paddr)
 
 	hyp = arg;
 
-	/*
-	 * Set the distributor address which will be
+	/* 
+	 * Set the distributor address which will be 
 	 * emulated using the MMIO infrasctructure
 	 * */
 	hyp->vgic_distributor.distributor_base = distributor_paddr;
 	hyp->vgic_distributor.cpu_int_base = cpu_int_paddr;
 	hyp->vgic_attached = true;
-	/*
+	/* 
 	 * Set the Virtual Interface Control address to
 	 * save/restore registers at context switch.
 	 * Also set the number of LRs
@@ -456,7 +446,7 @@ vgic_attach_to_vm(void *arg, uint64_t distributor_paddr, uint64_t cpu_int_paddr)
 			if (j < VGIC_NR_PPI)
 				vgic_bitmap_set_irq_val(hyp->vgic_distributor.irq_enabled_prv[i],
 										hyp->vgic_distributor.irq_enabled_shr, j, 1);
-
+			
 			if (j < VGIC_NR_PRV_IRQ)
 				vgic_bitmap_set_irq_val(hyp->vgic_distributor.irq_conf_prv[i],
 										hyp->vgic_distributor.irq_conf_shr, j, VGIC_CFG_EDGE);
@@ -465,9 +455,14 @@ vgic_attach_to_vm(void *arg, uint64_t distributor_paddr, uint64_t cpu_int_paddr)
 		}
 	}
 
-	/* Map the CPU Interface over the Virtual CPU Interface */
-	hypmap_set(arg, cpu_int_paddr, virtual_cpu_int_paddr,
-			virtual_cpu_int_size, VM_PROT_READ | VM_PROT_WRITE);
+	/* TODO: Map the CPU Interface over the Virtual CPU Interface */
+#if 0
+	lpae_vmmmap_set(arg,
+	    (lpae_vm_vaddr_t)cpu_int_paddr,
+	    (lpae_vm_paddr_t)virtual_cpu_int_paddr,
+	    virtual_cpu_int_size,
+	    VM_PROT_READ | VM_PROT_WRITE);
+#endif
 
 	return (0);
 }
@@ -505,7 +500,7 @@ vgic_irq_is_edge(struct hypctx *hypctx, int irq)
 	struct vgic_distributor *vgic_distributor = &hypctx->hyp->vgic_distributor;
 	int irq_val;
 
-	irq_val = vgic_bitmap_get_irq_val(vgic_distributor->irq_conf_prv[hypctx->vcpu],
+	irq_val = vgic_bitmap_get_irq_val(vgic_distributor->irq_conf_prv[hypctx->vcpu], 
 									  vgic_distributor->irq_conf_shr, irq);
 	return irq_val == VGIC_CFG_EDGE;
 }
@@ -603,7 +598,7 @@ compute_pending_for_cpu(struct hyp *hyp, int vcpu)
 
 	uint32_t *pending, *enabled, *pend_percpu, *pend_shared, *target;
 	int32_t pending_private, pending_shared;
-
+	
 	pend_percpu = vgic_cpu_int->pending_prv;
 	pend_shared = vgic_cpu_int->pending_shr;
 
@@ -626,9 +621,9 @@ compute_pending_for_cpu(struct hyp *hyp, int vcpu)
 }
 
 /*
- * Stop unused function warnings.
+ * TODO
  */
-/*
+#if 0
 static void
 vgic_dispatch_sgi(struct hypctx *hypctx)
 {
@@ -664,12 +659,12 @@ vgic_dispatch_sgi(struct hypctx *hypctx)
 		}
 	}
 }
-*/
+#endif
 
 /*
- * Stop unused function warnings.
+ * TODO
  */
-/*
+#if 0
 static void
 vgic_update_state(struct hyp *hyp)
 {
@@ -694,7 +689,7 @@ vgic_update_state(struct hyp *hyp)
 end:
 	;//mtx_unlock_spin(&vgic_distributor->distributor_lock);
 }
-*/
+#endif
 
 #define LR_CPUID(lr)	\
 	(((lr) & GICH_LR_PHYSID_CPUID) >> GICH_LR_PHYSID_CPUID_SHIFT)
@@ -702,9 +697,9 @@ end:
 	(GICH_LR_PENDING | ((src) << GICH_LR_PHYSID_CPUID_SHIFT) | (irq))
 
 /*
- * Stop unused function warnings.
+ * TODO
  */
-/*
+#if 0
 static void
 vgic_retire_disabled_irqs(struct hypctx *hypctx)
 {
@@ -724,7 +719,7 @@ vgic_retire_disabled_irqs(struct hypctx *hypctx)
 		}
 	}
 }
-*/
+#endif
 
 static bool
 vgic_queue_irq(struct hypctx *hypctx, uint8_t sgi_source_cpu, int irq)
@@ -783,7 +778,7 @@ vgic_queue_sgi(struct hypctx *hypctx, int irq)
 		vgic_cpu_irq_clear(hypctx, irq);
 		return true;
 	}
-
+	
 	return false;
 }
 
@@ -933,7 +928,7 @@ vgic_vcpu_pending_irq(void *arg)
 	hypctx = arg;
 	vgic_distributor = &hypctx->hyp->vgic_distributor;
 
-	return bit_test((bitstr_t *)&vgic_distributor->irq_pending_on_cpu,
+	return bit_test((bitstr_t *)&vgic_distributor->irq_pending_on_cpu, 
 		            hypctx->vcpu);
 }
 
@@ -1022,25 +1017,19 @@ vgic_inject_irq(void *arg, unsigned int irq, bool level)
 }
 
 /*
- * TODO: pass the hyp pmap as a parameter.
+ * TODO: pass hypmap as a parameter.
  */
 int
 vgic_hyp_init(void)
 {
-	/*
-	 * TODO: implement the get_get_* functions.
-	 */
 #if 0
-	virtual_int_ctrl_vaddr = gic_get_virtual_int_ctrl_vaddr(sc.vgic_dev);
-	virtual_int_ctrl_paddr = gic_get_virtual_int_ctrl_paddr(sc.vgic_dev);
-	virtual_int_ctrl_size = gic_get_virtual_int_ctrl_size(sc.vgic_dev);
-
-	/* Virtual CPU Interface */
-	virtual_cpu_int_paddr = gic_get_virtual_cpu_int_paddr(sc.vgic_dev);
-	virtual_cpu_int_size = gic_get_virtual_cpu_int_size(sc.vgic_dev);
-
-	lr_num = gic_get_lr_num(sc.vgic_dev);
+	lpae_vmmmap_set(NULL,
+	    (lpae_vm_vaddr_t)virtual_int_ctrl_vaddr,
+	    (lpae_vm_paddr_t)virtual_int_ctrl_paddr,
+	    virtual_int_ctrl_size,
+	    VM_PROT_READ | VM_PROT_WRITE);
 #endif
+
 	virtual_int_ctrl_vaddr = 0;
 	virtual_int_ctrl_paddr = 0;
 	virtual_int_ctrl_size = 0;
@@ -1051,101 +1040,113 @@ vgic_hyp_init(void)
 
 	lr_num = 0;
 
-	/*
-	lpae_vmmmap_set(NULL,
-	    (lpae_vm_vaddr_t)virtual_int_ctrl_vaddr,
-	    (lpae_vm_paddr_t)virtual_int_ctrl_paddr,
-	    virtual_int_ctrl_size,
-	    VM_PROT_READ | VM_PROT_WRITE);
-	    */
-
 	return (0);
 }
 
-/*
- * TODO - stop unused function warnings.
- */
-/*
 static int
 arm_vgic_maintenance_intr(void *arg)
 {
-	struct arm_vgic_softc *vgic_sc;
+
+	struct vgic_v3_softc *vgic_sc;
 	struct arm_gic_softc *gic_sc;
 	int maintenance_intr;
 
 	vgic_sc = arg;
 	gic_sc = device_get_softc(vgic_sc->gic_dev);
 
+	/*
 	maintenance_intr = bus_space_read_4(gic_sc->gic_h_bst,
 					    gic_sc->gic_h_bsh, GICH_MISR);
 
+					    */
+	maintenance_intr = 0;
 	printf("%s: %x\n", __func__, maintenance_intr);
 
 	return (FILTER_HANDLED);
 }
-*/
+
+static int
+arm_vgic_detach(device_t dev)
+{
+	softc.vgic_dev = NULL;
+	softc.gic_dev = NULL;
+
+	return (0);
+}
 
 static int
 arm_vgic_attach(device_t dev)
 {
-	/*
-	struct resource *virtual_int_ctrl_res = gic_get_virtual_int_ctrl_res(sc.vgic_dev);
-	struct resource *maintenance_intr_res = gic_get_maintenance_intr_res(sc.vgic_dev);
+	struct resource *virtual_int_ctrl_res;
+	struct resource *maintenance_intr_res;
+	int error;
 
-	if (virtual_int_ctrl_res) {
-		if (maintenance_intr_res == NULL ||
-		    bus_setup_intr(sc.vgic_dev, maintenance_intr_res, INTR_TYPE_CLK,
-	    			   arm_vgic_maintenance_intr, NULL, &sc,
-	    			   &arm_vgic_maintenance_intr_ihl[0])) {
-
-			device_printf(sc.vgic_dev, "Cannot setup Maintenance Interrupt. Disabling Hyp-Mode... %p\n",maintenance_intr_res);
-			hypmode_enabled = 0;
-		}
-	} else {
-		device_printf(sc.vgic_dev, "Cannot find Virtual Interface Control Registers.  Disabling Hyp-Mode...\n");
-		hypmode_enabled = 0;
+	virtual_int_ctrl_res = gic_get_virtual_int_ctrl_res(dev);
+	if (!virtual_int_ctrl_res) {
+		device_printf(dev, "Cannot find the Virtual Interface Control Registers. Disabling virtualization.\n");
+		goto error_disable_virtualization;
 	}
-	*/
+
+	maintenance_intr_res = gic_get_maintenance_intr_res(dev);
+	error = bus_setup_intr(dev, maintenance_intr_res, INTR_TYPE_CLK,
+			arm_vgic_maintenance_intr, NULL, &softc,
+			&arm_vgic_maintenance_intr_ihl[0]);
+	if (error) {
+		device_printf(dev, "Cannot set up the Maintenance Interrupt. Disabling virtualization.\n");
+		//goto error_disable_virtualization;
+		device_printf(dev, "Ignoring error %d\n", error);
+	}
 
 	return (0);
+
+error_disable_virtualization:
+	hypmode_enabled = 0;
+	return (ENXIO);
 }
 
 static void
 arm_vgic_identify(driver_t *driver, device_t parent)
 {
-	//device_t dev;
+	device_t dev = NULL;
+	int order;
 
-	if (sc.vgic_dev == NULL) {
-		/*
-		dev = BUS_ADD_CHILD(parent, BUS_PASS_INTERRUPT + BUS_PASS_ORDER_MIDDLE,
-		    "vgic", -1);
-		if (dev == NULL) {
-			device_printf(parent, "add vgic child failed\n");
-		} else {
-			sc.vgic_dev = dev;
-			sc.gic_dev = parent;
+	if (softc.vgic_dev == NULL) {
+		order = BUS_PASS_INTERRUPT + BUS_PASS_ORDER_MIDDLE;
+		dev = device_add_child_ordered(parent, order, VGIC_V3_DEVNAME, -1);
+		if (dev != NULL) {
+			softc.vgic_dev = dev;
+			softc.gic_dev = parent;
 		}
-		*/
 	}
+
+	return;
 }
 
 static int
 arm_vgic_probe(device_t dev)
 {
-	device_set_desc(dev, "Virtual Generic Interrupt Controller");
+	if (softc.vgic_dev == NULL)
+		goto error_disable_virtualization;
+
+	device_set_desc(dev, VGIC_V3_DEVSTR);
 	return (BUS_PROBE_DEFAULT);
+
+error_disable_virtualization:
+	hypmode_enabled = 0;
+	return (ENXIO);
 }
 
 static device_method_t arm_vgic_methods[] = {
 	DEVMETHOD(device_identify,	arm_vgic_identify),
 	DEVMETHOD(device_probe,		arm_vgic_probe),
 	DEVMETHOD(device_attach,	arm_vgic_attach),
+	DEVMETHOD(device_detach,	arm_vgic_detach),
 	DEVMETHOD_END
 };
 
 static devclass_t arm_vgic_devclass;
 
 DEFINE_CLASS_1(vgic, arm_vgic_driver, arm_vgic_methods,
-    sizeof(struct arm_vgic_softc), gic_v3_driver);
+    sizeof(struct vgic_v3_softc), gic_v3_driver);
 
 DRIVER_MODULE(vgic, gic, arm_vgic_driver, arm_vgic_devclass, 0, 0);
