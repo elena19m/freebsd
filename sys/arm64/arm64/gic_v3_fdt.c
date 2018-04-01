@@ -194,14 +194,20 @@ struct gic_v3_ofw_devinfo {
 static int
 gic_v3_fdt_print_child(device_t bus, device_t child)
 {
-	struct gic_v3_ofw_devinfo *di = device_get_ivars(child);
-	struct resource_list *rl = &di->di_rl;
+	struct gic_v3_ofw_devinfo *di;
+	struct resource_list *rl;
 	int retval = 0;
+
+	di = device_get_ivars(child);
+	if (di == NULL)
+		goto exit;
+	rl = &di->di_rl;
 
 	retval += bus_print_child_header(bus, child);
 	retval += resource_list_print_type(rl, "mem", SYS_RES_MEMORY, "%#jx");
 	retval += bus_print_child_footer(bus, child);
 
+exit:
 	return (retval);
 }
 
