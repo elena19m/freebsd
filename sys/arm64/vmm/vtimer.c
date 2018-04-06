@@ -36,7 +36,7 @@
 #include <sys/taskqueue.h>
 
 #include "vmm.h"
-#include "vgic.h"
+#include "vgic_v3.h"
 #include "arm64.h"
 #include "vtimer.h"
 

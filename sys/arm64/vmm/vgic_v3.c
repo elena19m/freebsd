@@ -59,7 +59,7 @@
 
 #include "hyp.h"
 #include "mmu.h"
-#include "vgic.h"
+#include "vgic_v3.h"
 #include "arm64.h"
 
 #define VGIC_V3_DEVNAME	"vgic"

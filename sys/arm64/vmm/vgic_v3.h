@@ -63,7 +63,7 @@ struct vgic_distributor {
 	/* Interrupt enabled */
 	uint32_t irq_enabled_prv[VGIC_MAXCPU][VGIC_NR_PRV_IRQ / (sizeof(uint32_t) * 8)];
 	uint32_t irq_enabled_shr[VGIC_NR_SHR_IRQ / (sizeof(uint32_t) * 8)];
-	
+
 	/* Interrupt level */
 	uint32_t irq_state_prv[VGIC_MAXCPU][VGIC_NR_PRV_IRQ / (sizeof(uint32_t) * 8)];
 	uint32_t irq_state_shr[VGIC_NR_SHR_IRQ / (sizeof(uint32_t) * 8)];
@@ -90,7 +90,7 @@ struct vgic_cpu_int {
 	/* Bitmaps for pending IRQs */
 	uint32_t	pending_prv[VGIC_NR_PRV_IRQ / (sizeof(uint32_t) * 8)];
 	uint32_t	pending_shr[VGIC_NR_SHR_IRQ / (sizeof(uint32_t) * 8)];
-	
+
 	uint64_t	virtual_int_ctrl;
 	uint32_t	lr_num;
 	uint32_t	hcr;
@@ -121,8 +121,11 @@ int vgic_vcpu_pending_irq(void *arg);
 int vgic_inject_irq(void *arg, unsigned int irq, bool level);
 
 struct vgic_v3_softc {
-	device_t vgic_dev;
-	device_t gic_dev;
+	struct resource *maintenance_int_res;		/* Not used. */
+	void 		*maintenance_int_cookie;	/* Not used. */
+	struct resource *virtual_int_ctrl_res;
+	device_t 	gic_v3_dev;
+	device_t 	vgic_v3_dev;
 };
 
 DECLARE_CLASS(arm_vgic_driver);

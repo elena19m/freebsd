@@ -52,7 +52,7 @@
 
 #include "mmu.h"
 #include "arm64.h"
-#include "vgic.h"
+#include "vgic_v3.h"
 #include "vtimer.h"
 #include "hyp.h"
 
