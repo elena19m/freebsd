@@ -74,7 +74,7 @@ static uint32_t virtual_cpu_int_size;
 
 static uint32_t lr_num;
 
-extern uint64_t virt_enabled;
+extern uint64_t hypmode_enabled;
 
 /* TODO: Do not manage the softc directly and use the device's softc */
 static struct vgic_v3_softc softc;
@@ -1122,7 +1122,7 @@ arm_vgic_attach(device_t dev)
 	printf("[vgic.c:arm_vgic_attach] Error happened.\n");
 
 error_disable_virtualization:
-	virt_enabled = 0;
+	hypmode_enabled = 0;
 	printf("Virtualization has been disabled.\n");
 	return (ENXIO);
 }
@@ -1159,7 +1159,7 @@ arm_vgic_probe(device_t dev)
 	return (BUS_PROBE_DEFAULT);
 
 error_disable_virtualization:
-	virt_enabled = 0;
+	hypmode_enabled = 0;
 	printf("Virtualization has been disabled.\n");
 	return (ENXIO);
 }

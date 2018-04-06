@@ -104,7 +104,7 @@ struct vm {
 	cpuset_t	active_cpus;
 };
 
-extern uint64_t virt_enabled;
+extern uint64_t hypmode_enabled;
 
 static bool vmm_initialized = false;
 
@@ -211,7 +211,7 @@ vmm_handler(module_t mod, int what, void *arg)
 
 		/*
 		printf("VMM_HANDLER:\n");
-		printf("\tvirt_enabled = %lu\n", virt_enabled);
+		printf("\thypmode_enabled = %lu\n", hypmode_enabled);
 		*/
 
 		vmmdev_init();
