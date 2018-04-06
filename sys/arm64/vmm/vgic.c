@@ -74,14 +74,10 @@ static uint32_t virtual_cpu_int_size;
 
 static uint32_t lr_num;
 
-static void *arm_vgic_maintenance_intr_ihl[1];
+extern uint64_t virt_enabled;
 
-extern uint64_t hypmode_enabled;
-
-static struct vgic_v3_softc softc = {
-	.vgic_dev = NULL,
-	.gic_dev  = NULL,
-};
+/* TODO: Do not manage the softc directly and use the device's softc */
+static struct vgic_v3_softc softc;
 
 static void vgic_bitmap_set_irq_val(uint32_t *irq_prv,
 						uint32_t *irq_shr, int irq, int val);
@@ -1052,7 +1048,7 @@ arm_vgic_maintenance_intr(void *arg)
 	int maintenance_intr;
 
 	vgic_sc = arg;
-	gic_sc = device_get_softc(vgic_sc->gic_dev);
+	gic_sc = device_get_softc(vgic_sc->gic_v3_dev);
 
 	/*
 	maintenance_intr = bus_space_read_4(gic_sc->gic_h_bst,
@@ -1068,39 +1064,66 @@ arm_vgic_maintenance_intr(void *arg)
 static int
 arm_vgic_detach(device_t dev)
 {
-	softc.vgic_dev = NULL;
-	softc.gic_dev = NULL;
+	/*
+	device_t parent;
+	*/
+	int error;
 
-	return (0);
+	printf("\n[arm64.c:arm_vgic_detach] dev nameunit = %s\n", device_get_nameunit(dev));
+
+	if (softc.vgic_v3_dev == NULL) {
+		printf("[arm64.c:arm_vgic_detach] softc.vgic_v3_dev is NULL, returning 0\n");
+		return (0);
+	}
+
+	softc.vgic_v3_dev = NULL;
+	softc.gic_v3_dev = NULL;
+
+	error = 0;
+#if 0
+	printf("[arm64.c:arm_vgic_detach] before device_get_parent()\n");
+	parent = device_get_parent(dev);
+	if (parent != NULL) {
+		printf("[arm64.c:arm_vgic_detach] before device_delete_child()\n");
+		error = device_delete_child(parent, dev);
+	}
+#endif
+
+	printf("[arm64.c:arm_vgic_detach] returning %d\n", error);
+	return (error);
 }
 
 static int
 arm_vgic_attach(device_t dev)
 {
-	struct resource *virtual_int_ctrl_res;
-	struct resource *maintenance_intr_res;
 	int error;
 
-	virtual_int_ctrl_res = gic_get_virtual_int_ctrl_res(dev);
-	if (!virtual_int_ctrl_res) {
-		device_printf(dev, "Cannot find the Virtual Interface Control Registers. Disabling virtualization.\n");
+	printf("[vgic.c:arm_vgic_attach] dev nameunit = %s\n", device_get_nameunit(dev));
+
+	softc.virtual_int_ctrl_res = gic_get_virtual_int_ctrl_res(dev);
+	if (!softc.virtual_int_ctrl_res) {
+		device_printf(dev, "Cannot find the Virtual Interface Control Registers.\n");
 		goto error_disable_virtualization;
 	}
 
-	maintenance_intr_res = gic_get_maintenance_intr_res(dev);
-	error = bus_setup_intr(dev, maintenance_intr_res, INTR_TYPE_CLK,
-			arm_vgic_maintenance_intr, NULL, &softc,
-			&arm_vgic_maintenance_intr_ihl[0]);
+	softc.maintenance_int_res = gic_get_maintenance_intr_res(dev);
+	error = bus_setup_intr(dev, softc.maintenance_int_res,
+			INTR_TYPE_CLK | INTR_MPSAFE,
+			arm_vgic_maintenance_intr, NULL,
+			&softc, &softc.maintenance_int_cookie);
 	if (error) {
-		device_printf(dev, "Cannot set up the Maintenance Interrupt. Disabling virtualization.\n");
+		device_printf(dev, "Cannot set up the Maintenance Interrupt.\n");
 		//goto error_disable_virtualization;
 		device_printf(dev, "Ignoring error %d\n", error);
 	}
 
 	return (0);
 
+	printf("[vgic.c:arm_vgic_attach] Error happened.\n");
+
 error_disable_virtualization:
-	hypmode_enabled = 0;
+	virt_enabled = 0;
+	printf("Virtualization has been disabled.\n");
 	return (ENXIO);
 }
 
@@ -1110,29 +1133,34 @@ arm_vgic_identify(driver_t *driver, device_t parent)
 	device_t dev = NULL;
 	int order;
 
-	if (softc.vgic_dev == NULL) {
+	printf("[vgic.c:arm_vgic_identify] parent nameunit = %s\n", device_get_nameunit(parent));
+
+	if (softc.vgic_v3_dev == NULL) {
 		order = BUS_PASS_INTERRUPT + BUS_PASS_ORDER_MIDDLE;
 		dev = device_add_child_ordered(parent, order, VGIC_V3_DEVNAME, -1);
 		if (dev != NULL) {
-			softc.vgic_dev = dev;
-			softc.gic_dev = parent;
+			printf("[vgic.c:arm_vgic_identify] dev nameunit = %s\n", device_get_nameunit(dev));
+			softc.vgic_v3_dev = dev;
+			softc.gic_v3_dev = parent;
+		} else {
+			printf("Cannot create the Virtual Generic Interrupt Controller device.\n");
 		}
 	}
-
-	return;
 }
 
 static int
 arm_vgic_probe(device_t dev)
 {
-	if (softc.vgic_dev == NULL)
+	printf("[vgic.c:arm_vgic_probe] dev nameunit = %s\n", device_get_nameunit(dev));
+	if (softc.vgic_v3_dev == NULL)
 		goto error_disable_virtualization;
 
 	device_set_desc(dev, VGIC_V3_DEVSTR);
 	return (BUS_PROBE_DEFAULT);
 
 error_disable_virtualization:
-	hypmode_enabled = 0;
+	virt_enabled = 0;
+	printf("Virtualization has been disabled.\n");
 	return (ENXIO);
 }
 
