@@ -240,8 +240,8 @@ END(mpentry)
 #endif
 
 	.align 3
-	.globl _C_LABEL(virt_enabled)
-_C_LABEL(virt_enabled):
+	.globl _C_LABEL(hypmode_enabled)
+_C_LABEL(hypmode_enabled):
 	.zero 8
 
 /*
@@ -312,7 +312,7 @@ drop_to_el1:
 
 	/* Mark hypervisor mode as enabled */
 	mov 	x1, #1
-	adr	x2, virt_enabled
+	adr	x2, hypmode_enabled
 	str 	x1, [x2]
 
 	mov	x2, #(PSR_F | PSR_I | PSR_A | PSR_D | PSR_M_EL1h)

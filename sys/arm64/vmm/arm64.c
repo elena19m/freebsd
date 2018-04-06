@@ -67,7 +67,7 @@ extern char hyp_code_start[];
 extern char hyp_code_end[];
 extern char hyp_stub_vectors[];
 
-extern uint64_t virt_enabled;
+extern uint64_t hypmode_enabled;
 
 char *stack;
 pmap_t hyp_pmap;
@@ -109,7 +109,7 @@ arm_init(int ipinum)
 	char *stack_top;
 	size_t hyp_code_len;
 
-	if (!virt_enabled) {
+	if (!hypmode_enabled) {
 		printf("arm_init: Processor doesn't have support for virtualization.\n");
 		return (ENXIO);
 	}
