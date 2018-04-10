@@ -73,7 +73,7 @@ struct hypctx {
 		uint64_t	hpfar_el2;	/* Hypervisor IPA Fault Address Register */
 	} exit_info;
 	struct vtimer_cpu vtimer_cpu;
-	struct vgic_cpu_int	vgic_cpu_int;
+	struct vgic_v3_cpu_if	vgic_cpu_int;
 #ifdef VFP
 	struct vfpstate host_vfp_state;
 	struct vfpstate guest_vfp_state;

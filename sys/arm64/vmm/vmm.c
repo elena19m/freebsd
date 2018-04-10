@@ -404,7 +404,7 @@ restart:
 			/* Check if we need to do in-kernel emulation */
 			pc = vme->pc + vme->inst_length;
 			retu = true;
-			//error = vgic_emulate_distributor(vm->cookie, vcpuid, vme, &retu);
+			//error = vgic_v3_emulate_distributor(vm->cookie, vcpuid, vme, &retu);
 			error = 0;
 			break;
 
@@ -737,7 +737,7 @@ vm_malloc(struct vm *vm, uint64_t ipa, size_t len)
 int
 vm_attach_vgic(struct vm *vm, uint64_t distributor_paddr, uint64_t cpu_int_paddr)
 {
-	return vgic_attach_to_vm(vm->cookie, distributor_paddr, cpu_int_paddr);
+	return vgic_v3_attach_to_vm(vm->cookie, distributor_paddr, cpu_int_paddr);
 }
 
 static int
@@ -753,7 +753,7 @@ vm_handle_wfi(struct vm *vm, int vcpuid, struct vm_exit *vme, bool *retu)
 
 	vcpu_lock(vcpu);
 	while (1) {
-		if (!intr_disabled && vgic_vcpu_pending_irq(hypctx))
+		if (!intr_disabled && vgic_v3_vcpu_pending_irq(hypctx))
 			break;
 
 		if (vcpu_should_yield(vm, vcpuid))
