@@ -93,7 +93,7 @@ vtimer_inject_irq(struct hypctx *hypctx)
 	struct vtimer_cpu *vtimer_cpu = &hypctx->vtimer_cpu;
 
 	vtimer_cpu->cntv_ctl |= 1 << 1;
-	vgic_inject_irq(hypctx, VTIMER_IRQ, IRQ_LEVEL);
+	vgic_v3_inject_irq(hypctx, VTIMER_IRQ, IRQ_LEVEL);
 }
 
 static void

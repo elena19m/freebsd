@@ -388,7 +388,8 @@ end:
 }
 
 int
-vgic_emulate_distributor(void *arg, int vcpuid, struct vm_exit *vme, bool *retu)
+vgic_v3_emulate_distributor(void *arg, int vcpuid, struct vm_exit *vme,
+		bool *retu)
 {
 	struct hyp *hyp;
 	int error;
@@ -411,7 +412,8 @@ vgic_emulate_distributor(void *arg, int vcpuid, struct vm_exit *vme, bool *retu)
 }
 
 int
-vgic_attach_to_vm(void *arg, uint64_t distributor_paddr, uint64_t cpu_int_paddr)
+vgic_v3_attach_to_vm(void *arg, uint64_t distributor_paddr,
+		uint64_t cpu_int_paddr)
 {
 	struct hyp *hyp;
 	struct hypctx *hypctx;
@@ -567,7 +569,7 @@ vgic_dist_irq_clear(struct hypctx *hypctx, int irq)
 static void
 vgic_cpu_irq_set(struct hypctx *hypctx, int irq)
 {
-	struct vgic_cpu_int *vgic_cpu_int = &hypctx->vgic_cpu_int;
+	struct vgic_v3_cpu_if *vgic_cpu_int = &hypctx->vgic_cpu_int;
 
 	if (irq < VGIC_NR_PRV_IRQ)
 		bit_set((bitstr_t *)vgic_cpu_int->pending_prv, irq);
@@ -578,7 +580,7 @@ vgic_cpu_irq_set(struct hypctx *hypctx, int irq)
 static void
 vgic_cpu_irq_clear(struct hypctx *hypctx, int irq)
 {
-	struct vgic_cpu_int *vgic_cpu_int = &hypctx->vgic_cpu_int;
+	struct vgic_v3_cpu_if *vgic_cpu_int = &hypctx->vgic_cpu_int;
 
 	if (irq < VGIC_NR_PRV_IRQ)
 		bit_clear((bitstr_t *)vgic_cpu_int->pending_prv, irq);
@@ -590,7 +592,7 @@ static int
 compute_pending_for_cpu(struct hyp *hyp, int vcpu)
 {
 	struct vgic_distributor *vgic_distributor = &hyp->vgic_distributor;
-	struct vgic_cpu_int *vgic_cpu_int = &hyp->ctx[vcpu].vgic_cpu_int;
+	struct vgic_v3_cpu_if *vgic_cpu_int = &hyp->ctx[vcpu].vgic_cpu_int;
 
 	uint32_t *pending, *enabled, *pend_percpu, *pend_shared, *target;
 	int32_t pending_private, pending_shared;
@@ -699,7 +701,7 @@ end:
 static void
 vgic_retire_disabled_irqs(struct hypctx *hypctx)
 {
-	struct vgic_cpu_int *vgic_cpu_int = &hypctx->vgic_cpu_int;
+	struct vgic_v3_cpu_if *vgic_cpu_int = &hypctx->vgic_cpu_int;
 	int lr_idx;
 
 	for_each_set_bit(lr_idx, vgic_cpu_int->lr_used, vgic_cpu_int->lr_num) {
@@ -720,7 +722,7 @@ vgic_retire_disabled_irqs(struct hypctx *hypctx)
 static bool
 vgic_queue_irq(struct hypctx *hypctx, uint8_t sgi_source_cpu, int irq)
 {
-	struct vgic_cpu_int *vgic_cpu_int = &hypctx->vgic_cpu_int;
+	struct vgic_v3_cpu_if *vgic_cpu_int = &hypctx->vgic_cpu_int;
 	int lr_idx;
 
 	//printf("Queue IRQ%d\n", irq);
@@ -801,7 +803,7 @@ vgic_queue_hwirq(struct hypctx *hypctx, int irq)
 static bool
 vgic_process_maintenance(struct hypctx *hypctx)
 {
-	struct vgic_cpu_int *vgic_cpu_int = &hypctx->vgic_cpu_int;
+	struct vgic_v3_cpu_if *vgic_cpu_int = &hypctx->vgic_cpu_int;
 	int lr_idx, irq;
 	bool level_pending = false;
 
@@ -832,10 +834,10 @@ vgic_process_maintenance(struct hypctx *hypctx)
 }
 
 void
-vgic_flush_hwstate(void *arg)
+vgic_v3_flush_hwstate(void *arg)
 {
 	struct hypctx *hypctx;
-	struct vgic_cpu_int *vgic_cpu_int;
+	struct vgic_v3_cpu_if *vgic_cpu_int;
 	struct vgic_distributor *vgic_distributor;
 	int i, overflow = 0;
 
@@ -847,7 +849,7 @@ vgic_flush_hwstate(void *arg)
 
 	//mtx_lock_spin(&vgic_distributor->distributor_lock);
 
-	if (!vgic_vcpu_pending_irq(hypctx)) {
+	if (!vgic_v3_vcpu_pending_irq(hypctx)) {
 		//printf("CPU%d has no pending interrupt\n", hypctx->vcpu);
 		goto end;
 	}
@@ -885,10 +887,10 @@ end:
 }
 
 void
-vgic_sync_hwstate(void *arg)
+vgic_v3_sync_hwstate(void *arg)
 {
 	struct hypctx *hypctx;
-	struct vgic_cpu_int *vgic_cpu_int;
+	struct vgic_v3_cpu_if *vgic_cpu_int;
 	struct vgic_distributor *vgic_distributor;
 	int lr_idx, pending, irq;
 	bool level_pending;
@@ -916,7 +918,7 @@ vgic_sync_hwstate(void *arg)
 }
 
 int
-vgic_vcpu_pending_irq(void *arg)
+vgic_v3_vcpu_pending_irq(void *arg)
 {
 	struct hypctx *hypctx;
 	struct vgic_distributor *vgic_distributor;
@@ -995,13 +997,13 @@ vgic_kick_vcpus(struct hyp *hyp)
         int cpu;
 
         for (cpu = 0; cpu < VGIC_MAXCPU; ++cpu) {
-                if (vgic_vcpu_pending_irq(&hyp->ctx[cpu]))
+                if (vgic_v3_vcpu_pending_irq(&hyp->ctx[cpu]))
                         ;//TODO kick vcpu
         }
 }
 
 int
-vgic_inject_irq(void *arg, unsigned int irq, bool level)
+vgic_v3_inject_irq(void *arg, unsigned int irq, bool level)
 {
         struct hypctx *hypctx = arg;
 
@@ -1013,10 +1015,10 @@ vgic_inject_irq(void *arg, unsigned int irq, bool level)
 }
 
 /*
- * TODO: pass hypmap as a parameter.
+ * TODO: map the GICD and GICV in el2_pmap.
  */
 int
-vgic_hyp_init(void)
+vgic_v3_map(pmap_t el2_pmap)
 {
 #if 0
 	lpae_vmmmap_set(NULL,
@@ -1131,7 +1133,13 @@ static void
 arm_vgic_identify(driver_t *driver, device_t parent)
 {
 	device_t dev = NULL;
+	//uint32_t icv;
 	int order;
+
+	/*
+	icv = gic_icv_read(DIR);
+	printf("icv_ctlr = %u\n", icv);
+	*/
 
 	printf("[vgic.c:arm_vgic_identify] parent nameunit = %s\n", device_get_nameunit(parent));
 

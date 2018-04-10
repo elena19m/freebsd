@@ -148,7 +148,7 @@ arm_init(int ipinum)
 	vmm_call_hyp((void *)vtophys(hyp_vectors), vtophys(hyp_pmap->pm_l0), ktohyp(stack_top));
 
 	/* Initialize VGIC infrastructure */
-	if (vgic_hyp_init())
+	if (vgic_v3_map(hyp_pmap))
 		return (ENXIO);
 
 	//vtimer_hyp_init();
@@ -223,7 +223,8 @@ arm_vminit(struct vm *vm)
 		 * HCR_VM: use stage 2 translation
 		 */
 		hypctx->hcr_el2 = HCR_RW | HCR_TSC | HCR_BSU_IS | \
-				HCR_SWIO | HCR_FB | HCR_VM| HCR_AMO | HCR_IMO | HCR_FMO;
+				HCR_SWIO | HCR_FB | HCR_VM | \
+				HCR_AMO | HCR_IMO | HCR_FMO;
 
 		/* The guest will detect a uniprocessor system */
 		hypctx->vmpidr_el2 = get_mpidr();
