@@ -114,7 +114,6 @@ ASSYM(HYPCTX_VGIC_ICH_ELSR_EL2, offsetof(struct hypctx, vgic.ich_elsr_el2));
 ASSYM(HYPCTX_VGIC_ICH_HCR_EL2, offsetof(struct hypctx, vgic.ich_hcr_el2));
 ASSYM(HYPCTX_VGIC_ICH_MISR_EL2, offsetof(struct hypctx, vgic.ich_misr_el2));
 ASSYM(HYPCTX_VGIC_ICH_VMCR_EL2, offsetof(struct hypctx, vgic.ich_vmcr_el2));
-ASSYM(HYPCTX_VGIC_ICH_VTR_EL2, offsetof(struct hypctx, vgic.ich_vtr_el2));
 ASSYM(HYPCTX_VGIC_ICH_LR_EL2, offsetof(struct hypctx, vgic.ich_lr_el2));
 
 ASSYM(HYPCTX_VTIMER_CPU_CNTV_CTL, offsetof(struct hypctx, vtimer_cpu.cntv_ctl));

@@ -101,7 +101,6 @@ struct vgic_v3_cpu_if {
 	uint32_t	ich_hcr_el2;	/* Hyp Control Register. */
 	uint32_t	ich_misr_el2;	/* Maintenance Interrupt State Register. */
 	uint32_t	ich_vmcr_el2;	/* Virtual Machine Control Register. */
-	uint32_t	ich_vtr_el2;	/* VGIC Type Register. */
 
 	uint32_t	lr_num;
 	uint64_t	ich_lr_el2[VGIC_LR_NUM];	/* List Registers. */
