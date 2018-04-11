@@ -81,12 +81,14 @@
 	PUSH_SYSTEM_REG_PAIR(ELR_EL2, HCR_EL2);		\
 	PUSH_SYSTEM_REG_PAIR(VPIDR_EL2, VMPIDR_EL2);	\
 	PUSH_SYSTEM_REG_PAIR(CPTR_EL2, SPSR_EL2);	\
+	PUSH_SYSTEM_REG_PAIR(ICH_HCR_EL2, ICH_VMCR_EL2);
 
 /*
  * Restore all the host registers before entering the host.
  */
 #define LOAD_HOST_REGS()				\
 	/* Pop the system registers first */		\
+	POP_SYSTEM_REG_PAIR(ICH_HCR_EL2, ICH_VMCR_EL2);	\
 	POP_SYSTEM_REG_PAIR(CPTR_EL2, SPSR_EL2);	\
 	POP_SYSTEM_REG_PAIR(VPIDR_EL2, VMPIDR_EL2);	\
 	POP_SYSTEM_REG_PAIR(ELR_EL2, HCR_EL2);		\
@@ -118,6 +120,32 @@
 	ldp	x4, x5, [sp], #16;			\
 	ldp	x2, x3, [sp], #16;			\
 	ldp	x0, x1, [sp], #16;			\
+
+#define LOAD_VGIC_REG(reg)				\
+	mov	x1, #HYPCTX_VGIC_##reg;			\
+	ldr	x2, [x0, x1];				\
+	msr	reg, x2;
+
+#define SAVE_VGIC_REG(reg)				\
+	mov	x1, #HYPCTX_VGIC_##reg;			\
+	mrs	x2, reg;				\
+	str	x2, [x0, x1];
+
+/*
+ * ICH_EISR_EL2, ICH_ELSR_EL2 and ICH_MISR_EL2 are saved here because they are
+ * modified by the hardware when the virtual machine is running and we need to
+ * inspect them in the VGIC driver.
+ */
+#define SAVE_GUEST_VGIC_REGS()				\
+	SAVE_VGIC_REG(ICH_EISR_EL2);			\
+	SAVE_VGIC_REG(ICH_ELSR_EL2);			\
+	SAVE_VGIC_REG(ICH_MISR_EL2);			\
+	SAVE_VGIC_REG(ICH_HCR_EL2);			\
+	SAVE_VGIC_REG(ICH_VMCR_EL2);			\
+
+#define LOAD_GUEST_VGIC_REGS()				\
+	LOAD_VGIC_REG(ICH_HCR_EL2);			\
+	LOAD_VGIC_REG(ICH_VMCR_EL2);			\
 
 #define	SAVE_REG(reg)					\
 	mov	x1, #HYPCTX_REGS_##reg;			\
@@ -230,6 +258,9 @@
 #define	SAVE_GUEST_REGS()				\
 	SAVE_GUEST_X_REGS();				\
 							\
+	SAVE_GUEST_VGIC_REGS();				\
+							\
+	/* Save the stack pointer. */			\
 	mrs	x1, sp_el1;				\
 	mov	x2, #HYPCTX_REGS_SP;			\
 	str	x1, [x0, x2];				\
@@ -356,6 +387,8 @@
 	add	x1, x1, x0;				\
 	ldr	x2, [x1];				\
 	msr	sp_el1, x2;				\
+							\
+	LOAD_GUEST_VGIC_REGS();				\
 							\
 	LOAD_GUEST_X_REGS();				\
 
