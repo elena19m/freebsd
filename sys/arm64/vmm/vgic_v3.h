@@ -41,11 +41,11 @@
 #define VGIC_SPI_NUM		(GIC_LAST_SPI - GIC_FIRST_SPI + 1)
 #define VGIC_PRV_INT_NUM	(VGIC_SGI_NUM + VGIC_PPI_NUM)
 #define VGIC_SHR_INT_NUM	(VGIC_SPI_NUM)
+
 #define VGIC_LR_NUM		16
+#define VGIC_LR_EMPTY		0xff
 
 #define VGIC_MAXCPU		VM_MAXCPU
-
-#define VGIC_LR_EMPTY	0xff
 
 #define VGIC_CFG_LEVEL	0
 #define VGIC_CFG_EDGE	1
@@ -94,8 +94,6 @@ struct vgic_v3_cpu_if {
 	uint32_t	pending_prv[VGIC_PRV_INT_NUM / (sizeof(uint32_t) * 8)];
 	uint32_t	pending_shr[VGIC_SHR_INT_NUM / (sizeof(uint32_t) * 8)];
 
-	uint32_t	ich_ap0r_el2;	/* Active Priorities Group 0 Register. */
-	uint32_t	ich_ap1r_el2;	/* Active Priorities Group 1 Register. */
 	uint32_t	ich_eisr_el2;	/* End of Interrupt Status Register. */
 	uint32_t	ich_elsr_el2;	/* Empty List register Status Register. */
 	uint32_t	ich_hcr_el2;	/* Hyp Control Register. */

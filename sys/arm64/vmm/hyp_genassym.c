@@ -107,8 +107,6 @@ ASSYM(HYPCTX_EXIT_INFO_FAR_EL2, offsetof(struct hypctx, exit_info.far_el2));
 ASSYM(HYPCTX_EXIT_INFO_HPFAR_EL2, offsetof(struct hypctx, exit_info.hpfar_el2));
 
 ASSYM(HYPCTX_VGIC_LR_NUM, offsetof(struct hypctx, vgic.lr_num));
-ASSYM(HYPCTX_VGIC_ICH_AP0R_EL2, offsetof(struct hypctx, vgic.ich_ap0r_el2));
-ASSYM(HYPCTX_VGIC_ICH_AP1R_EL2, offsetof(struct hypctx, vgic.ich_ap1r_el2));
 ASSYM(HYPCTX_VGIC_ICH_EISR_EL2, offsetof(struct hypctx, vgic.ich_eisr_el2));
 ASSYM(HYPCTX_VGIC_ICH_ELSR_EL2, offsetof(struct hypctx, vgic.ich_elsr_el2));
 ASSYM(HYPCTX_VGIC_ICH_HCR_EL2, offsetof(struct hypctx, vgic.ich_hcr_el2));
