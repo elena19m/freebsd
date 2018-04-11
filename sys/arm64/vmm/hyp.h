@@ -92,5 +92,4 @@
 
 #define	HYP_GET_VECTOR_TABLE	-1
 
-#endif
-
+#endif /* !_VMM_HYP_H_ */

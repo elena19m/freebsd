@@ -24,8 +24,8 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _VMM_VGIC_H_
-#define	_VMM_VGIC_H_
+#ifndef _VMM_VGIC_V3_H_
+#define	_VMM_VGIC_V3_H_
 
 #include <sys/cdefs.h>
 #include <sys/param.h>
@@ -133,4 +133,5 @@ struct vgic_v3_softc {
 };
 
 DECLARE_CLASS(arm_vgic_driver);
-#endif
+
+#endif /* !_VMM_VGIC_V3_H_ */
