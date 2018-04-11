@@ -106,15 +106,16 @@ ASSYM(HYPCTX_EXIT_INFO_ESR_EL2, offsetof(struct hypctx, exit_info.esr_el2));
 ASSYM(HYPCTX_EXIT_INFO_FAR_EL2, offsetof(struct hypctx, exit_info.far_el2));
 ASSYM(HYPCTX_EXIT_INFO_HPFAR_EL2, offsetof(struct hypctx, exit_info.hpfar_el2));
 
-ASSYM(HYPCTX_VGIC_INT_CTRL, offsetof(struct hypctx, vgic.virtual_int_ctrl));
 ASSYM(HYPCTX_VGIC_LR_NUM, offsetof(struct hypctx, vgic.lr_num));
-ASSYM(HYPCTX_VGIC_HCR, offsetof(struct hypctx, vgic.hcr));
-ASSYM(HYPCTX_VGIC_VMCR, offsetof(struct hypctx, vgic.vmcr));
-ASSYM(HYPCTX_VGIC_MISR, offsetof(struct hypctx, vgic.misr));
-ASSYM(HYPCTX_VGIC_EISR, offsetof(struct hypctx, vgic.eisr));
-ASSYM(HYPCTX_VGIC_ELSR, offsetof(struct hypctx, vgic.elsr));
-ASSYM(HYPCTX_VGIC_APR, offsetof(struct hypctx, vgic.apr));
-ASSYM(HYPCTX_VGIC_LR, offsetof(struct hypctx, vgic.lr));
+ASSYM(HYPCTX_VGIC_ICH_AP0R_EL2, offsetof(struct hypctx, vgic.ich_ap0r_el2));
+ASSYM(HYPCTX_VGIC_ICH_AP1R_EL2, offsetof(struct hypctx, vgic.ich_ap1r_el2));
+ASSYM(HYPCTX_VGIC_ICH_EISR_EL2, offsetof(struct hypctx, vgic.ich_eisr_el2));
+ASSYM(HYPCTX_VGIC_ICH_ELSR_EL2, offsetof(struct hypctx, vgic.ich_elsr_el2));
+ASSYM(HYPCTX_VGIC_ICH_HCR_EL2, offsetof(struct hypctx, vgic.ich_hcr_el2));
+ASSYM(HYPCTX_VGIC_ICH_MISR_EL2, offsetof(struct hypctx, vgic.ich_misr_el2));
+ASSYM(HYPCTX_VGIC_ICH_VMCR_EL2, offsetof(struct hypctx, vgic.ich_vmcr_el2));
+ASSYM(HYPCTX_VGIC_ICH_VTR_EL2, offsetof(struct hypctx, vgic.ich_vtr_el2));
+ASSYM(HYPCTX_VGIC_ICH_LR_EL2, offsetof(struct hypctx, vgic.ich_lr_el2));
 
 ASSYM(HYPCTX_VTIMER_CPU_CNTV_CTL, offsetof(struct hypctx, vtimer_cpu.cntv_ctl));
 ASSYM(HYPCTX_VTIMER_CPU_CNTV_CVAL, offsetof(struct hypctx, vtimer_cpu.cntv_cval));

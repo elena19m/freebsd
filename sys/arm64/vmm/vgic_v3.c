@@ -151,7 +151,7 @@ vgic_dist_mmio_read(void *vm, int vcpuid, uint64_t gpa, uint64_t *rval, int size
 
 	} else if (base_offset >= GICD_TYPER && base_offset < GICD_IIDR) {
 
-		*rval = (((VGIC_MAXCPU - 1) << 5) | ((VGIC_NR_IRQ / 32) - 1) >> byte_offset) & mask;
+		*rval = (((VGIC_MAXCPU - 1) << 5) | ((GIC_I_NUM_MAX / 32) - 1) >> byte_offset) & mask;
 
 	} else if (base_offset >= GICD_IIDR && base_offset < GICD_IGROUPR(0)) {
 
@@ -162,52 +162,52 @@ vgic_dist_mmio_read(void *vm, int vcpuid, uint64_t gpa, uint64_t *rval, int size
 		/* irq group control is RAZ */
 		*rval = 0;
 
-	} else if (base_offset >= GICD_ISENABLER(0) && base_offset < GICD_ISENABLER(VGIC_NR_PRV_IRQ)) {
+	} else if (base_offset >= GICD_ISENABLER(0) && base_offset < GICD_ISENABLER(VGIC_PRV_INT_NUM)) {
 
 		/* private set-enable irq */
 		*rval = (dist->irq_enabled_prv[vcpuid][0] >> byte_offset) & mask;
 
-	} else if (base_offset >= GICD_ISENABLER(VGIC_NR_PRV_IRQ) && base_offset < GICD_ICENABLER(0)) {
+	} else if (base_offset >= GICD_ISENABLER(VGIC_PRV_INT_NUM) && base_offset < GICD_ICENABLER(0)) {
 
 		/* shared set-enable irq */
-		*rval = (dist->irq_enabled_shr[(base_offset - GICD_ISENABLER(VGIC_NR_PRV_IRQ)) / sizeof(uint32_t)] >> byte_offset) & mask;
+		*rval = (dist->irq_enabled_shr[(base_offset - GICD_ISENABLER(VGIC_PRV_INT_NUM)) / sizeof(uint32_t)] >> byte_offset) & mask;
 
-	} else if (base_offset >= GICD_ICENABLER(0) && base_offset < GICD_ICENABLER(VGIC_NR_PRV_IRQ)) {
+	} else if (base_offset >= GICD_ICENABLER(0) && base_offset < GICD_ICENABLER(VGIC_PRV_INT_NUM)) {
 
 		/* private clear-enable irq */
 		*rval = (dist->irq_enabled_prv[vcpuid][0] >> byte_offset) & mask;
 
-	} else if (offset >= GICD_ICENABLER(VGIC_NR_PRV_IRQ) && offset < GICD_ISPENDR(0)) {
+	} else if (offset >= GICD_ICENABLER(VGIC_PRV_INT_NUM) && offset < GICD_ISPENDR(0)) {
 
 		/* shared clear-enable irq */
-		*rval = (dist->irq_enabled_shr[(base_offset - GICD_ICENABLER(VGIC_NR_PRV_IRQ)) / sizeof(uint32_t)] >> byte_offset) & mask;
+		*rval = (dist->irq_enabled_shr[(base_offset - GICD_ICENABLER(VGIC_PRV_INT_NUM)) / sizeof(uint32_t)] >> byte_offset) & mask;
 
-	} else if (base_offset >= GICD_ISPENDR(0) && base_offset < GICD_ISPENDR(VGIC_NR_PRV_IRQ)) {
+	} else if (base_offset >= GICD_ISPENDR(0) && base_offset < GICD_ISPENDR(VGIC_PRV_INT_NUM)) {
 
 		/* private set-pending irq */
 		*rval = (dist->irq_state_prv[vcpuid][0] >> byte_offset) & mask;
 
-	} else if (base_offset >= GICD_ISPENDR(VGIC_NR_PRV_IRQ) && base_offset < GICD_ICPENDR(0)) {
+	} else if (base_offset >= GICD_ISPENDR(VGIC_PRV_INT_NUM) && base_offset < GICD_ICPENDR(0)) {
 
 		/* shared set-pending irq */
-		*rval = (dist->irq_state_shr[(base_offset - GICD_ISPENDR(VGIC_NR_PRV_IRQ)) / sizeof(uint32_t)] >> byte_offset) & mask;
+		*rval = (dist->irq_state_shr[(base_offset - GICD_ISPENDR(VGIC_PRV_INT_NUM)) / sizeof(uint32_t)] >> byte_offset) & mask;
 
-	} else if (base_offset >= GICD_ICPENDR(0) && base_offset < GICD_ICPENDR(VGIC_NR_PRV_IRQ)) {
+	} else if (base_offset >= GICD_ICPENDR(0) && base_offset < GICD_ICPENDR(VGIC_PRV_INT_NUM)) {
 
 		/* private clear-pending irq */
 		*rval = (dist->irq_state_prv[vcpuid][0] >> byte_offset) & mask;
 
-	} else if (base_offset >= GICD_ICPENDR(VGIC_NR_PRV_IRQ) && base_offset < GICD_ICACTIVER(0)) {
+	} else if (base_offset >= GICD_ICPENDR(VGIC_PRV_INT_NUM) && base_offset < GICD_ICACTIVER(0)) {
 
 		/* shared clear-pending irq */
-		*rval = (dist->irq_state_shr[(base_offset - GICD_ICPENDR(VGIC_NR_PRV_IRQ)) / sizeof(uint32_t)] >> byte_offset) & mask;
+		*rval = (dist->irq_state_shr[(base_offset - GICD_ICPENDR(VGIC_PRV_INT_NUM)) / sizeof(uint32_t)] >> byte_offset) & mask;
 
 	} else if (base_offset >= GICD_ISACTIVER(0) && base_offset < GICD_IPRIORITYR(0)) {
 
 		/* active irq is RAZ */
 		*rval = 0;
 
-	} else if (base_offset >= GICD_ITARGETSR(0) && base_offset < GICD_ITARGETSR(VGIC_NR_PRV_IRQ)) {
+	} else if (base_offset >= GICD_ITARGETSR(0) && base_offset < GICD_ITARGETSR(VGIC_PRV_INT_NUM)) {
 
 		/* target for banked interrupts is read-only and returns the processor reading this register */
 		*rval = (1 << vcpuid);
@@ -215,7 +215,7 @@ vgic_dist_mmio_read(void *vm, int vcpuid, uint64_t gpa, uint64_t *rval, int size
 		*rval |= *rval << 16;
 		*rval = (*rval >> byte_offset) & mask;
 
-	} else if (base_offset >= GICD_ITARGETSR(VGIC_NR_PRV_IRQ) && base_offset < GICD_ICFGR(0)) {
+	} else if (base_offset >= GICD_ITARGETSR(VGIC_PRV_INT_NUM) && base_offset < GICD_ICFGR(0)) {
 
 		/* target for shared irqs */
 		*rval = (dist->irq_target_shr[(base_offset - GICD_ITARGETSR(8)) / sizeof(uint32_t)] >> byte_offset) & mask;
@@ -274,57 +274,57 @@ vgic_dist_mmio_write(void *vm, int vcpuid, uint64_t gpa, uint64_t val, int size,
 
 	} else if (base_offset >= GICD_IGROUPR(0) && base_offset < GICD_ISENABLER(0)) {
 		/* irq group control is WI */
-	} else if (base_offset >= GICD_ISENABLER(0) && base_offset < GICD_ISENABLER(VGIC_NR_PRV_IRQ)) {
+	} else if (base_offset >= GICD_ISENABLER(0) && base_offset < GICD_ISENABLER(VGIC_PRV_INT_NUM)) {
 
 		/* private set-enable irq */
 		dist->irq_enabled_prv[vcpuid][0] |= (val & mask) << byte_offset;
 		
-	} else if (base_offset >= GICD_ISENABLER(VGIC_NR_PRV_IRQ) && base_offset < GICD_ICENABLER(0)) {
+	} else if (base_offset >= GICD_ISENABLER(VGIC_PRV_INT_NUM) && base_offset < GICD_ICENABLER(0)) {
 
 		/* shared set-enable irq */
-		dist->irq_enabled_shr[(base_offset - GICD_ISENABLER(VGIC_NR_PRV_IRQ)) / sizeof(uint32_t)] |= (val & mask) << byte_offset;
+		dist->irq_enabled_shr[(base_offset - GICD_ISENABLER(VGIC_PRV_INT_NUM)) / sizeof(uint32_t)] |= (val & mask) << byte_offset;
 		
-	} else if (base_offset >= GICD_ICENABLER(0) && base_offset < GICD_ICENABLER(VGIC_NR_PRV_IRQ)) {
+	} else if (base_offset >= GICD_ICENABLER(0) && base_offset < GICD_ICENABLER(VGIC_PRV_INT_NUM)) {
 
 		/* private clear-enable irq */
 		dist->irq_enabled_prv[vcpuid][0] &= ~((val & mask) << byte_offset);
 		vgic_retire_disabled_irqs(&hyp->ctx[vcpuid]);
 
-	} else if (offset >= GICD_ICENABLER(VGIC_NR_PRV_IRQ) && offset < GICD_ISPENDR(0)) {
+	} else if (offset >= GICD_ICENABLER(VGIC_PRV_INT_NUM) && offset < GICD_ISPENDR(0)) {
 
 		/* shared clear-enable irq */
-		dist->irq_enabled_shr[(base_offset - GICD_ICENABLER(VGIC_NR_PRV_IRQ)) / sizeof(uint32_t)] &= ~((val & mask) << byte_offset);
+		dist->irq_enabled_shr[(base_offset - GICD_ICENABLER(VGIC_PRV_INT_NUM)) / sizeof(uint32_t)] &= ~((val & mask) << byte_offset);
 		vgic_retire_disabled_irqs(&hyp->ctx[vcpuid]);
 
-	} else if (base_offset >= GICD_ISPENDR(0) && base_offset < GICD_ISPENDR(VGIC_NR_PRV_IRQ)) {
+	} else if (base_offset >= GICD_ISPENDR(0) && base_offset < GICD_ISPENDR(VGIC_PRV_INT_NUM)) {
 
 		/* private set-pending irq */
 		dist->irq_state_prv[vcpuid][0] |= (val & mask) << byte_offset;
 
-	} else if (base_offset >= GICD_ISPENDR(VGIC_NR_PRV_IRQ) && base_offset < GICD_ICPENDR(0)) {
+	} else if (base_offset >= GICD_ISPENDR(VGIC_PRV_INT_NUM) && base_offset < GICD_ICPENDR(0)) {
 
 		/* shared set-pending irq */
-		dist->irq_state_shr[(base_offset - GICD_ISPENDR(VGIC_NR_PRV_IRQ)) / sizeof(uint32_t)] |= (val & mask) << byte_offset;
+		dist->irq_state_shr[(base_offset - GICD_ISPENDR(VGIC_PRV_INT_NUM)) / sizeof(uint32_t)] |= (val & mask) << byte_offset;
 
-	} else if (base_offset >= GICD_ICPENDR(0) && base_offset < GICD_ICPENDR(VGIC_NR_PRV_IRQ)) {
+	} else if (base_offset >= GICD_ICPENDR(0) && base_offset < GICD_ICPENDR(VGIC_PRV_INT_NUM)) {
 
 		/* private clear-pending irq */
 		dist->irq_state_prv[vcpuid][0] &= ~((val & mask) << byte_offset);
 
-	} else if (base_offset >= GICD_ICPENDR(VGIC_NR_PRV_IRQ) && base_offset < GICD_ICACTIVER(0)) {
+	} else if (base_offset >= GICD_ICPENDR(VGIC_PRV_INT_NUM) && base_offset < GICD_ICACTIVER(0)) {
 
 		/* shared clear-pending irq */
-		dist->irq_state_shr[(base_offset - GICD_ICPENDR(VGIC_NR_PRV_IRQ)) / sizeof(uint32_t)] &= ~((val & mask) << byte_offset);
+		dist->irq_state_shr[(base_offset - GICD_ICPENDR(VGIC_PRV_INT_NUM)) / sizeof(uint32_t)] &= ~((val & mask) << byte_offset);
 
 	} else if (base_offset >= GICD_ISACTIVER(0) && base_offset < GICD_IPRIORITYR(0)) {
 		/*  active irq is WI */
-	} else if (base_offset >= GICD_ITARGETSR(0) && base_offset < GICD_ITARGETSR(VGIC_NR_PRV_IRQ)) {
+	} else if (base_offset >= GICD_ITARGETSR(0) && base_offset < GICD_ITARGETSR(VGIC_PRV_INT_NUM)) {
 		/* target for banked interrupts is WI */
-	} else if (base_offset >= GICD_ITARGETSR(VGIC_NR_PRV_IRQ) && base_offset < GICD_ICFGR(0)) {
+	} else if (base_offset >= GICD_ITARGETSR(VGIC_PRV_INT_NUM) && base_offset < GICD_ICFGR(0)) {
 
 		/* target for shared irqs */
-		dist->irq_target_shr[(base_offset - GICD_ITARGETSR(VGIC_NR_PRV_IRQ)) / sizeof(uint32_t)] =
-			(dist->irq_target_shr[(base_offset - GICD_ITARGETSR(VGIC_NR_PRV_IRQ)) / sizeof(uint32_t)] & ~(mask << byte_offset))
+		dist->irq_target_shr[(base_offset - GICD_ITARGETSR(VGIC_PRV_INT_NUM)) / sizeof(uint32_t)] =
+			(dist->irq_target_shr[(base_offset - GICD_ITARGETSR(VGIC_PRV_INT_NUM)) / sizeof(uint32_t)] & ~(mask << byte_offset))
 			| ((val & mask) << byte_offset);
 
 	} else if (base_offset >= GICD_ICFGR(0) && base_offset < GICD_ICFGR(16)) {
@@ -421,8 +421,8 @@ vgic_v3_attach_to_vm(void *arg, uint64_t distributor_paddr,
 
 	hyp = arg;
 
-	/* 
-	 * Set the distributor address which will be 
+	/*
+	 * Set the distributor address which will be
 	 * emulated using the MMIO infrasctructure
 	 * */
 	hyp->vgic_distributor.distributor_base = distributor_paddr;
@@ -435,21 +435,20 @@ vgic_v3_attach_to_vm(void *arg, uint64_t distributor_paddr,
 	 * */
 	for (i = 0; i < VM_MAXCPU; i++) {
 		hypctx = &hyp->ctx[i];
-		hypctx->vgic.virtual_int_ctrl = virtual_int_ctrl_vaddr;
 		hypctx->vgic.lr_num = lr_num;
-		hypctx->vgic.hcr = GICH_HCR_EN;
-		hypctx->vgic.vmcr = 0;
+		hypctx->vgic.ich_hcr_el2 = GICH_HCR_EN;
+		hypctx->vgic.ich_vmcr_el2 = 0;
 
-		for (j = 0; j < VGIC_NR_IRQ; j++) {
-			if (j < VGIC_NR_PPI)
+		for (j = 0; j < GIC_I_NUM_MAX; j++) {
+			if (j < VGIC_PPI_NUM)
 				vgic_bitmap_set_irq_val(hyp->vgic_distributor.irq_enabled_prv[i],
 										hyp->vgic_distributor.irq_enabled_shr, j, 1);
-			
-			if (j < VGIC_NR_PRV_IRQ)
+
+			if (j < VGIC_PRV_INT_NUM)
 				vgic_bitmap_set_irq_val(hyp->vgic_distributor.irq_conf_prv[i],
 										hyp->vgic_distributor.irq_conf_shr, j, VGIC_CFG_EDGE);
 
-			hypctx->vgic.irq_to_lr[j] = LR_EMPTY;
+			hypctx->vgic.irq_to_lr[j] = VGIC_LR_EMPTY;
 		}
 	}
 
@@ -468,10 +467,10 @@ vgic_v3_attach_to_vm(void *arg, uint64_t distributor_paddr,
 static int
 vgic_bitmap_get_irq_val(uint32_t *irq_prv, uint32_t *irq_shr, int irq)
 {
-	if (irq < VGIC_NR_PRV_IRQ)
+	if (irq < VGIC_PRV_INT_NUM)
 		return bit_test((bitstr_t *)irq_prv, irq);
 
-	return bit_test((bitstr_t *)irq_shr, irq - VGIC_NR_PRV_IRQ);
+	return bit_test((bitstr_t *)irq_shr, irq - VGIC_PRV_INT_NUM);
 }
 
 static void
@@ -479,11 +478,11 @@ vgic_bitmap_set_irq_val(uint32_t *irq_prv, uint32_t *irq_shr, int irq, int val)
 {
 	uint32_t *reg;
 
-	if (irq < VGIC_NR_PRV_IRQ) {
+	if (irq < VGIC_PRV_INT_NUM) {
 		reg = irq_prv;
 	} else {
 		reg = irq_shr;
-		irq -= VGIC_NR_PRV_IRQ;
+		irq -= VGIC_PRV_INT_NUM;
 	}
 
 	if (val)
@@ -571,10 +570,10 @@ vgic_cpu_irq_set(struct hypctx *hypctx, int irq)
 {
 	struct vgic_v3_cpu_if *vgic = &hypctx->vgic;
 
-	if (irq < VGIC_NR_PRV_IRQ)
+	if (irq < VGIC_PRV_INT_NUM)
 		bit_set((bitstr_t *)vgic->pending_prv, irq);
 	else
-		bit_set((bitstr_t *)vgic->pending_shr, irq - VGIC_NR_PRV_IRQ);
+		bit_set((bitstr_t *)vgic->pending_shr, irq - VGIC_PRV_INT_NUM);
 }
 
 static void
@@ -582,10 +581,10 @@ vgic_cpu_irq_clear(struct hypctx *hypctx, int irq)
 {
 	struct vgic_v3_cpu_if *vgic = &hypctx->vgic;
 
-	if (irq < VGIC_NR_PRV_IRQ)
+	if (irq < VGIC_PRV_INT_NUM)
 		bit_clear((bitstr_t *)vgic->pending_prv, irq);
 	else
-		bit_clear((bitstr_t *)vgic->pending_shr, irq - VGIC_NR_PRV_IRQ);
+		bit_clear((bitstr_t *)vgic->pending_shr, irq - VGIC_PRV_INT_NUM);
 }
 
 static int
@@ -596,25 +595,26 @@ compute_pending_for_cpu(struct hyp *hyp, int vcpu)
 
 	uint32_t *pending, *enabled, *pend_percpu, *pend_shared, *target;
 	int32_t pending_private, pending_shared;
-	
+
 	pend_percpu = vgic->pending_prv;
 	pend_shared = vgic->pending_shr;
 
 	pending = vgic_distributor->irq_state_prv[vcpu];
 	enabled = vgic_distributor->irq_enabled_prv[vcpu];
 	bitstr_and((bitstr_t *)pend_percpu, (bitstr_t *)pending,
-		       (bitstr_t *)enabled, VGIC_NR_PRV_IRQ);
+		       (bitstr_t *)enabled, VGIC_PRV_INT_NUM);
 
 	pending = vgic_distributor->irq_state_shr;
 	enabled = vgic_distributor->irq_enabled_shr;
 	target = vgic_distributor->irq_target_shr;
 	bitstr_and((bitstr_t *)pend_shared, (bitstr_t *)pending,
-		       (bitstr_t *)enabled, VGIC_NR_SHR_IRQ);
+		       (bitstr_t *)enabled, VGIC_SHR_INT_NUM);
 	bitstr_and((bitstr_t *)pend_shared, (bitstr_t *)pend_shared,
-		       (bitstr_t *)target, VGIC_NR_SHR_IRQ);
+		       (bitstr_t *)target, VGIC_SHR_INT_NUM);
 
-	bit_ffs((bitstr_t *)pend_percpu, VGIC_NR_PRV_IRQ, &pending_private);
-	bit_ffs((bitstr_t *)pend_shared, VGIC_NR_SHR_IRQ, &pending_shared);
+	bit_ffs((bitstr_t *)pend_percpu, VGIC_PRV_INT_NUM, &pending_private);
+	bit_ffs((bitstr_t *)pend_shared, VGIC_SHR_INT_NUM, &pending_shared);
+
 	return (pending_private > -1 || pending_shared > -1);
 }
 
@@ -709,9 +709,9 @@ vgic_retire_disabled_irqs(struct hypctx *hypctx)
 		int irq = vgic->lr[lr_idx] & GICH_LR_VIRTID;
 
 		if (!vgic_irq_is_enabled(hypctx, irq)) {
-			vgic->irq_to_lr[irq] = LR_EMPTY;
+			vgic->irq_to_lr[irq] = VGIC_LR_EMPTY;
 			bit_clear((bitstr_t *)vgic->lr_used, lr_idx);
-			vgic->lr[lr_idx] &= ~GICH_LR_STATE;
+			vgic->ich_lr_el2[lr_idx] &= ~GICH_LR_STATE;
 			if (vgic_irq_is_active(hypctx, irq))
 				vgic_irq_clear_active(hypctx, irq);
 		}
@@ -729,12 +729,12 @@ vgic_queue_irq(struct hypctx *hypctx, uint8_t sgi_source_cpu, int irq)
 
 	lr_idx = vgic->irq_to_lr[irq];
 
-	if (lr_idx != LR_EMPTY &&
-	    (LR_CPUID(vgic->lr[lr_idx]) == sgi_source_cpu)) {
+	if (lr_idx != VGIC_LR_EMPTY &&
+	    (LR_CPUID(vgic->ich_lr_el2[lr_idx]) == sgi_source_cpu)) {
 
 		//printf("LR%d piggyback for IRQ%d %x\n", lr, irq, vgic_cpu->vgic_lr[lr]);
 
-		vgic->lr[lr_idx] |= GICH_LR_PENDING;
+		vgic->ich_lr_el2[lr_idx] |= GICH_LR_PENDING;
 
 		goto end;
 	}
@@ -744,13 +744,13 @@ vgic_queue_irq(struct hypctx *hypctx, uint8_t sgi_source_cpu, int irq)
 		return false;
 
 	//printf("LR%d allocated for IRQ%d %x\n", lr, irq, sgi_source_id);
-	vgic->lr[lr_idx] = MK_LR_PEND(sgi_source_cpu, irq);
+	vgic->ich_lr_el2[lr_idx] = MK_LR_PEND(sgi_source_cpu, irq);
 	vgic->irq_to_lr[irq] = lr_idx;
 	bit_set((bitstr_t *)vgic->lr_used, lr_idx);
 
 end:
 	if (!vgic_irq_is_edge(hypctx, irq))
-		vgic->lr[lr_idx] |= GICH_LR_EOI;
+		vgic->ich_lr_el2[lr_idx] |= GICH_LR_EOI;
 
 	return true;
 }
@@ -809,14 +809,14 @@ vgic_process_maintenance(struct hypctx *hypctx)
 
 	//printf("MISR = %08x\n", vgic->misr);
 
-	if (vgic->misr & GICH_MISR_EOI) {
+	if (vgic->ich_misr_el2 & GICH_MISR_EOI) {
 
-		for_each_set_bit(lr_idx, &vgic->eisr, vgic->lr_num) {
+		for_each_set_bit(lr_idx, &vgic->ich_eisr_el2, vgic->lr_num) {
 
-			irq = vgic->lr[lr_idx] & GICH_LR_VIRTID;
+			irq = vgic->ich_lr_el2[lr_idx] & GICH_LR_VIRTID;
 
 			vgic_irq_clear_active(hypctx, irq);
-			vgic->lr[lr_idx] &= ~GICH_LR_EOI;
+			vgic->ich_lr_el2[lr_idx] &= ~GICH_LR_EOI;
 
 			if (vgic_dist_irq_is_pending(hypctx, irq)) {
 				vgic_cpu_irq_set(hypctx, irq);
@@ -827,8 +827,8 @@ vgic_process_maintenance(struct hypctx *hypctx)
 		}
 	}
 
-	if (vgic->misr & GICH_MISR_U)
-		vgic->hcr &= ~GICH_HCR_UIE;
+	if (vgic->ich_misr_el2 & GICH_MISR_U)
+		vgic->ich_hcr_el2 &= ~GICH_HCR_UIE;
 
 	return level_pending;
 }
@@ -855,32 +855,32 @@ vgic_v3_flush_hwstate(void *arg)
 	}
 
 	/* SGIs */
-	for_each_set_bit(i, vgic->pending_prv, VGIC_NR_SGI) {
+	for_each_set_bit(i, vgic->pending_prv, VGIC_SGI_NUM) {
 		//printf("Pending SGI %d\n", i);
 		if (!vgic_queue_sgi(hypctx, i))
 			overflow = 1;
 	}
 
 	/* PPIs */
-	i = VGIC_NR_SGI;
-	for_each_set_bit_from(i, vgic->pending_prv, VGIC_NR_PRV_IRQ) {
+	i = VGIC_SPI_NUM;
+	for_each_set_bit_from(i, vgic->pending_prv, VGIC_PRV_INT_NUM) {
 		//printf("Pending PPI %d\n", i);
 		if (!vgic_queue_hwirq(hypctx, i))
 			overflow = 1;
 	}
 
 	/* SPIs */
-	for_each_set_bit(i, vgic->pending_shr, VGIC_NR_SHR_IRQ) {
+	for_each_set_bit(i, vgic->pending_shr, VGIC_SHR_INT_NUM) {
 		//printf("Pending SPI %d\n", i);
-		if (!vgic_queue_hwirq(hypctx, i + VGIC_NR_PRV_IRQ))
+		if (!vgic_queue_hwirq(hypctx, i + VGIC_PRV_INT_NUM))
 			overflow = 1;
 	}
 
 end:
 	if (overflow) {
-		vgic->hcr |= GICH_HCR_UIE;
+		vgic->ich_hcr_el2 |= GICH_HCR_UIE;
 	} else {
-		vgic->hcr &= ~GICH_HCR_UIE;
+		vgic->ich_hcr_el2 &= ~GICH_HCR_UIE;
 		bit_clear((bitstr_t *)&vgic_distributor->irq_pending_on_cpu, hypctx->vcpu);
 	}
 	//mtx_unlock_spin(&vgic_distributor->distributor_lock);
@@ -903,16 +903,16 @@ vgic_v3_sync_hwstate(void *arg)
 
 	level_pending = vgic_process_maintenance(hypctx);
 
-	for_each_set_bit(lr_idx, &vgic->elsr, vgic->lr_num) {
+	for_each_set_bit(lr_idx, &vgic->ich_elsr_el2, vgic->lr_num) {
 
 		if (!bit_test_and_clear((bitstr_t *)vgic->lr_used, lr_idx))
 			continue;
 
-		irq = vgic->lr[lr_idx] & GICH_LR_VIRTID;
-		vgic->irq_to_lr[irq] = LR_EMPTY;
+		irq = vgic->ich_lr_el2[lr_idx] & GICH_LR_VIRTID;
+		vgic->irq_to_lr[irq] = VGIC_LR_EMPTY;
 	}
 
-	bit_ffc((bitstr_t *)&vgic->elsr, vgic->lr_num, &pending);
+	bit_ffc((bitstr_t *)&vgic->ich_elsr_el2, vgic->lr_num, &pending);
 	if (level_pending || pending > -1)
 		bit_set((bitstr_t *)&vgic_distributor->irq_pending_on_cpu, hypctx->vcpu);
 }
@@ -956,8 +956,8 @@ vgic_update_irq_state(struct hypctx *hypctx, unsigned int irq, bool level)
                 goto end;
         }
 
-        if (irq >= VGIC_NR_PRV_IRQ) {
-                cpu = 0;//vgic_distributor->irq_spi_cpu[irq - VGIC_NR_PRV_IRQ];
+        if (irq >= VGIC_PRV_INT_NUM) {
+                cpu = 0;//vgic_distributor->irq_spi_cpu[irq - VGIC_PRV_INT_NUM];
                 hypctx = &hypctx->hyp->ctx[cpu];
         }
 
@@ -1102,12 +1102,6 @@ arm_vgic_attach(device_t dev)
 
 	printf("[vgic.c:arm_vgic_attach] dev nameunit = %s\n", device_get_nameunit(dev));
 
-	softc.virtual_int_ctrl_res = gic_get_virtual_int_ctrl_res(dev);
-	if (!softc.virtual_int_ctrl_res) {
-		device_printf(dev, "Cannot find the Virtual Interface Control Registers.\n");
-		goto error_disable_virtualization;
-	}
-
 	softc.maintenance_int_res = gic_get_maintenance_intr_res(dev);
 	error = bus_setup_intr(dev, softc.maintenance_int_res,
 			INTR_TYPE_CLK | INTR_MPSAFE,
@@ -1123,10 +1117,12 @@ arm_vgic_attach(device_t dev)
 
 	printf("[vgic.c:arm_vgic_attach] Error happened.\n");
 
+	/*
 error_disable_virtualization:
 	hypmode_enabled = 0;
 	printf("Virtualization has been disabled.\n");
 	return (ENXIO);
+	*/
 }
 
 static void
