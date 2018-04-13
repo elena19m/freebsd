@@ -431,13 +431,12 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 		case EXCP_DATA_ABORT_L:
 			/* Check if instruction syndrome is valid */
 			if (esr_iss & ISS_DATA_ISV) {
-				if ((esr_iss & ISS_DATA_DFSC_MASK) == ISS_DATA_DFSC_TF_L1) {
+				if (ISS_DATA_DFSC_TF(esr_iss)) {
 					vmexit->exitcode = VM_EXITCODE_INST_EMUL;
 
 					/*
 					 * FIPA holds bits [47:12] of the IPA,
-					 * bits [11:0] are zero for a 4KB
-					 * granule size.
+					 * bits [11:0] are zero for a 4KB page.
 					 */
 					vmexit->u.inst_emul.gpa = (vmexit->u.hyp.hpfar_el2 >> HPFAR_EL2_FIPA_SHIFT) << 12;
 
@@ -478,7 +477,7 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 			break;
 #endif
 		default:
-			printf("%s:%d Unknown ESR_EC code: 0x%x\n",__func__, __LINE__, esr_ec);
+			printf("%s:%d Unknown ESR_EC code: 0x%x\n", __func__, __LINE__, esr_ec);
 			break;
 	}
 
@@ -588,6 +587,7 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 		printf("sctlr_el1 = 0x%08x\n", hypctx->sctlr_el1);
 		*/
 
+		/* TODO: ARMv8 has fixed instruction length (4 bytes) */
 		vmexit->inst_length = 4;
 		handled = handle_world_switch(hyp, vcpu, vmexit);
 
