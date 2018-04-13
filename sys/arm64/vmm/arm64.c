@@ -108,6 +108,7 @@ arm_init(int ipinum)
 {
 	char *stack_top;
 	size_t hyp_code_len;
+	int error;
 
 	if (!hypmode_enabled) {
 		printf("arm_init: Processor doesn't have support for virtualization.\n");
@@ -148,8 +149,9 @@ arm_init(int ipinum)
 	vmm_call_hyp((void *)vtophys(hyp_vectors), vtophys(hyp_pmap->pm_l0), ktohyp(stack_top));
 
 	/* Initialize VGIC infrastructure */
-	if (vgic_v3_map(hyp_pmap))
-		return (ENXIO);
+	error = vgic_v3_map(hyp_pmap);
+	if (error)
+		return (error);
 
 	//vtimer_hyp_init();
 

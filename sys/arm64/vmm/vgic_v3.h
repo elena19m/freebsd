@@ -94,7 +94,6 @@ struct vgic_v3_cpu_if {
 	uint32_t	pending_prv[VGIC_PRV_INT_NUM / (sizeof(uint32_t) * 8)];
 	uint32_t	pending_shr[VGIC_SHR_INT_NUM / (sizeof(uint32_t) * 8)];
 
-	/* The GICv3 driver enabled the register interface at load. */
 	uint32_t	ich_eisr_el2;	/* End of Interrupt Status Register. */
 	uint32_t	ich_elsr_el2;	/* Empty List register Status Register. */
 	uint32_t	ich_hcr_el2;	/* Hyp Control Register. */
