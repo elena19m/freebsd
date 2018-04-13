@@ -104,4 +104,13 @@ uint64_t vmm_enter_guest(struct hypctx *hypctx);
 #define MPIDR_AFF1_LEVEL(x) 	((x >> 2) << 8)
 #define MPIDR_AFF0_LEVEL(x) 	((x & 0x3) << 0)
 
+/*
+ * Return true if the exception was caused by a translation fault in the stage 2
+ * translation regime. The DFSC encoding for a translation fault has the format
+ * 0b0001LL, where LL (bits [1:0]) represents the level where the fault occured
+ * (page D7-2280 of the ARMv8 Architecture Manual).
+ */
+#define ISS_DATA_DFSC_TF(esr_iss)	(!((esr_iss) & 0b111000) && \
+						((esr_iss) & 0b000100))
+
 #endif /* !_VMM_ARM64_H_ */
