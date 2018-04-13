@@ -441,7 +441,7 @@ vgic_v3_attach_to_vm(void *arg, uint64_t distributor_paddr,
 	 */
 	for (i = 0; i < VM_MAXCPU; i++) {
 		hypctx = &hyp->ctx[i];
-		hypctx->vgic.lr_used_count = 0;
+		hypctx->vgic.lr_num = virt_features.lr_num;
 		hypctx->vgic.ich_hcr_el2 = ICH_HCR_EL2_EN;
 
 		/*
@@ -722,7 +722,7 @@ vgic_retire_disabled_irqs(struct hypctx *hypctx)
 	struct vgic_v3_cpu_if *vgic = &hypctx->vgic;
 	int lr_idx;
 
-	for_each_set_bit(lr_idx, vgic->lr_used, vgic->lr_used_count) {
+	for_each_set_bit(lr_idx, vgic->lr_used, vgic->lr_num) {
 
 		int irq = vgic->lr[lr_idx] & GICH_LR_VIRTID;
 
@@ -757,7 +757,7 @@ vgic_queue_irq(struct hypctx *hypctx, uint8_t sgi_source_cpu, int irq)
 		goto end;
 	}
 
-	bit_ffc((bitstr_t *)vgic->lr_used, vgic->lr_used_count, &lr_idx);
+	bit_ffc((bitstr_t *)vgic->lr_used, vgic->lr_num, &lr_idx);
 	if (lr_idx == -1)
 		return false;
 
@@ -829,7 +829,7 @@ vgic_process_maintenance(struct hypctx *hypctx)
 
 	if (vgic->ich_misr_el2 & GICH_MISR_EOI) {
 
-		for_each_set_bit(lr_idx, &vgic->ich_eisr_el2, vgic->lr_used_count) {
+		for_each_set_bit(lr_idx, &vgic->ich_eisr_el2, vgic->lr_num) {
 
 			irq = vgic->ich_lr_el2[lr_idx] & GICH_LR_VIRTID;
 
@@ -924,7 +924,7 @@ vgic_v3_sync_hwstate(void *arg)
 
 	level_pending = vgic_process_maintenance(hypctx);
 
-	for_each_set_bit(lr_idx, &vgic->ich_elsr_el2, vgic->lr_used_count) {
+	for_each_set_bit(lr_idx, &vgic->ich_elsr_el2, vgic->lr_num) {
 
 		if (!bit_test_and_clear((bitstr_t *)vgic->lr_used, lr_idx))
 			continue;
@@ -933,7 +933,7 @@ vgic_v3_sync_hwstate(void *arg)
 		vgic->irq_to_lr[irq] = VGIC_LR_EMPTY;
 	}
 
-	bit_ffc((bitstr_t *)&vgic->ich_elsr_el2, vgic->lr_used_count, &pending);
+	bit_ffc((bitstr_t *)&vgic->ich_elsr_el2, vgic->lr_num, &pending);
 	if (level_pending || pending > -1)
 		bit_set((bitstr_t *)&vgic_distributor->irq_pending_on_cpu, hypctx->vcpu);
 }

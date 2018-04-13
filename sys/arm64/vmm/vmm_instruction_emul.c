@@ -56,7 +56,7 @@ vmm_emulate_instruction(void *vm, int vcpuid, uint64_t gpa, struct vie *vie,
 	int error;
 	uint64_t val;
 
-	if(vie->dir) {
+	if(vie->dir == VM_VIE_DIR_WRITE) {
 		error = vm_get_register(vm, vcpuid, vie->reg, &val);
 		if (error)
 			goto out;
