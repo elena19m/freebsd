@@ -284,6 +284,9 @@ int vcpu_trace_exceptions(struct vm *vm, int vcpuid);
 
 #define	VM_MAXCPU	1
 
+#define	VM_VIE_DIR_READ		0
+#define	VM_VIE_DIR_WRITE	1
+
 struct vie {
 	uint8_t access_size:4, sign_extend:1, dir:1, unused:2;
 	enum vm_reg_name reg;

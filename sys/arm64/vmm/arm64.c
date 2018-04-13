@@ -430,18 +430,30 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 			break;
 		case EXCP_DATA_ABORT_L:
 			/* Check if instruction syndrome is valid */
-			if (((esr_iss & ISS_DATA_ISV) >> ISS_DATA_ISV_SHIFT) == 1) {
+			if (esr_iss & ISS_DATA_ISV) {
 				if ((esr_iss & ISS_DATA_DFSC_MASK) == ISS_DATA_DFSC_TF_L1) {
 					vmexit->exitcode = VM_EXITCODE_INST_EMUL;
 
-					/* FIPA holds bits [47:12] of the IPA */
+					/*
+					 * FIPA holds bits [47:12] of the IPA,
+					 * bits [11:0] are zero for a 4KB
+					 * granule size.
+					 */
 					vmexit->u.inst_emul.gpa = (vmexit->u.hyp.hpfar_el2 >> HPFAR_EL2_FIPA_SHIFT) << 12;
 
 					esr_sas = (esr_iss & ISS_DATA_SAS_MASK) >> ISS_DATA_SAS_SHIFT;
 					vmexit->u.inst_emul.vie.access_size = 1 << esr_sas;
 
-					vmexit->u.inst_emul.vie.sign_extend = ((esr_iss & ISS_DATA_SSE) >> ISS_DATA_SSE_SHIFT);
-					vmexit->u.inst_emul.vie.dir = ((esr_iss & ISS_DATA_WnR) >>  ISS_DATA_WnR_SHIFT);
+					if (esr_iss & ISS_DATA_SSE)
+						vmexit->u.inst_emul.vie.sign_extend = 1;
+					else
+						vmexit->u.inst_emul.vie.sign_extend = 0;
+
+					if (esr_iss & ISS_DATA_WnR)
+						vmexit->u.inst_emul.vie.dir = VM_VIE_DIR_WRITE;
+					else
+						vmexit->u.inst_emul.vie.dir = VM_VIE_DIR_READ;
+
 					vmexit->u.inst_emul.vie.reg = get_vm_reg_name(
 							(esr_iss & ISS_DATA_SRT_MASK) >> ISS_DATA_SRT_SHIFT, 0);
 				} else {
