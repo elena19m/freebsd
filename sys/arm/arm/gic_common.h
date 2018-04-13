@@ -134,7 +134,7 @@ uint32_t arm_gic_get_lr_num(void);
 #define	GICH_HCR		0x0
 #define	GICH_VTR		0x4
 #define	GICH_VMCR		0x8
-#define  GICH_VMCR_VMGRP1EN	(1 << 1)
+#define	 GICH_VMCR_VMGRP1EN	(1 << 1)
 #define	GICH_MISR		0x10
 #define	GICH_EISR0		0x20
 #define	GICH_EISR1		0x24
