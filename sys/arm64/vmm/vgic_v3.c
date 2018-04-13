@@ -60,6 +60,7 @@
 #include "hyp.h"
 #include "mmu.h"
 #include "vgic_v3.h"
+#include "vgic_v3_reg.h"
 #include "arm64.h"
 
 #define VGIC_V3_DEVNAME	"vgic"
@@ -72,7 +73,7 @@ static uint32_t virtual_int_ctrl_size;
 static uint64_t virtual_cpu_int_paddr;
 static uint32_t virtual_cpu_int_size;
 
-static uint32_t lr_num;
+static uint32_t lr_used_count;
 
 extern uint64_t hypmode_enabled;
 
@@ -422,22 +423,34 @@ vgic_v3_attach_to_vm(void *arg, uint64_t distributor_paddr,
 	hyp = arg;
 
 	/*
-	 * Set the distributor address which will be
-	 * emulated using the MMIO infrasctructure
-	 * */
+	 * Set the distributor address which will be emulated using the MMIO
+	 * infrasctructure
+	 */
 	hyp->vgic_distributor.distributor_base = distributor_paddr;
 	hyp->vgic_distributor.cpu_int_base = cpu_int_paddr;
 	hyp->vgic_attached = true;
-	/* 
-	 * Set the Virtual Interface Control address to
-	 * save/restore registers at context switch.
-	 * Also set the number of LRs
-	 * */
+
+	/*
+	 * Set the Virtual Interface Control address to save/restore registers
+	 * at context switch and initiate the List Registers.
+	 */
 	for (i = 0; i < VM_MAXCPU; i++) {
 		hypctx = &hyp->ctx[i];
-		hypctx->vgic.lr_num = lr_num;
-		hypctx->vgic.ich_hcr_el2 = GICH_HCR_EN;
-		hypctx->vgic.ich_vmcr_el2 = 0;
+		hypctx->vgic.lr_used_count = 0;
+		hypctx->vgic.ich_hcr_el2 = ICH_HCR_EL2_EN;
+
+		/*
+		 * Set up the Virtual Machine Control Register:
+		 *
+		 * ICH_VMCR_EL2_VPMR_PRIO_LOWEST: all interrupts will be
+		 * asserted regardless of their priority.
+		 * ~ICH_VMCR_EL2_VEOIM: an EOI write performs priority drop and
+		 * deactivation.
+		 * ICH_VMCR_EL2_VENG1: virtual Group 1 interrupts are enabled.
+		 */
+		hypctx->vgic.ich_vmcr_el2 = (ICH_VMCR_EL2_VPMR_PRIO_LOWEST | \
+					    ICH_VMCR_EL2_VENG1) & \
+					    ~ICH_VMCR_EL2_VEOIM;
 
 		for (j = 0; j < GIC_I_NUM_MAX; j++) {
 			if (j < VGIC_PPI_NUM)
@@ -704,7 +717,7 @@ vgic_retire_disabled_irqs(struct hypctx *hypctx)
 	struct vgic_v3_cpu_if *vgic = &hypctx->vgic;
 	int lr_idx;
 
-	for_each_set_bit(lr_idx, vgic->lr_used, vgic->lr_num) {
+	for_each_set_bit(lr_idx, vgic->lr_used, vgic->lr_used_count) {
 
 		int irq = vgic->lr[lr_idx] & GICH_LR_VIRTID;
 
@@ -739,7 +752,7 @@ vgic_queue_irq(struct hypctx *hypctx, uint8_t sgi_source_cpu, int irq)
 		goto end;
 	}
 
-	bit_ffc((bitstr_t *)vgic->lr_used, vgic->lr_num, &lr_idx);
+	bit_ffc((bitstr_t *)vgic->lr_used, vgic->lr_used_count, &lr_idx);
 	if (lr_idx == -1)
 		return false;
 
@@ -811,7 +824,7 @@ vgic_process_maintenance(struct hypctx *hypctx)
 
 	if (vgic->ich_misr_el2 & GICH_MISR_EOI) {
 
-		for_each_set_bit(lr_idx, &vgic->ich_eisr_el2, vgic->lr_num) {
+		for_each_set_bit(lr_idx, &vgic->ich_eisr_el2, vgic->lr_used_count) {
 
 			irq = vgic->ich_lr_el2[lr_idx] & GICH_LR_VIRTID;
 
@@ -855,22 +868,25 @@ vgic_v3_flush_hwstate(void *arg)
 	}
 
 	/* SGIs */
-	for_each_set_bit(i, vgic->pending_prv, VGIC_SGI_NUM) {
+	/* TODO - check bounds for i */
+	i = GIC_FIRST_SGI;
+	for_each_set_bit_from(i, vgic->pending_prv, GIC_LAST_SGI + 1) {
 		//printf("Pending SGI %d\n", i);
 		if (!vgic_queue_sgi(hypctx, i))
 			overflow = 1;
 	}
 
 	/* PPIs */
-	i = VGIC_SPI_NUM;
-	for_each_set_bit_from(i, vgic->pending_prv, VGIC_PRV_INT_NUM) {
+	i = GIC_FIRST_PPI;
+	for_each_set_bit_from(i, vgic->pending_prv, GIC_LAST_PPI + 1) {
 		//printf("Pending PPI %d\n", i);
 		if (!vgic_queue_hwirq(hypctx, i))
 			overflow = 1;
 	}
 
 	/* SPIs */
-	for_each_set_bit(i, vgic->pending_shr, VGIC_SHR_INT_NUM) {
+	i = 0;
+	for_each_set_bit(i, vgic->pending_shr, VGIC_SPI_NUM) {
 		//printf("Pending SPI %d\n", i);
 		if (!vgic_queue_hwirq(hypctx, i + VGIC_PRV_INT_NUM))
 			overflow = 1;
@@ -903,7 +919,7 @@ vgic_v3_sync_hwstate(void *arg)
 
 	level_pending = vgic_process_maintenance(hypctx);
 
-	for_each_set_bit(lr_idx, &vgic->ich_elsr_el2, vgic->lr_num) {
+	for_each_set_bit(lr_idx, &vgic->ich_elsr_el2, vgic->lr_used_count) {
 
 		if (!bit_test_and_clear((bitstr_t *)vgic->lr_used, lr_idx))
 			continue;
@@ -912,7 +928,7 @@ vgic_v3_sync_hwstate(void *arg)
 		vgic->irq_to_lr[irq] = VGIC_LR_EMPTY;
 	}
 
-	bit_ffc((bitstr_t *)&vgic->ich_elsr_el2, vgic->lr_num, &pending);
+	bit_ffc((bitstr_t *)&vgic->ich_elsr_el2, vgic->lr_used_count, &pending);
 	if (level_pending || pending > -1)
 		bit_set((bitstr_t *)&vgic_distributor->irq_pending_on_cpu, hypctx->vcpu);
 }
@@ -926,7 +942,7 @@ vgic_v3_vcpu_pending_irq(void *arg)
 	hypctx = arg;
 	vgic_distributor = &hypctx->hyp->vgic_distributor;
 
-	return bit_test((bitstr_t *)&vgic_distributor->irq_pending_on_cpu, 
+	return bit_test((bitstr_t *)&vgic_distributor->irq_pending_on_cpu,
 		            hypctx->vcpu);
 }
 
@@ -1036,7 +1052,7 @@ vgic_v3_map(pmap_t el2_pmap)
 	virtual_cpu_int_paddr = 0;
 	virtual_cpu_int_size = 0;
 
-	lr_num = 0;
+	lr_used_count = 0;
 
 	return (0);
 }

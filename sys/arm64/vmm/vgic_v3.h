@@ -94,15 +94,16 @@ struct vgic_v3_cpu_if {
 	uint32_t	pending_prv[VGIC_PRV_INT_NUM / (sizeof(uint32_t) * 8)];
 	uint32_t	pending_shr[VGIC_SHR_INT_NUM / (sizeof(uint32_t) * 8)];
 
+	/* The GICv3 driver enabled the register interface at load. */
 	uint32_t	ich_eisr_el2;	/* End of Interrupt Status Register. */
 	uint32_t	ich_elsr_el2;	/* Empty List register Status Register. */
 	uint32_t	ich_hcr_el2;	/* Hyp Control Register. */
 	uint32_t	ich_misr_el2;	/* Maintenance Interrupt State Register. */
 	uint32_t	ich_vmcr_el2;	/* Virtual Machine Control Register. */
 
-	uint32_t	lr_num;
 	uint64_t	ich_lr_el2[VGIC_LR_NUM];	/* List Registers. */
-	uint8_t		lr_used[VGIC_LR_NUM];
+	uint32_t	lr_used_count;			/* Number of used List Registers. */
+	uint8_t		lr_used[VGIC_LR_NUM];		/* Bitmap for used List Registers. */
 	uint8_t		irq_to_lr[GIC_I_NUM_MAX];
 };
 
