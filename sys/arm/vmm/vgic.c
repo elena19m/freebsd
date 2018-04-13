@@ -420,7 +420,10 @@ vgic_attach_to_vm(void *arg, uint64_t distributor_paddr, uint64_t cpu_int_paddr)
 		hypctx->vgic_cpu_int.virtual_int_ctrl = virtual_int_ctrl_vaddr;
 		hypctx->vgic_cpu_int.lr_num = lr_num;
 		hypctx->vgic_cpu_int.hcr = GICH_HCR_EN;
-		hypctx->vgic_cpu_int.vmcr = 0;
+		/*
+		 * Enable delivery of Group 1 virtual interrupts to the guest.
+		 */
+		hypctx->vgic_cpu_int.vmcr = GICH_VMCR_VMGRP1EN;
 
 		for (j = 0; j < VGIC_NR_IRQ; j++) {
 			if (j < VGIC_NR_PPI)
