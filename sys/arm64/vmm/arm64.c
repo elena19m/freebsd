@@ -124,7 +124,7 @@ arm_init(int ipinum)
 	vmm_call_hyp((void *)vtophys(hyp_init_vectors));
 
 	/*
-	 * Create the necessary mappings for the hypervisor translation table
+	 * Create the necessary mappings for the hypervisor translation table.
 	 */
 	hyp_pmap = malloc(sizeof(*hyp_pmap), M_HYP, M_WAITOK | M_ZERO);
 	hypmap_init(hyp_pmap, PT_STAGE1);

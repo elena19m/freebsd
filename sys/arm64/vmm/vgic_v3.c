@@ -418,21 +418,23 @@ vgic_v3_emulate_distributor(void *arg, int vcpuid, struct vm_exit *vme,
 }
 
 int
-vgic_v3_attach_to_vm(void *arg, uint64_t distributor_paddr,
-		uint64_t cpu_int_paddr)
+vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, uint64_t redist_ipa)
 {
 	struct hyp *hyp;
-	struct hypctx *hypctx;
-	int i, j;
+	//struct hypctx *hypctx;
+	//int i, j;
 
 	hyp = arg;
 
+	printf("[vgic_v3: vgic_v3_attach_to_vm()]\n");
+
+#if 0
 	/*
 	 * Set the distributor address which will be emulated using the MMIO
-	 * infrasctructure
+	 * infrastructure.
 	 */
-	hyp->vgic_distributor.distributor_base = distributor_paddr;
-	hyp->vgic_distributor.cpu_int_base = cpu_int_paddr;
+	hyp->vgic_distributor.distributor_base = dist_ipa;
+	hyp->vgic_distributor.cpu_int_base = (uint64_t) redist_ipas;
 	hyp->vgic_attached = true;
 
 	/*
@@ -469,6 +471,7 @@ vgic_v3_attach_to_vm(void *arg, uint64_t distributor_paddr,
 			hypctx->vgic.irq_to_lr[j] = VGIC_LR_EMPTY;
 		}
 	}
+#endif
 
 	/* TODO: Map the CPU Interface over the Virtual CPU Interface */
 #if 0
@@ -1120,10 +1123,21 @@ static int
 arm_vgic_attach(device_t dev)
 {
 	int error;
+	device_t parent;
+	struct gic_v3_softc *parent_sc;
 
 	printf("[vgic.c:arm_vgic_attach] dev nameunit = %s\n", device_get_nameunit(dev));
 
+	parent = device_get_parent(dev);
+	printf("[vgic.c:arm_vgic_attach] parent nameunit = %s\n", device_get_nameunit(parent));
+	parent_sc = device_get_softc(parent);
+	printf("[vgic.c:arm_vgic_attach] gic_dist = %lx\n", (uint64_t)parent_sc->gic_dist);
+	printf("[vgic.c:arm_vgic_attach] gic_dist = %lx\n", (uint64_t)vtophys(parent_sc->gic_dist));
+
 	softc.maintenance_int_res = gic_get_maintenance_intr_res(dev);
+	/*
+	 * TODO: gic_v3.c registers interrupts by using intr_isrc_register()
+	 */
 	error = bus_setup_intr(dev, softc.maintenance_int_res,
 			INTR_TYPE_CLK | INTR_MPSAFE,
 			arm_vgic_maintenance_intr, NULL,
@@ -1150,13 +1164,7 @@ static void
 arm_vgic_identify(driver_t *driver, device_t parent)
 {
 	device_t dev = NULL;
-	//uint32_t icv;
 	int order;
-
-	/*
-	icv = gic_icv_read(DIR);
-	printf("icv_ctlr = %u\n", icv);
-	*/
 
 	printf("[vgic.c:arm_vgic_identify] parent nameunit = %s\n", device_get_nameunit(parent));
 
