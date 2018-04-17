@@ -62,6 +62,11 @@
 #define	BSP			0
 #define KERNEL_IMAGE_NAME_LEN	32
 
+#define	GIC_V3_DIST_IPA		0x2f000000UL
+#define	GIC_V3_DIST_SIZE	0x10000UL
+#define	GIC_V3_REDIST_IPA	0x2f100000UL
+#define	GIC_V3_REDIST_SIZE	0x200000UL
+
 struct env {
 	const char *str;
 	SLIST_ENTRY(env) next;
@@ -357,24 +362,12 @@ main(int argc, char** argv)
 		exit(1);
 	}
 
-	/*
-	char *envp = vm_map_ipa(ctx, gvatovm(bootparams.envp_gva), PAGE_SIZE);
-	fprintf(stderr, "env:\n");
-	while (1) {
-		if (*envp == 0 && *(envp + 1) == 0)
-			break;
-		printf("%d ", *envp);
-		envp++;
-	}
-	printf("0 0\n");
-	*/
-
-	/*
-	error = vm_attach_vgic(ctx, periphbase + 0x1000, periphbase + 0x2000);
+	error = vm_attach_vgic(ctx, GIC_V3_DIST_IPA, GIC_V3_REDIST_IPA);
 	if (error) {
+		fprintf(stderr, "Error attaching VGIC to the virtual machine\n");
+		exit(1);
 	}
 	munmap(addr, st.st_size);
-	*/
 
 	guest_setreg(VM_REG_ELR_EL2, kernel_load_address + bootparams.entry_off);
 	guest_setreg(VM_REG_GUEST_X0, bootparams.modulep_gva);

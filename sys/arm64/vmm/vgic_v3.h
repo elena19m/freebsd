@@ -113,8 +113,7 @@ int vgic_v3_map(pmap_t el2_pmap);
 int vgic_v3_emulate_distributor(void *arg, int vcpuid,
 		struct vm_exit *vme, bool *retu);
 
-int vgic_v3_attach_to_vm(void *arg, uint64_t distributor_paddr,
-		uint64_t cpu_int_paddr);
+int vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, uint64_t redist_ipa);
 
 void vgic_v3_sync_hwstate(void *arg);
 

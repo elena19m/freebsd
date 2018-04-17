@@ -194,10 +194,11 @@ vmmdev_ioctl(struct cdev *cdev, u_long cmd, caddr_t data, int fflag,
 	case VM_ACTIVATE_CPU:
 		vac = (struct vm_activate_cpu *)data;
 		error = vm_activate_cpu(sc->vm, vac->vcpuid);
+		break;
 	case VM_ATTACH_VGIC:
 		vav = (struct vm_attach_vgic *)data;
-		error = vm_attach_vgic(sc->vm, vav->distributor_paddr,
-					vav->cpu_int_paddr);
+		error = vm_attach_vgic(sc->vm, vav->dist_ipa, vav->redist_ipa);
+		break;
 	default:
 		error = ENOTTY;
 		break;

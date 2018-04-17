@@ -735,9 +735,9 @@ vm_malloc(struct vm *vm, uint64_t ipa, size_t len)
 }
 
 int
-vm_attach_vgic(struct vm *vm, uint64_t distributor_paddr, uint64_t cpu_int_paddr)
+vm_attach_vgic(struct vm *vm, uint64_t dist_ipa, uint64_t redist_ipa)
 {
-	return vgic_v3_attach_to_vm(vm->cookie, distributor_paddr, cpu_int_paddr);
+	return vgic_v3_attach_to_vm(vm->cookie, dist_ipa, redist_ipa);
 }
 
 static int

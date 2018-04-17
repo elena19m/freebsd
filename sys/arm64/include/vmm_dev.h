@@ -96,8 +96,8 @@ struct vm_activate_cpu {
 };
 
 struct vm_attach_vgic {
-	uint64_t	distributor_paddr;
-	uint64_t	cpu_int_paddr;
+	uint64_t	dist_ipa;
+	uint64_t	redist_ipa;
 };
 
 #define	VM_ACTIVE_CPUS		0

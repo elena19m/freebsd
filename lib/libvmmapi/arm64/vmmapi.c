@@ -327,13 +327,13 @@ vcpu_reset(struct vmctx *vmctx, int vcpu)
 }
 
 int
-vm_attach_vgic(struct vmctx *ctx, uint64_t distributor_paddr, uint64_t cpu_int_paddr)
+vm_attach_vgic(struct vmctx *ctx, uint64_t dist_ipa, uint64_t redist_ipa)
 {
 	struct vm_attach_vgic vav;
 
 	bzero(&vav, sizeof(vav));
-	vav.distributor_paddr = distributor_paddr;
-	vav.cpu_int_paddr = cpu_int_paddr;
+	vav.dist_ipa = dist_ipa;
+	vav.redist_ipa = redist_ipa;
 
 	return (ioctl(ctx->fd, VM_ATTACH_VGIC, &vav));
 }
