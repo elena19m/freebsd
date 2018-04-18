@@ -1,5 +1,8 @@
 /*-
- * Copyright (c) 2015 Nahanni Systems, Inc.
+ * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
+ *
+ * Copyright (c) 2014 Hudson River Trading LLC
+ * Written by: John H. Baldwin <jhb@FreeBSD.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -11,7 +14,7 @@
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
  *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
  * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
  * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
@@ -26,61 +29,19 @@
  * $FreeBSD$
  */
 
-#include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
+#ifndef __DEVEMU_IRQ_H__
+#define	__DEVEMU_IRQ_H__
 
-#include <sys/types.h>
-#include <unistd.h>
+struct devemu_inst;
 
-#include <errno.h>
+void	devemu_irq_assert(struct devemu_inst *di);
+void	devemu_irq_deassert(struct devemu_inst *di);
+void	devemu_irq_init(struct vmctx *ctx);
+void	devemu_irq_reserve(int irq);
+void	devemu_irq_use(int irq);
+int	pirq_alloc_pin(struct devemu_inst *di);
+int	pirq_irq(int pin);
+uint8_t	pirq_read(int pin);
+void	pirq_write(struct vmctx *ctx, int pin, uint8_t val);
 
-#include "sockstream.h"
-
-ssize_t
-stream_read(int fd, void *buf, ssize_t nbytes)
-{
-	uint8_t *p;
-	ssize_t len = 0;
-	ssize_t n;
-
-	p = buf;
-
-	while (len < nbytes) {
-		n = read(fd, p + len, nbytes - len);
-		if (n == 0)
-			break;
-
-		if (n < 0) {
-			if (errno == EINTR || errno == EAGAIN)
-				continue;
-			return (n);
-		}
-		len += n;
-	}
-	return (len);
-}
-
-ssize_t
-stream_write(int fd, const void *buf, ssize_t nbytes)
-{
-	const uint8_t *p;
-	ssize_t len = 0;
-	ssize_t n;
-
-	p = buf;
-
-	while (len < nbytes) {
-		n = write(fd, p + len, nbytes - len);
-		if (n == 0)
-			break;
-		if (n < 0) {
-			if (errno == EINTR || errno == EAGAIN)
-				continue;
-			return (n);
-		}
-		len += n;
-	}
-	return (len);
-}
-
-
+#endif

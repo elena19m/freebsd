@@ -59,8 +59,8 @@ __FBSDID("$FreeBSD$");
 
 #include "bhyverun.h"
 #include "debug.h"
-#include "pci_emul.h"
-#include "virtio.h"
+#include "devemu.h"
+#include "devemu_virtio.h"
 
 #define VTRND_RINGSZ	64
 
@@ -72,7 +72,7 @@ static int pci_vtrnd_debug;
 /*
  * Per-device softc
  */
-struct pci_vtrnd_softc {
+struct devemu_vtrnd_softc {
 	struct virtio_softc vrsc_vs;
 	struct vqueue_info  vrsc_vq;
 	pthread_mutex_t     vrsc_mtx;
@@ -80,15 +80,15 @@ struct pci_vtrnd_softc {
 	int                 vrsc_fd;
 };
 
-static void pci_vtrnd_reset(void *);
-static void pci_vtrnd_notify(void *, struct vqueue_info *);
+static void devemu_vtrnd_reset(void *);
+static void devemu_vtrnd_notify(void *, struct vqueue_info *);
 
 static struct virtio_consts vtrnd_vi_consts = {
 	"vtrnd",		/* our name */
 	1,			/* we support 1 virtqueue */
 	0,			/* config reg size */
-	pci_vtrnd_reset,	/* reset */
-	pci_vtrnd_notify,	/* device-wide qnotify */
+	devemu_vtrnd_reset,	/* reset */
+	devemu_vtrnd_notify,	/* device-wide qnotify */
 	NULL,			/* read virtio config */
 	NULL,			/* write virtio config */
 	NULL,			/* apply negotiated features */
@@ -97,9 +97,9 @@ static struct virtio_consts vtrnd_vi_consts = {
 
 
 static void
-pci_vtrnd_reset(void *vsc)
+devemu_vtrnd_reset(void *vsc)
 {
-	struct pci_vtrnd_softc *sc;
+	struct devemu_vtrnd_softc *sc;
 
 	sc = vsc;
 
@@ -109,10 +109,10 @@ pci_vtrnd_reset(void *vsc)
 
 
 static void
-pci_vtrnd_notify(void *vsc, struct vqueue_info *vq)
+devemu_vtrnd_notify(void *vsc, struct vqueue_info *vq)
 {
 	struct iovec iov;
-	struct pci_vtrnd_softc *sc;
+	struct devemu_vtrnd_softc *sc;
 	int len;
 	uint16_t idx;
 
@@ -143,9 +143,9 @@ pci_vtrnd_notify(void *vsc, struct vqueue_info *vq)
 
 
 static int
-pci_vtrnd_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
+devemu_vtrnd_init(struct vmctx *ctx, struct devemu_inst *di, char *opts)
 {
-	struct pci_vtrnd_softc *sc;
+	struct devemu_vtrnd_softc *sc;
 	int fd;
 	int len;
 	uint8_t v;
@@ -176,9 +176,9 @@ pci_vtrnd_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 		return (1);
 	}
 
-	sc = calloc(1, sizeof(struct pci_vtrnd_softc));
+	sc = calloc(1, sizeof(struct devemu_vtrnd_softc));
 
-	vi_softc_linkup(&sc->vrsc_vs, &vtrnd_vi_consts, sc, pi, &sc->vrsc_vq);
+	vi_softc_linkup(&sc->vrsc_vs, &vtrnd_vi_consts, sc, di, &sc->vrsc_vq);
 	sc->vrsc_vs.vs_mtx = &sc->vrsc_mtx;
 
 	sc->vrsc_vq.vq_qsize = VTRND_RINGSZ;
@@ -187,15 +187,11 @@ pci_vtrnd_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 	sc->vrsc_fd = fd;
 
 	/* initialize config space */
-	pci_set_cfgdata16(pi, PCIR_DEVICE, VIRTIO_DEV_RANDOM);
-	pci_set_cfgdata16(pi, PCIR_VENDOR, VIRTIO_VENDOR);
-	pci_set_cfgdata8(pi, PCIR_CLASS, PCIC_CRYPTO);
-	pci_set_cfgdata16(pi, PCIR_SUBDEV_0, VIRTIO_TYPE_ENTROPY);
-	pci_set_cfgdata16(pi, PCIR_SUBVEND_0, VIRTIO_VENDOR);
+	vi_devemu_init(di, VIRTIO_TYPE_ENTROPY);
 
 	if (vi_intr_init(&sc->vrsc_vs, 1, fbsdrun_virtio_msix()))
 		return (1);
-	vi_set_io_bar(&sc->vrsc_vs, 0);
+	vi_set_io_res(&sc->vrsc_vs, 0);
 
 	return (0);
 }
@@ -210,4 +206,4 @@ struct pci_devemu pci_de_vrnd = {
 	.pe_snapshot =	vi_pci_snapshot,
 #endif
 };
-PCI_EMUL_SET(pci_de_vrnd);
+DEVEMU_SET(pci_de_vrnd);

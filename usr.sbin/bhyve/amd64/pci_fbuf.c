@@ -50,7 +50,7 @@ __FBSDID("$FreeBSD$");
 #include "debug.h"
 #include "console.h"
 #include "inout.h"
-#include "pci_emul.h"
+#include "devemu.h"
 #include "rfb.h"
 #include "vga.h"
 

@@ -1,6 +1,4 @@
 /*-
- * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
- *
  * Copyright (c) 2013  Chris Torek <torek @ torek net>
  * All rights reserved.
  *
@@ -30,8 +28,6 @@
 
 #ifndef	_VIRTIO_H_
 #define	_VIRTIO_H_
-
-#include <machine/atomic.h>
 
 /*
  * These are derived from several virtio specifications.
@@ -188,7 +184,7 @@ struct vring_used {
 /*
  * PFN register shift amount
  */
-#define	VRING_PFN		12
+#define VRING_PFN               12
 
 /*
  * Virtio device types
@@ -215,31 +211,14 @@ struct vring_used {
 #define	VIRTIO_DEV_BLOCK	0x1001
 #define	VIRTIO_DEV_CONSOLE	0x1003
 #define	VIRTIO_DEV_RANDOM	0x1005
-#define	VIRTIO_DEV_SCSI		0x1008
-#define	VIRTIO_DEV_9P		0x1009
+
+#define	VIRTIO_MMIO_MAGIC_NUM	0x74726976
+#define	VIRTIO_MMIO_VERSION_NUM	0x2
 
 /*
- * PCI config space constants.
- *
- * If MSI-X is enabled, the ISR register is generally not used,
- * and the configuration vector and queue vector appear at offsets
- * 20 and 22 with the remaining configuration registers at 24.
- * If MSI-X is not enabled, those two registers disappear and
- * the remaining configuration registers start at offset 20.
+ * MMIO config space constants.
  */
-#define	VTCFG_R_HOSTCAP		0
-#define	VTCFG_R_GUESTCAP	4
-#define	VTCFG_R_PFN		8
-#define	VTCFG_R_QNUM		12
-#define	VTCFG_R_QSEL		14
-#define	VTCFG_R_QNOTIFY		16
-#define	VTCFG_R_STATUS		18
-#define	VTCFG_R_ISR		19
-#define	VTCFG_R_CFGVEC		20
-#define	VTCFG_R_QVEC		22
-#define	VTCFG_R_CFG0		20	/* No MSI-X */
-#define	VTCFG_R_CFG1		24	/* With MSI-X */
-#define	VTCFG_R_MSIX		20
+#define VTCFG_R_CFG		0x100
 
 /*
  * Bits in VTCFG_R_STATUS.  Guests need not actually set any of these,
@@ -258,7 +237,7 @@ struct vring_used {
 #define	VTCFG_ISR_QUEUES	0x01	/* re-scan queues */
 #define	VTCFG_ISR_CONF_CHANGED	0x80	/* configuration changed */
 
-#define	VIRTIO_MSI_NO_VECTOR	0xFFFF
+#define VIRTIO_MSI_NO_VECTOR	0xFFFF
 
 /*
  * Feature flags.
@@ -270,25 +249,24 @@ struct vring_used {
 
 /* From section 2.3, "Virtqueue Configuration", of the virtio specification */
 static inline size_t
-vring_size(u_int qsz)
+vring_size(u_int qsz, uint32_t align)
 {
 	size_t size;
 
 	/* constant 3 below = va_flags, va_idx, va_used_event */
 	size = sizeof(struct virtio_desc) * qsz + sizeof(uint16_t) * (3 + qsz);
-	size = roundup2(size, VRING_ALIGN);
+	size = roundup2(size, align);
 
 	/* constant 3 below = vu_flags, vu_idx, vu_avail_event */
 	size += sizeof(uint16_t) * 3 + sizeof(struct virtio_used) * qsz;
-	size = roundup2(size, VRING_ALIGN);
+	size = roundup2(size, align);
 
 	return (size);
 }
 
 struct vmctx;
-struct pci_devinst;
+struct devemu_inst;
 struct vqueue_info;
-struct vm_snapshot_meta;
 
 /*
  * A virtual device, with some number (possibly 0) of virtual
@@ -328,13 +306,13 @@ struct virtio_softc {
 	struct virtio_consts *vs_vc;	/* constants (see below) */
 	int	vs_flags;		/* VIRTIO_* flags from above */
 	pthread_mutex_t *vs_mtx;	/* POSIX mutex, if any */
-	struct pci_devinst *vs_pi;	/* PCI device instance */
+	struct devemu_inst *vs_di;	/* device instance */
 	uint32_t vs_negotiated_caps;	/* negotiated capabilities */
+	uint32_t vs_align;		/* virtual queue alignment */
 	struct vqueue_info *vs_queues;	/* one per vc_nvq */
 	int	vs_curq;		/* current queue */
+	int	irq;			/* interrupt */
 	uint8_t	vs_status;		/* value from last status write */
-	uint8_t	vs_isr;			/* ISR flags, if not MSI-X */
-	uint16_t vs_msix_cfg_idx;	/* MSI-X vector for config event */
 };
 
 #define	VS_LOCK(vs)							\
@@ -363,10 +341,6 @@ struct virtio_consts {
 	void    (*vc_apply_features)(void *, uint64_t);
 				/* called to apply negotiated features */
 	uint64_t vc_hv_caps;		/* hypervisor-provided capabilities */
-	void	(*vc_pause)(void *);	/* called to pause device activity */
-	void	(*vc_resume)(void *);	/* called to resume device activity */
-	int	(*vc_snapshot)(void *, struct vm_snapshot_meta *);
-				/* called to save / restore device state */
 };
 
 /*
@@ -398,16 +372,13 @@ struct vqueue_info {
 
 	uint16_t vq_flags;	/* flags (see above) */
 	uint16_t vq_last_avail;	/* a recent value of vq_avail->va_idx */
-	uint16_t vq_next_used;	/* index of the next used slot to be filled */
 	uint16_t vq_save_used;	/* saved vq_used->vu_idx; see vq_endchains */
-	uint16_t vq_msix_idx;	/* MSI-X index, or VIRTIO_MSI_NO_VECTOR */
 
 	uint32_t vq_pfn;	/* PFN of virt queue (not shifted!) */
 
 	volatile struct virtio_desc *vq_desc;	/* descriptor array */
 	volatile struct vring_avail *vq_avail;	/* the "avail" ring */
 	volatile struct vring_used *vq_used;	/* the "used" ring */
-
 };
 /* as noted above, these are sort of backwards, name-wise */
 #define VQ_AVAIL_EVENT_IDX(vq) \
@@ -444,62 +415,28 @@ vq_has_descs(struct vqueue_info *vq)
 static inline void
 vq_interrupt(struct virtio_softc *vs, struct vqueue_info *vq)
 {
-
-	if (pci_msix_enabled(vs->vs_pi))
-		pci_generate_msix(vs->vs_pi, vq->vq_msix_idx);
-	else {
-		VS_LOCK(vs);
-		vs->vs_isr |= VTCFG_ISR_QUEUES;
-		pci_generate_msi(vs->vs_pi, 0);
-		pci_lintr_assert(vs->vs_pi);
-		VS_UNLOCK(vs);
-	}
-}
-
-static inline void
-vq_kick_enable(struct vqueue_info *vq)
-{
-
-	vq->vq_used->vu_flags &= ~VRING_USED_F_NO_NOTIFY;
-	/*
-	 * Full memory barrier to make sure the store to vu_flags
-	 * happens before the load from va_idx, which results from
-	 * a subsequent call to vq_has_descs().
-	 */
-	atomic_thread_fence_seq_cst();
-}
-
-static inline void
-vq_kick_disable(struct vqueue_info *vq)
-{
-
-	vq->vq_used->vu_flags |= VRING_USED_F_NO_NOTIFY;
+	VS_LOCK(vs);
+	devemu_lintr_assert(vs->vs_di);
+	VS_UNLOCK(vs);
 }
 
 struct iovec;
 void	vi_softc_linkup(struct virtio_softc *vs, struct virtio_consts *vc,
-			void *dev_softc, struct pci_devinst *pi,
+			void *dev_softc, struct devemu_inst *di,
 			struct vqueue_info *queues);
 int	vi_intr_init(struct virtio_softc *vs, int barnum, int use_msix);
 void	vi_reset_dev(struct virtio_softc *);
-void	vi_set_io_bar(struct virtio_softc *, int);
+void	vi_set_io_res(struct virtio_softc *, int);
 
 int	vq_getchain(struct vqueue_info *vq, uint16_t *pidx,
 		    struct iovec *iov, int n_iov, uint16_t *flags);
-void	vq_retchains(struct vqueue_info *vq, uint16_t n_chains);
-void	vq_relchain_prepare(struct vqueue_info *vq, uint16_t idx,
-			    uint32_t iolen);
-void	vq_relchain_publish(struct vqueue_info *vq);
+void	vq_retchain(struct vqueue_info *vq);
 void	vq_relchain(struct vqueue_info *vq, uint16_t idx, uint32_t iolen);
 void	vq_endchains(struct vqueue_info *vq, int used_all_avail);
 
-uint64_t vi_pci_read(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
-		     int baridx, uint64_t offset, int size);
-void	vi_pci_write(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
-		     int baridx, uint64_t offset, int size, uint64_t value);
-#ifdef BHYVE_SNAPSHOT
-int	vi_pci_snapshot(struct vm_snapshot_meta *meta);
-int	vi_pci_pause(struct vmctx *ctx, struct pci_devinst *pi);
-int	vi_pci_resume(struct vmctx *ctx, struct pci_devinst *pi);
-#endif
+uint64_t vi_devemu_read(struct vmctx *ctx, int vcpu, struct devemu_inst *di,
+			int baridx, uint64_t offset, size_t size);
+void	vi_devemu_write(struct vmctx *ctx, int vcpu, struct devemu_inst *di,
+			int baridx, uint64_t offset, size_t size, uint64_t value);
+void	vi_devemu_init(struct devemu_inst *di, uint32_t type);
 #endif	/* _VIRTIO_H_ */

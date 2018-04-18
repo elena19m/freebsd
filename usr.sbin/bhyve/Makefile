@@ -75,7 +75,14 @@ SRCS=	\
 	vmgenc.c		\
 	xmsr.c			\
 	spinup_ap.c		\
-	iov.c
+	iov.c			\
+	block_if.c		\
+	devemu_virtio_block.c	\
+	devemu_virtio_console.c	\
+	devemu_virtio_net.c	\
+	devemu_virtio_rnd.c	\
+	mevent.c		\
+	sockstream.c
 
 .if ${MK_BHYVE_SNAPSHOT} != "no"
 SRCS+=	snapshot.c
@@ -83,7 +90,7 @@ SRCS+=	snapshot.c
 
 CFLAGS.kernemu_dev.c+=	-I${SRCTOP}/sys/amd64
 
-.PATH:  ${BHYVE_SYSDIR}/sys/amd64/vmm
+.PATH:	${BHYVE_SYSDIR}/sys/${BHYVE_ARCH}/vmm
 SRCS+=	vmm_instruction_emul.c
 
 LIBADD=	vmmapi md pthread z util sbuf cam 9p casper cap_pwd cap_grp
@@ -121,14 +128,16 @@ CFLAGS+= -DBHYVE_SNAPSHOT
 .endif
 
 .include "${BHYVE_SRCTOP}/${BHYVE_ARCH}/Makefile.inc"
-LIBADD+=	vmmapi md pthread
+.include "${BHYVE_SRCTOP}/${BHYVE_BUS}/Makefile.inc"
+
+CFLAGS+=	-I${BHYVE_SRCTOP}
+CFLAGS+= 	-I${BHYVE_SYSDIR}/sys/dev/virtio
+CFLAGS+= 	-I${BHYVE_SYSDIR}/sys/dev/virtio/console
 
 .ifdef GDB_LOG
 CFLAGS+=-DGDB_LOG
 .endif
 
 WARNS?=	2
-
-CFLAGS+= -I${BHYVE_SYSDIR}/sys/dev/virtio/console
 
 .include <bsd.prog.mk>
