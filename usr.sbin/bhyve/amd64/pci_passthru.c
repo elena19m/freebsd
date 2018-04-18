@@ -59,7 +59,7 @@ __FBSDID("$FreeBSD$");
 
 #include <machine/vmm.h>
 #include <vmmapi.h>
-#include "pci_emul.h"
+#include "devemu.h"
 #include "mem.h"
 
 #ifndef _PATH_DEVPCI
@@ -84,7 +84,7 @@ static int iofd = -1;
 static int memfd = -1;
 
 struct passthru_softc {
-	struct pci_devinst *psc_pi;
+	struct devemu_inst *psc_pi;
 	struct pcibar psc_bar[PCI_BARMAX + 1];
 	struct {
 		int		capoff;

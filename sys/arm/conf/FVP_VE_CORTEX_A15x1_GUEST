@@ -75,8 +75,8 @@ options 	INTRNG
 # VirtIO
 device		virtio
 device		virtio_mmio
-#device		virtio_random
-#device		virtio_console
+device		virtio_random
+device		virtio_console
 device		vtnet
 device		virtio_blk
 

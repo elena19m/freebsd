@@ -37,7 +37,7 @@ __FBSDID("$FreeBSD$");
 #include <vmmapi.h>
 
 #include "ioapic.h"
-#include "pci_emul.h"
+#include "devemu.h"
 #include "pci_lpc.h"
 
 /*

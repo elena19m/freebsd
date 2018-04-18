@@ -212,9 +212,6 @@ struct vring_used {
 #define	VIRTIO_DEV_CONSOLE	0x1003
 #define	VIRTIO_DEV_RANDOM	0x1005
 
-#define	VIRTIO_MMIO_MAGIC_NUM	0x74726976
-#define	VIRTIO_MMIO_VERSION_NUM	0x2
-
 /*
  * MMIO config space constants.
  */
@@ -392,6 +389,7 @@ struct vqueue_info {
 static inline int
 vq_ring_ready(struct vqueue_info *vq)
 {
+
 	return (vq->vq_flags & VQ_ALLOC);
 }
 
@@ -402,29 +400,18 @@ vq_ring_ready(struct vqueue_info *vq)
 static inline int
 vq_has_descs(struct vqueue_info *vq)
 {
+
 	return (vq_ring_ready(vq) && vq->vq_last_avail !=
 	    vq->vq_avail->va_idx);
 }
 
 /*
- * TODO
  * Deliver an interrupt to guest on the given virtual queue
  * (if possible, or a generic MSI interrupt if not using MSI-X).
  */
 static inline void
 vq_interrupt(struct virtio_softc *vs, struct vqueue_info *vq)
 {
-#if 0
-	if (pci_msix_enabled(vs->vs_pi))
-		pci_generate_msix(vs->vs_pi, vq->vq_msix_idx);
-	else {
-		VS_LOCK(vs);
-		vs->vs_isr |= VTCFG_ISR_QUEUES;
-		pci_generate_msi(vs->vs_pi, 0);
-		pci_lintr_assert(vs->vs_pi);
-		VS_UNLOCK(vs);
-	}
-#endif
 	VS_LOCK(vs);
 	mmio_lintr_assert(vs->vs_mi);
 	VS_UNLOCK(vs);
@@ -436,7 +423,7 @@ void	vi_softc_linkup(struct virtio_softc *vs, struct virtio_consts *vc,
 			struct vqueue_info *queues);
 int	vi_intr_init(struct virtio_softc *vs);
 void	vi_reset_dev(struct virtio_softc *);
-void	vi_set_mmio_mem(struct virtio_softc *);
+void	vi_set_io_res(struct virtio_softc *, int);
 
 int	vq_getchain(struct vqueue_info *vq, uint16_t *pidx,
 		    struct iovec *iov, int n_iov, uint16_t *flags);

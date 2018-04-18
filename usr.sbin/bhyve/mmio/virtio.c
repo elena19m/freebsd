@@ -1,9 +1,6 @@
 /*-
- * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
- *
  * Copyright (c) 2013  Chris Torek <torek @ torek net>
  * All rights reserved.
- * Copyright (c) 2019 Joyent, Inc.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -33,18 +30,24 @@ __FBSDID("$FreeBSD$");
 #include <sys/param.h>
 #include <sys/uio.h>
 
-#include <machine/atomic.h>
-#include <machine/vmm_snapshot.h>
-
 #include <stdio.h>
 #include <stdint.h>
 #include <pthread.h>
 #include <pthread_np.h>
 
 #include "bhyverun.h"
-#include "debug.h"
-#include "pci_emul.h"
+#include "mmio_emul.h"
+#include "mmio_irq.h"
 #include "virtio.h"
+#include "virtio_mmio.h"
+#include "vmmapi.h"
+
+static int debug_virtio = 0;
+
+#define DPRINTF(fmt, ...) if (debug_virtio) printf(fmt, ##__VA_ARGS__)
+#define CFG_RW_DBG(offset, value)						\
+	DPRINTF("{device} | %-60s | %-35s | %-30s (%jx): value = %jx\r\n",	\
+		__FILE__, __func__, #offset, (uintmax_t)offset, (uintmax_t)value);
 
 /*
  * Functions for dealing with generalized "virtual devices" as
@@ -56,7 +59,7 @@ __FBSDID("$FreeBSD$");
  * front of virtio-based device softc" constraint, let's use
  * this to convert.
  */
-#define	DEV_SOFTC(vs) ((void *)(vs))
+#define DEV_SOFTC(vs) ((void *)(vs))
 
 /*
  * Link a virtio_softc to its constants, the device softc, and
@@ -64,7 +67,7 @@ __FBSDID("$FreeBSD$");
  */
 void
 vi_softc_linkup(struct virtio_softc *vs, struct virtio_consts *vc,
-		void *dev_softc, struct pci_devinst *pi,
+		void *dev_softc, struct mmio_devinst *mi,
 		struct vqueue_info *queues)
 {
 	int i;
@@ -72,8 +75,8 @@ vi_softc_linkup(struct virtio_softc *vs, struct virtio_consts *vc,
 	/* vs and dev_softc addresses must match */
 	assert((void *)vs == dev_softc);
 	vs->vs_vc = vc;
-	vs->vs_pi = pi;
-	pi->pi_arg = vs;
+	vs->vs_mi = mi;
+	mi->mi_arg = vs;
 
 	vs->vs_queues = queues;
 	for (i = 0; i < vc->vc_nvq; i++) {
@@ -88,8 +91,6 @@ vi_softc_linkup(struct virtio_softc *vs, struct virtio_consts *vc,
  * internal pointers, we just clear the VQ_ALLOC flag).
  *
  * It resets negotiated features to "none".
- *
- * If MSI-X is enabled, this also resets all the vectors to NO_VECTOR.
  */
 void
 vi_reset_dev(struct virtio_softc *vs)
@@ -104,64 +105,29 @@ vi_reset_dev(struct virtio_softc *vs)
 	for (vq = vs->vs_queues, i = 0; i < nvq; vq++, i++) {
 		vq->vq_flags = 0;
 		vq->vq_last_avail = 0;
-		vq->vq_next_used = 0;
 		vq->vq_save_used = 0;
 		vq->vq_pfn = 0;
-		vq->vq_msix_idx = VIRTIO_MSI_NO_VECTOR;
 	}
 	vs->vs_negotiated_caps = 0;
 	vs->vs_curq = 0;
 	/* vs->vs_status = 0; -- redundant */
-	if (vs->vs_isr)
-		pci_lintr_deassert(vs->vs_pi);
-	vs->vs_isr = 0;
-	vs->vs_msix_cfg_idx = VIRTIO_MSI_NO_VECTOR;
+	mmio_lintr_deassert(vs->vs_mi);
 }
 
-/*
- * Set I/O BAR (usually 0) to map PCI config registers.
- */
 void
-vi_set_io_bar(struct virtio_softc *vs, int barnum)
+vi_set_mmio_mem(struct virtio_softc *vs)
 {
-	size_t size;
-
-	/*
-	 * ??? should we use CFG0 if MSI-X is disabled?
-	 * Existing code did not...
-	 */
-	size = VTCFG_R_CFG1 + vs->vs_vc->vc_cfgsize;
-	pci_emul_alloc_bar(vs->vs_pi, barnum, PCIBAR_IO, size);
+	mmio_emul_alloc_mem(vs->vs_mi);
 }
 
 /*
- * Initialize MSI-X vector capabilities if we're to use MSI-X,
- * or MSI capabilities if not.
- *
- * We assume we want one MSI-X vector per queue, here, plus one
- * for the config vec.
+ * Initialize interrupts for MMIO
  */
 int
-vi_intr_init(struct virtio_softc *vs, int barnum, int use_msix)
+vi_intr_init(struct virtio_softc *vs)
 {
-	int nvec;
-
-	if (use_msix) {
-		vs->vs_flags |= VIRTIO_USE_MSIX;
-		VS_LOCK(vs);
-		vi_reset_dev(vs); /* set all vectors to NO_VECTOR */
-		VS_UNLOCK(vs);
-		nvec = vs->vs_vc->vc_nvq + 1;
-		if (pci_emul_add_msixcap(vs->vs_pi, nvec, barnum))
-			return (1);
-	} else
-		vs->vs_flags &= ~VIRTIO_USE_MSIX;
-
-	/* Only 1 MSI vector for bhyve */
-	pci_emul_add_msicap(vs->vs_pi, 1);
-
-	/* Legacy interrupts are mandatory for virtio devices */
-	pci_lintr_request(vs->vs_pi);
+	/* activate interrupts */
+	mmio_lintr_request(vs->vs_mi);
 
 	return (0);
 }
@@ -182,8 +148,8 @@ vi_vq_init(struct virtio_softc *vs, uint32_t pfn)
 	vq = &vs->vs_queues[vs->vs_curq];
 	vq->vq_pfn = pfn;
 	phys = (uint64_t)pfn << VRING_PFN;
-	size = vring_size(vq->vq_qsize);
-	base = paddr_guest2host(vs->vs_pi->pi_vmctx, phys, size);
+	size = vring_size(vq->vq_qsize, vs->vs_align);
+	base = paddr_guest2host(vs->vs_mi->mi_vmctx, phys, size);
 
 	/* First page(s) are descriptors... */
 	vq->vq_desc = (struct virtio_desc *)base;
@@ -194,7 +160,7 @@ vi_vq_init(struct virtio_softc *vs, uint32_t pfn)
 	base += (2 + vq->vq_qsize + 1) * sizeof(uint16_t);
 
 	/* Then it's rounded up to the next page... */
-	base = (char *)roundup2((uintptr_t)base, VRING_ALIGN);
+	base = (char *)roundup2((uintptr_t)base, vs->vs_align);
 
 	/* ... and the last page(s) are the used ring. */
 	vq->vq_used = (struct vring_used *)base;
@@ -202,7 +168,6 @@ vi_vq_init(struct virtio_softc *vs, uint32_t pfn)
 	/* Mark queue as allocated, and start at 0 when we use it. */
 	vq->vq_flags = VQ_ALLOC;
 	vq->vq_last_avail = 0;
-	vq->vq_next_used = 0;
 	vq->vq_save_used = 0;
 }
 
@@ -283,7 +248,7 @@ vq_getchain(struct vqueue_info *vq, uint16_t *pidx,
          * the guest has written are valid (including all their
          * vd_next fields and vd_flags).
 	 *
-	 * Compute (va_idx - last_avail) in integers mod 2**16.  This is
+	 * Compute (last_avail - va_idx) in integers mod 2**16.  This is
 	 * the number of descriptors the device has made available
 	 * since the last time we updated vq->vq_last_avail.
 	 *
@@ -296,8 +261,8 @@ vq_getchain(struct vqueue_info *vq, uint16_t *pidx,
 		return (0);
 	if (ndesc > vq->vq_qsize) {
 		/* XXX need better way to diagnose issues */
-		EPRINTLN(
-		    "%s: ndesc (%u) out of range, driver confused?",
+		fprintf(stderr,
+		    "%s: ndesc (%u) out of range, driver confused?\r\n",
 		    name, (u_int)ndesc);
 		return (-1);
 	}
@@ -310,14 +275,14 @@ vq_getchain(struct vqueue_info *vq, uint16_t *pidx,
 	 * check whether we're re-visiting a previously visited
 	 * index, but we just abort if the count gets excessive.
 	 */
-	ctx = vs->vs_pi->pi_vmctx;
+	ctx = vs->vs_mi->mi_vmctx;
 	*pidx = next = vq->vq_avail->va_ring[idx & (vq->vq_qsize - 1)];
 	vq->vq_last_avail++;
 	for (i = 0; i < VQ_MAX_DESCRIPTORS; next = vdir->vd_next) {
 		if (next >= vq->vq_qsize) {
-			EPRINTLN(
+			fprintf(stderr,
 			    "%s: descriptor index %u out of range, "
-			    "driver confused?",
+			    "driver confused?\r\n",
 			    name, next);
 			return (-1);
 		}
@@ -327,17 +292,17 @@ vq_getchain(struct vqueue_info *vq, uint16_t *pidx,
 			i++;
 		} else if ((vs->vs_vc->vc_hv_caps &
 		    VIRTIO_RING_F_INDIRECT_DESC) == 0) {
-			EPRINTLN(
+			fprintf(stderr,
 			    "%s: descriptor has forbidden INDIRECT flag, "
-			    "driver confused?",
+			    "driver confused?\r\n",
 			    name);
 			return (-1);
 		} else {
 			n_indir = vdir->vd_len / 16;
 			if ((vdir->vd_len & 0xf) || n_indir == 0) {
-				EPRINTLN(
+				fprintf(stderr,
 				    "%s: invalid indir len 0x%x, "
-				    "driver confused?",
+				    "driver confused?\r\n",
 				    name, (u_int)vdir->vd_len);
 				return (-1);
 			}
@@ -354,9 +319,9 @@ vq_getchain(struct vqueue_info *vq, uint16_t *pidx,
 			for (;;) {
 				vp = &vindir[next];
 				if (vp->vd_flags & VRING_DESC_F_INDIRECT) {
-					EPRINTLN(
+					fprintf(stderr,
 					    "%s: indirect desc has INDIR flag,"
-					    " driver confused?",
+					    " driver confused?\r\n",
 					    name);
 					return (-1);
 				}
@@ -367,9 +332,9 @@ vq_getchain(struct vqueue_info *vq, uint16_t *pidx,
 					break;
 				next = vp->vd_next;
 				if (next >= n_indir) {
-					EPRINTLN(
+					fprintf(stderr,
 					    "%s: invalid next %u > %u, "
-					    "driver confused?",
+					    "driver confused?\r\n",
 					    name, (u_int)next, n_indir);
 					return (-1);
 				}
@@ -379,59 +344,23 @@ vq_getchain(struct vqueue_info *vq, uint16_t *pidx,
 			return (i);
 	}
 loopy:
-	EPRINTLN(
-	    "%s: descriptor loop? count > %d - driver confused?",
+	fprintf(stderr,
+	    "%s: descriptor loop? count > %d - driver confused?\r\n",
 	    name, i);
 	return (-1);
 }
 
 /*
- * Return the first n_chain request chains back to the available queue.
+ * Return the currently-first request chain back to the available queue.
  *
- * (These chains are the ones you handled when you called vq_getchain()
+ * (This chain is the one you handled when you called vq_getchain()
  * and used its positive return value.)
  */
 void
-vq_retchains(struct vqueue_info *vq, uint16_t n_chains)
+vq_retchain(struct vqueue_info *vq)
 {
 
-	vq->vq_last_avail -= n_chains;
-}
-
-void
-vq_relchain_prepare(struct vqueue_info *vq, uint16_t idx, uint32_t iolen)
-{
-	volatile struct vring_used *vuh;
-	volatile struct virtio_used *vue;
-	uint16_t mask;
-
-	/*
-	 * Notes:
-	 *  - mask is N-1 where N is a power of 2 so computes x % N
-	 *  - vuh points to the "used" data shared with guest
-	 *  - vue points to the "used" ring entry we want to update
-	 *
-	 * (I apologize for the two fields named vu_idx; the
-	 * virtio spec calls the one that vue points to, "id"...)
-	 */
-	mask = vq->vq_qsize - 1;
-	vuh = vq->vq_used;
-
-	vue = &vuh->vu_ring[vq->vq_next_used++ & mask];
-	vue->vu_idx = idx;
-	vue->vu_tlen = iolen;
-}
-
-void
-vq_relchain_publish(struct vqueue_info *vq)
-{
-	/*
-	 * Ensure the used descriptor is visible before updating the index.
-	 * This is necessary on ISAs with memory ordering less strict than x86
-	 * (and even on x86 to act as a compiler barrier).
-	 */
-	atomic_thread_fence_rel();
-	vq->vq_used->vu_idx = vq->vq_next_used;
+	vq->vq_last_avail--;
 }
 
 /*
@@ -444,8 +373,28 @@ vq_relchain_publish(struct vqueue_info *vq)
 void
 vq_relchain(struct vqueue_info *vq, uint16_t idx, uint32_t iolen)
 {
-	vq_relchain_prepare(vq, idx, iolen);
-	vq_relchain_publish(vq);
+	uint16_t uidx, mask;
+	volatile struct vring_used *vuh;
+	volatile struct virtio_used *vue;
+
+	/*
+	 * Notes:
+	 *  - mask is N-1 where N is a power of 2 so computes x % N
+	 *  - vuh points to the "used" data shared with guest
+	 *  - vue points to the "used" ring entry we want to update
+	 *  - head is the same value we compute in vq_iovecs().
+	 *
+	 * (I apologize for the two fields named vu_idx; the
+	 * virtio spec calls the one that vue points to, "id"...)
+	 */
+	mask = vq->vq_qsize - 1;
+	vuh = vq->vq_used;
+
+	uidx = vuh->vu_idx;
+	vue = &vuh->vu_ring[uidx++ & mask];
+	vue->vu_idx = idx;
+	vue->vu_tlen = iolen;
+	vuh->vu_idx = uidx;
 }
 
 /*
@@ -482,13 +431,6 @@ vq_endchains(struct vqueue_info *vq, int used_all_avail)
 	vs = vq->vq_vs;
 	old_idx = vq->vq_save_used;
 	vq->vq_save_used = new_idx = vq->vq_used->vu_idx;
-
-	/*
-	 * Use full memory barrier between vu_idx store from preceding
-	 * vq_relchain() call and the loads from VQ_USED_EVENT_IDX() or
-	 * va_flags below.
-	 */
-	atomic_thread_fence_seq_cst();
 	if (used_all_avail &&
 	    (vs->vs_negotiated_caps & VIRTIO_F_NOTIFY_ON_EMPTY))
 		intr = 1;
@@ -508,73 +450,22 @@ vq_endchains(struct vqueue_info *vq, int used_all_avail)
 		vq_interrupt(vs, vq);
 }
 
-/* Note: these are in sorted order to make for a fast search */
-static struct config_reg {
-	uint16_t	cr_offset;	/* register offset */
-	uint8_t		cr_size;	/* size (bytes) */
-	uint8_t		cr_ro;		/* true => reg is read only */
-	const char	*cr_name;	/* name of reg */
-} config_regs[] = {
-	{ VTCFG_R_HOSTCAP,	4, 1, "HOSTCAP" },
-	{ VTCFG_R_GUESTCAP,	4, 0, "GUESTCAP" },
-	{ VTCFG_R_PFN,		4, 0, "PFN" },
-	{ VTCFG_R_QNUM,		2, 1, "QNUM" },
-	{ VTCFG_R_QSEL,		2, 0, "QSEL" },
-	{ VTCFG_R_QNOTIFY,	2, 0, "QNOTIFY" },
-	{ VTCFG_R_STATUS,	1, 0, "STATUS" },
-	{ VTCFG_R_ISR,		1, 0, "ISR" },
-	{ VTCFG_R_CFGVEC,	2, 0, "CFGVEC" },
-	{ VTCFG_R_QVEC,		2, 0, "QVEC" },
-};
-
-static inline struct config_reg *
-vi_find_cr(int offset) {
-	u_int hi, lo, mid;
-	struct config_reg *cr;
-
-	lo = 0;
-	hi = sizeof(config_regs) / sizeof(*config_regs) - 1;
-	while (hi >= lo) {
-		mid = (hi + lo) >> 1;
-		cr = &config_regs[mid];
-		if (cr->cr_offset == offset)
-			return (cr);
-		if (cr->cr_offset < offset)
-			lo = mid + 1;
-		else
-			hi = mid - 1;
-	}
-	return (NULL);
-}
-
 /*
  * Handle pci config space reads.
- * If it's to the MSI-X info, do that.
+ * If it's to the interrupt system, do that
  * If it's part of the virtio standard stuff, do that.
  * Otherwise dispatch to the actual driver.
  */
 uint64_t
-vi_pci_read(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
-	    int baridx, uint64_t offset, int size)
+vi_mmio_read(struct vmctx *ctx, int vcpu, struct mmio_devinst *mi,
+	     uint64_t offset, size_t size)
 {
-	struct virtio_softc *vs = pi->pi_arg;
+	struct virtio_softc *vs = mi->mi_arg;
 	struct virtio_consts *vc;
-	struct config_reg *cr;
-	uint64_t virtio_config_size, max;
 	const char *name;
-	uint32_t newoff;
+	uint64_t sel;
 	uint32_t value;
 	int error;
-
-	if (vs->vs_flags & VIRTIO_USE_MSIX) {
-		if (baridx == pci_msix_table_bar(pi) ||
-		    baridx == pci_msix_pba_bar(pi)) {
-			return (pci_emul_msix_tread(pi, offset, size));
-		}
-	}
-
-	/* XXX probably should do something better than just assert() */
-	assert(baridx == 0);
 
 	if (vs->vs_mtx)
 		pthread_mutex_lock(vs->vs_mtx);
@@ -586,81 +477,70 @@ vi_pci_read(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
 	if (size != 1 && size != 2 && size != 4)
 		goto bad;
 
-	if (pci_msix_enabled(pi))
-		virtio_config_size = VTCFG_R_CFG1;
-	else
-		virtio_config_size = VTCFG_R_CFG0;
-
-	if (offset >= virtio_config_size) {
-		/*
-		 * Subtract off the standard size (including MSI-X
-		 * registers if enabled) and dispatch to underlying driver.
-		 * If that fails, fall into general code.
-		 */
-		newoff = offset - virtio_config_size;
-		max = vc->vc_cfgsize ? vc->vc_cfgsize : 0x100000000;
-		if (newoff + size > max)
+	if (offset >= VIRTIO_MMIO_CONFIG) {
+		error = (*vc->vc_cfgread)(DEV_SOFTC(vs),
+					  offset - VIRTIO_MMIO_CONFIG,
+					  size,
+					  &value);
+		if (error)
 			goto bad;
-		error = (*vc->vc_cfgread)(DEV_SOFTC(vs), newoff, size, &value);
-		if (!error)
-			goto done;
-	}
 
-bad:
-	cr = vi_find_cr(offset);
-	if (cr == NULL || cr->cr_size != size) {
-		if (cr != NULL) {
-			/* offset must be OK, so size must be bad */
-			EPRINTLN(
-			    "%s: read from %s: bad size %d",
-			    name, cr->cr_name, size);
-		} else {
-			EPRINTLN(
-			    "%s: read from bad offset/size %jd/%d",
-			    name, (uintmax_t)offset, size);
-		}
+		CFG_RW_DBG(offset, value);
 		goto done;
 	}
 
 	switch (offset) {
-	case VTCFG_R_HOSTCAP:
-		value = vc->vc_hv_caps;
+	case VIRTIO_MMIO_MAGIC_VALUE:
+		value = mmio_get_cfgreg(mi, offset);
+		CFG_RW_DBG(VIRTIO_MMIO_MAGIC_VALUE, value);
 		break;
-	case VTCFG_R_GUESTCAP:
-		value = vs->vs_negotiated_caps;
+	case VIRTIO_MMIO_VERSION:
+		value = mmio_get_cfgreg(mi, offset);
+		CFG_RW_DBG(VIRTIO_MMIO_VERSION, value);
 		break;
-	case VTCFG_R_PFN:
-		if (vs->vs_curq < vc->vc_nvq)
-			value = vs->vs_queues[vs->vs_curq].vq_pfn;
+	case VIRTIO_MMIO_DEVICE_ID:
+		value = mmio_get_cfgreg(mi, offset);
+		CFG_RW_DBG(VIRTIO_MMIO_DEVICE_ID, value);
 		break;
-	case VTCFG_R_QNUM:
+	case VIRTIO_MMIO_VENDOR_ID:
+		value = mmio_get_cfgreg(mi, offset);
+		CFG_RW_DBG(VIRTIO_MMIO_VENDOR_ID, value);
+		break;
+	case VIRTIO_MMIO_INTERRUPT_STATUS:
+		value = mmio_get_cfgreg(mi, offset);
+		CFG_RW_DBG(VIRTIO_MMIO_INTERRUPT_STATUS, value);
+		break;
+	case VIRTIO_MMIO_STATUS:
+		value = mmio_get_cfgreg(mi, offset);
+		CFG_RW_DBG(VIRTIO_MMIO_STATUS, value);
+		break;
+	case VIRTIO_MMIO_HOST_FEATURES:
+		sel = mmio_get_cfgreg(mi, VIRTIO_MMIO_HOST_FEATURES_SEL);
+		value = (vc->vc_hv_caps >> (32 * sel)) & 0xffffffff;
+		CFG_RW_DBG(VIRTIO_MMIO_HOST_FEATURES, value);
+		break;
+	case VIRTIO_MMIO_QUEUE_NUM_MAX:
 		value = vs->vs_curq < vc->vc_nvq ?
-		    vs->vs_queues[vs->vs_curq].vq_qsize : 0;
+			vs->vs_queues[vs->vs_curq].vq_qsize : 0;
+		CFG_RW_DBG(VIRTIO_MMIO_QUEUE_NUM_MAX, value);
 		break;
-	case VTCFG_R_QSEL:
-		value = vs->vs_curq;
-		break;
-	case VTCFG_R_QNOTIFY:
-		value = 0;	/* XXX */
-		break;
-	case VTCFG_R_STATUS:
-		value = vs->vs_status;
-		break;
-	case VTCFG_R_ISR:
-		value = vs->vs_isr;
-		vs->vs_isr = 0;		/* a read clears this flag */
-		if (value)
-			pci_lintr_deassert(pi);
-		break;
-	case VTCFG_R_CFGVEC:
-		value = vs->vs_msix_cfg_idx;
-		break;
-	case VTCFG_R_QVEC:
+	case VIRTIO_MMIO_QUEUE_PFN:
 		value = vs->vs_curq < vc->vc_nvq ?
-		    vs->vs_queues[vs->vs_curq].vq_msix_idx :
-		    VIRTIO_MSI_NO_VECTOR;
+			vs->vs_queues[vs->vs_curq].vq_pfn : 0;
+		CFG_RW_DBG(VIRTIO_MMIO_QUEUE_PFN, value);
+		break;
+	default:
+		CFG_RW_DBG(offset, value);
+		goto bad;
 		break;
 	}
+
+	goto done;
+
+bad:
+	fprintf(stderr, "%s: read from bad offset/size: %jd/%d\r\n",
+		name, (uintmax_t)offset, size);
+
 done:
 	if (vs->vs_mtx)
 		pthread_mutex_unlock(vs->vs_mtx);
@@ -674,28 +554,14 @@ done:
  * Otherwise dispatch to the actual driver.
  */
 void
-vi_pci_write(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
-	     int baridx, uint64_t offset, int size, uint64_t value)
+vi_mmio_write(struct vmctx *ctx, int vcpu, struct mmio_devinst *mi,
+	     uint64_t offset, size_t size, uint64_t value)
 {
-	struct virtio_softc *vs = pi->pi_arg;
+	struct virtio_softc *vs = mi->mi_arg;
 	struct vqueue_info *vq;
 	struct virtio_consts *vc;
-	struct config_reg *cr;
-	uint64_t virtio_config_size, max;
 	const char *name;
-	uint32_t newoff;
 	int error;
-
-	if (vs->vs_flags & VIRTIO_USE_MSIX) {
-		if (baridx == pci_msix_table_bar(pi) ||
-		    baridx == pci_msix_pba_bar(pi)) {
-			pci_emul_msix_twrite(pi, offset, size, value);
-			return;
-		}
-	}
-
-	/* XXX probably should do something better than just assert() */
-	assert(baridx == 0);
 
 	if (vs->vs_mtx)
 		pthread_mutex_lock(vs->vs_mtx);
@@ -706,59 +572,56 @@ vi_pci_write(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
 	if (size != 1 && size != 2 && size != 4)
 		goto bad;
 
-	if (pci_msix_enabled(pi))
-		virtio_config_size = VTCFG_R_CFG1;
-	else
-		virtio_config_size = VTCFG_R_CFG0;
-
-	if (offset >= virtio_config_size) {
-		/*
-		 * Subtract off the standard size (including MSI-X
-		 * registers if enabled) and dispatch to underlying driver.
-		 */
-		newoff = offset - virtio_config_size;
-		max = vc->vc_cfgsize ? vc->vc_cfgsize : 0x100000000;
-		if (newoff + size > max)
+	if (offset >= VIRTIO_MMIO_CONFIG) {
+		error = (*vc->vc_cfgwrite)(DEV_SOFTC(vs),
+					   offset - VIRTIO_MMIO_CONFIG,
+					   size, value);
+		if (error)
 			goto bad;
-		error = (*vc->vc_cfgwrite)(DEV_SOFTC(vs), newoff, size, value);
-		if (!error)
-			goto done;
-	}
 
-bad:
-	cr = vi_find_cr(offset);
-	if (cr == NULL || cr->cr_size != size || cr->cr_ro) {
-		if (cr != NULL) {
-			/* offset must be OK, wrong size and/or reg is R/O */
-			if (cr->cr_size != size)
-				EPRINTLN(
-				    "%s: write to %s: bad size %d",
-				    name, cr->cr_name, size);
-			if (cr->cr_ro)
-				EPRINTLN(
-				    "%s: write to read-only reg %s",
-				    name, cr->cr_name);
-		} else {
-			EPRINTLN(
-			    "%s: write to bad offset/size %jd/%d",
-			    name, (uintmax_t)offset, size);
-		}
+		CFG_RW_DBG(offset, value);
 		goto done;
 	}
 
 	switch (offset) {
-	case VTCFG_R_GUESTCAP:
+	case VIRTIO_MMIO_HOST_FEATURES_SEL:
+		CFG_RW_DBG(VIRTIO_MMIO_HOST_FEATURES_SEL, value);
+		mmio_set_cfgreg(mi, offset, value);
+		break;
+	case VIRTIO_MMIO_GUEST_FEATURES_SEL:
+		CFG_RW_DBG(VIRTIO_MMIO_GUEST_FEATURES_SEL, value);
+		mmio_set_cfgreg(mi, offset, value);
+		break;
+	case VIRTIO_MMIO_INTERRUPT_ACK:
+		CFG_RW_DBG(VIRTIO_MMIO_INTERRUPT_ACK, value);
+		mmio_lintr_deassert(mi);
+		mmio_set_cfgreg(mi, offset, value);
+		break;
+	case VIRTIO_MMIO_STATUS:
+		CFG_RW_DBG(VIRTIO_MMIO_STATUS, value);
+		mmio_set_cfgreg(mi, offset, value);
+		vs->vs_status = value;
+		if (value == 0)
+			(*vc->vc_reset)(DEV_SOFTC(vs));
+		break;
+	case VIRTIO_MMIO_QUEUE_NUM:
+		CFG_RW_DBG(VIRTIO_MMIO_QUEUE_NUM, value);
+		mmio_set_cfgreg(mi, offset, value);
+		vq = &vs->vs_queues[vs->vs_curq];
+		vq->vq_qsize = value;
+		break;
+	case VIRTIO_MMIO_GUEST_FEATURES:
+		CFG_RW_DBG(VIRTIO_MMIO_GUEST_FEATURES, value);
+		mmio_set_cfgreg(mi, offset, value);
 		vs->vs_negotiated_caps = value & vc->vc_hv_caps;
 		if (vc->vc_apply_features)
 			(*vc->vc_apply_features)(DEV_SOFTC(vs),
 			    vs->vs_negotiated_caps);
 		break;
-	case VTCFG_R_PFN:
-		if (vs->vs_curq >= vc->vc_nvq)
-			goto bad_qindex;
-		vi_vq_init(vs, value);
-		break;
-	case VTCFG_R_QSEL:
+	/* TODO: add VIRTIO_MMIO_GUEST_PAGE_SIZE */
+	case VIRTIO_MMIO_QUEUE_SEL:
+		CFG_RW_DBG(VIRTIO_MMIO_QUEUE_SEL, value);
+		mmio_set_cfgreg(mi, offset, value);
 		/*
 		 * Note that the guest is allowed to select an
 		 * invalid queue; we just need to return a QNUM
@@ -766,191 +629,50 @@ bad:
 		 */
 		vs->vs_curq = value;
 		break;
-	case VTCFG_R_QNOTIFY:
+	case VIRTIO_MMIO_QUEUE_ALIGN:
+		CFG_RW_DBG(VIRTIO_MMIO_QUEUE_ALIGN, value);
+		mmio_set_cfgreg(mi, offset, value);
+		vs->vs_align = value;
+		break;
+	case VIRTIO_MMIO_QUEUE_PFN:
+		CFG_RW_DBG(VIRTIO_MMIO_QUEUE_PFN, value);
+		mmio_set_cfgreg(mi, offset, value);
+		if (vs->vs_curq >= vc->vc_nvq)
+			fprintf(stderr, "%s: curq %d >= max %d\r\n",
+				name, vs->vs_curq, vc->vc_nvq);
+		else
+			vi_vq_init(vs, value);
+		break;
+	case VIRTIO_MMIO_QUEUE_NOTIFY:
+		CFG_RW_DBG(VIRTIO_MMIO_QUEUE_NOTIFY, value);
 		if (value >= vc->vc_nvq) {
-			EPRINTLN("%s: queue %d notify out of range",
+			fprintf(stderr, "%s: queue %d notify out of range\r\n",
 				name, (int)value);
-			goto done;
+			break;
 		}
+		mmio_set_cfgreg(mi, offset, value);
 		vq = &vs->vs_queues[value];
 		if (vq->vq_notify)
 			(*vq->vq_notify)(DEV_SOFTC(vs), vq);
 		else if (vc->vc_qnotify)
 			(*vc->vc_qnotify)(DEV_SOFTC(vs), vq);
 		else
-			EPRINTLN(
-			    "%s: qnotify queue %d: missing vq/vc notify",
+			fprintf(stderr,
+			    "%s: qnotify queue %d: missing vq/vc notify\r\n",
 				name, (int)value);
 		break;
-	case VTCFG_R_STATUS:
-		vs->vs_status = value;
-		if (value == 0)
-			(*vc->vc_reset)(DEV_SOFTC(vs));
-		break;
-	case VTCFG_R_CFGVEC:
-		vs->vs_msix_cfg_idx = value;
-		break;
-	case VTCFG_R_QVEC:
-		if (vs->vs_curq >= vc->vc_nvq)
-			goto bad_qindex;
-		vq = &vs->vs_queues[vs->vs_curq];
-		vq->vq_msix_idx = value;
+	default:
+		CFG_RW_DBG(offset, value);
+		goto bad;
 		break;
 	}
+
 	goto done;
 
-bad_qindex:
-	EPRINTLN(
-	    "%s: write config reg %s: curq %d >= max %d",
-	    name, cr->cr_name, vs->vs_curq, vc->vc_nvq);
+bad:
+	fprintf(stderr, "%s: write to bad offset/size %jd/%d\r\n",
+		name, (uintmax_t)offset, size);
 done:
 	if (vs->vs_mtx)
 		pthread_mutex_unlock(vs->vs_mtx);
 }
-
-#ifdef BHYVE_SNAPSHOT
-int
-vi_pci_pause(struct vmctx *ctx, struct pci_devinst *pi)
-{
-	struct virtio_softc *vs;
-	struct virtio_consts *vc;
-
-	vs = pi->pi_arg;
-	vc = vs->vs_vc;
-
-	vc = vs->vs_vc;
-	assert(vc->vc_pause != NULL);
-	(*vc->vc_pause)(DEV_SOFTC(vs));
-
-	return (0);
-}
-
-int
-vi_pci_resume(struct vmctx *ctx, struct pci_devinst *pi)
-{
-	struct virtio_softc *vs;
-	struct virtio_consts *vc;
-
-	vs = pi->pi_arg;
-	vc = vs->vs_vc;
-
-	vc = vs->vs_vc;
-	assert(vc->vc_resume != NULL);
-	(*vc->vc_resume)(DEV_SOFTC(vs));
-
-	return (0);
-}
-
-static int
-vi_pci_snapshot_softc(struct virtio_softc *vs, struct vm_snapshot_meta *meta)
-{
-	int ret;
-
-	SNAPSHOT_VAR_OR_LEAVE(vs->vs_flags, meta, ret, done);
-	SNAPSHOT_VAR_OR_LEAVE(vs->vs_negotiated_caps, meta, ret, done);
-	SNAPSHOT_VAR_OR_LEAVE(vs->vs_curq, meta, ret, done);
-	SNAPSHOT_VAR_OR_LEAVE(vs->vs_status, meta, ret, done);
-	SNAPSHOT_VAR_OR_LEAVE(vs->vs_isr, meta, ret, done);
-	SNAPSHOT_VAR_OR_LEAVE(vs->vs_msix_cfg_idx, meta, ret, done);
-
-done:
-	return (ret);
-}
-
-static int
-vi_pci_snapshot_consts(struct virtio_consts *vc, struct vm_snapshot_meta *meta)
-{
-	int ret;
-
-	SNAPSHOT_VAR_CMP_OR_LEAVE(vc->vc_nvq, meta, ret, done);
-	SNAPSHOT_VAR_CMP_OR_LEAVE(vc->vc_cfgsize, meta, ret, done);
-	SNAPSHOT_VAR_CMP_OR_LEAVE(vc->vc_hv_caps, meta, ret, done);
-
-done:
-	return (ret);
-}
-
-static int
-vi_pci_snapshot_queues(struct virtio_softc *vs, struct vm_snapshot_meta *meta)
-{
-	int i;
-	int ret;
-	struct virtio_consts *vc;
-	struct vqueue_info *vq;
-	uint64_t addr_size;
-
-	vc = vs->vs_vc;
-
-	/* Save virtio queue info */
-	for (i = 0; i < vc->vc_nvq; i++) {
-		vq = &vs->vs_queues[i];
-
-		SNAPSHOT_VAR_CMP_OR_LEAVE(vq->vq_qsize, meta, ret, done);
-		SNAPSHOT_VAR_CMP_OR_LEAVE(vq->vq_num, meta, ret, done);
-
-		SNAPSHOT_VAR_OR_LEAVE(vq->vq_flags, meta, ret, done);
-		SNAPSHOT_VAR_OR_LEAVE(vq->vq_last_avail, meta, ret, done);
-		SNAPSHOT_VAR_OR_LEAVE(vq->vq_next_used, meta, ret, done);
-		SNAPSHOT_VAR_OR_LEAVE(vq->vq_save_used, meta, ret, done);
-		SNAPSHOT_VAR_OR_LEAVE(vq->vq_msix_idx, meta, ret, done);
-
-		SNAPSHOT_VAR_OR_LEAVE(vq->vq_pfn, meta, ret, done);
-
-		addr_size = vq->vq_qsize * sizeof(struct virtio_desc);
-		SNAPSHOT_GUEST2HOST_ADDR_OR_LEAVE(vq->vq_desc, addr_size,
-			false, meta, ret, done);
-
-		addr_size = (2 + vq->vq_qsize + 1) * sizeof(uint16_t);
-		SNAPSHOT_GUEST2HOST_ADDR_OR_LEAVE(vq->vq_avail, addr_size,
-			false, meta, ret, done);
-
-		addr_size  = (2 + 2 * vq->vq_qsize + 1) * sizeof(uint16_t);
-		SNAPSHOT_GUEST2HOST_ADDR_OR_LEAVE(vq->vq_used, addr_size,
-			false, meta, ret, done);
-
-		SNAPSHOT_BUF_OR_LEAVE(vq->vq_desc, vring_size(vq->vq_qsize),
-			meta, ret, done);
-	}
-
-done:
-	return (ret);
-}
-
-int
-vi_pci_snapshot(struct vm_snapshot_meta *meta)
-{
-	int ret;
-	struct pci_devinst *pi;
-	struct virtio_softc *vs;
-	struct virtio_consts *vc;
-
-	pi = meta->dev_data;
-	vs = pi->pi_arg;
-	vc = vs->vs_vc;
-
-	/* Save virtio softc */
-	ret = vi_pci_snapshot_softc(vs, meta);
-	if (ret != 0)
-		goto done;
-
-	/* Save virtio consts */
-	ret = vi_pci_snapshot_consts(vc, meta);
-	if (ret != 0)
-		goto done;
-
-	/* Save virtio queue info */
-	ret = vi_pci_snapshot_queues(vs, meta);
-	if (ret != 0)
-		goto done;
-
-	/* Save device softc, if needed */
-	if (vc->vc_snapshot != NULL) {
-		ret = (*vc->vc_snapshot)(DEV_SOFTC(vs), meta);
-		if (ret != 0)
-			goto done;
-	}
-
-done:
-	return (ret);
-}
-#endif

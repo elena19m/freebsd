@@ -46,8 +46,8 @@ __FBSDID("$FreeBSD$");
 #include "debug.h"
 #include "bootrom.h"
 #include "inout.h"
-#include "pci_emul.h"
-#include "pci_irq.h"
+#include "devemu.h"
+#include "devemu_irq.h"
 #include "pci_lpc.h"
 #include "uart_emul.h"
 
@@ -65,7 +65,7 @@ SYSRES_IO(ELCR_PORT, 2);
 #define	NMISC_PORT	0x61
 SYSRES_IO(NMISC_PORT, 1);
 
-static struct pci_devinst *lpc_bridge;
+static struct devemu_inst *lpc_bridge;
 
 static const char *romfile;
 

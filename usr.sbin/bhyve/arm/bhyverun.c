@@ -45,8 +45,8 @@
 #include "bhyverun.h"
 #include "mem.h"
 #include "mevent.h"
-#include "mmio_emul.h"
-#include "mmio_irq.h"
+#include "devemu.h"
+#include "devemu_irq.h"
 #include "reset.h"
 
 #define GUEST_NIO_PORT		0x488	/* guest upcalls via i/o port */
@@ -112,6 +112,14 @@ paddr_guest2host(struct vmctx *ctx, uintptr_t gaddr, size_t len)
 {
 
 	return (vm_map_gpa(ctx, gaddr, len));
+}
+
+
+int
+fbsdrun_virtio_msix(void)
+{
+
+	return 0;
 }
 
 static void *
@@ -324,7 +332,7 @@ main(int argc, char *argv[])
 			guest_ncpus = atoi(optarg);
 			break;
 		case 'm':
-			if (mmio_parse_opts(optarg) != 0)
+			if (devemu_parse_opts(optarg) != 0)
 				exit(1);
 			break;
 		case 'h':
@@ -361,9 +369,9 @@ main(int argc, char *argv[])
 	}
 
 	init_mem();
-	mmio_irq_init(ctx);
+	devemu_irq_init(ctx);
 
-	if (init_mmio(ctx) != 0)
+	if (init_devemu(ctx) != 0)
 		exit(1);
 
 	if (bvmcons)

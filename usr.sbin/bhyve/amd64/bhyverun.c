@@ -97,7 +97,7 @@ __FBSDID("$FreeBSD$");
 #include "mem.h"
 #include "mevent.h"
 #include "mptbl.h"
-#include "pci_emul.h"
+#include "devemu.h"
 #include "pci_irq.h"
 #include "pci_lpc.h"
 #include "smbiostbl.h"

@@ -5,12 +5,11 @@
 
 MAN=	bhyve.8
 
-SRCS=	\
+SRCS+=	\
 	atkbdc.c		\
 	acpi.c			\
 	bhyvegc.c		\
 	bhyverun.c		\
-	block_if.c		\
 	bootrom.c		\
 	console.c		\
 	consport.c		\
@@ -19,19 +18,14 @@ SRCS=	\
 	inout.c			\
 	ioapic.c		\
 	mem.c			\
-	mevent.c		\
 	mptbl.c			\
 	pci_ahci.c		\
 	pci_e82545.c		\
-	pci_emul.c		\
 	pci_fbuf.c		\
 	pci_hostbridge.c	\
-	pci_irq.c		\
 	pci_lpc.c		\
 	pci_passthru.c		\
 	pci_virtio_block.c	\
-	pci_virtio_console.c	\
-	pci_virtio_net.c	\
 	pci_virtio_rnd.c	\
 	pci_uart.c		\
 	pci_xhci.c		\
@@ -42,18 +36,13 @@ SRCS=	\
 	rfb.c			\
 	rtc.c			\
 	smbiostbl.c		\
-	sockstream.c		\
 	task_switch.c		\
 	uart_emul.c		\
 	usb_emul.c		\
 	usb_mouse.c		\
-	virtio.c		\
 	vga.c			\
 	xmsr.c			\
 	spinup_ap.c
-
-.PATH:  ${BHYVE_SYSDIR}/sys/amd64/vmm
-SRCS+=	vmm_instruction_emul.c
 
 LIBADD=	z
 
@@ -63,6 +52,10 @@ CFLAGS+=-DNO_OPENSSL
 LIBADD+=	crypto
 .endif
 
-CFLAGS+= -I${BHYVE_SYSDIR}/sys/dev/e1000
-CFLAGS+= -I${BHYVE_SYSDIR}/sys/dev/mii
-CFLAGS+= -I${BHYVE_SYSDIR}/sys/dev/usb/controller
+CFLAGS+=	-I${BHYVE_SYSDIR}/sys/dev/e1000
+CFLAGS+=	-I${BHYVE_SYSDIR}/sys/dev/mii
+CFLAGS+=	-I${BHYVE_SYSDIR}/sys/dev/usb/controller
+
+CFLAGS+= 	-I${BHYVE_SRCTOP}/amd64
+
+BHYVE_BUS=	pci
