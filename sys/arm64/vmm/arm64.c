@@ -214,12 +214,12 @@ arm_vminit(struct vm *vm)
 		 * Set the Hypervisor Configuration Register:
 		 *
 		 * HCR_RW: use AArch64 for EL1
+		 * HCR_BSU_IS: barrier instructions apply to the inner shareable
+		 * domain
 		 * HCR_HCD: disable the HVC instruction from EL1 ** HVC ENABLED FOR NOW **
 		 * HCR_SWIO: turn set/way invalidate into set/way clean and
 		 * invalidate
 		 * HCR_FB: broadcast maintenance operations
-		 * HCR_BSU_IS: barrier instructions apply to the inner shareable
-		 * domain
 		 * HCR_AMO: route physical SError interrupts to EL2
 		 * HCR_IMO: route physical IRQ interrupts to EL2
 		 * HCR_FMO: route physical FIQ interrupts to EL2
@@ -356,71 +356,16 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 {
 	uint32_t esr_ec, esr_iss, esr_sas, reg_nr;
 	struct vie *vie;
-	//struct hypctx *hypctx = &hyp->ctx[vcpu];
 
 	esr_ec = ESR_ELx_EXCEPTION(vmexit->u.hyp.esr_el2);
 	esr_iss = vmexit->u.hyp.esr_el2 & ESR_ELx_ISS_MASK;
 
 	switch(esr_ec) {
 	case EXCP_UNKNOWN:
-		eprintf("Unknown exception\n");
+		eprintf("Unknown exception from guest\n");
 		vmexit->exitcode = VM_EXITCODE_HYP;
 		break;
 
-#if 0
-	case HSR_EC_WFI_WFE:
-		vmexit->exitcode = VM_EXITCODE_WFI;
-		vmexit->u.wfi.hypctx = hypctx;
-		break;
-	case HSR_EC_MCR_MRC_CP15:
-		printf("%s:%d MCR/MRC CP15 - unimplemented\n",
-		    __func__, __LINE__);
-		break;
-	case HSR_EC_MCRR_MRRC_CP15:
-		printf("%s:%d MCRR/MRRC CP15 - unimplemented\n",
-		    __func__, __LINE__);
-		break;
-	case HSR_EC_MCR_MRC_CP14:
-		printf("%s:%d MCR/MRC CP14 - unimplemented\n",
-		    __func__, __LINE__);
-		break;
-	case HSR_EC_LDC_STC_CP14:
-		printf("%s:%d LDC/STC CP14 - unimplemented\n",
-		    __func__, __LINE__);
-		break;
-	case HSR_EC_HCPTR_CP0_CP13:
-		printf("%s:%d MCR/MRC CP14 - unimplemented\n",
-		    __func__, __LINE__);
-		break;
-	case HSR_EC_MRC_VMRS_CP10:
-		printf("%s:%d MCR/VMRS CP14 - unimplemented\n",
-		    __func__, __LINE__);
-		break;
-	case HSR_EC_BXJ:
-		printf("%s:%d BXJ - unimplemented\n",
-		    __func__, __LINE__);
-		break;
-	case HSR_EC_MRRC_CP14:
-		printf("%s:%d MRRC CP14 - unimplemented\n",
-		    __func__, __LINE__);
-		break;
-	case HSR_EC_SVC:
-		panic("%s:%d SVC called from hyp-mode\n",
-		    __func__, __LINE__);
-		break;
-	case HSR_EC_SMC:
-		printf("%s:%d SMC called from hyp-mode - unsupported\n",
-		    __func__, __LINE__);
-		break;
-	case HSR_EC_PABT:
-		printf("%s:%d PABT from guest at address %x - unimplemented\n",
-		    __func__, __LINE__, vmexit->u.hyp.hifar);
-		break;
-	case HSR_EC_PABT_HYP:
-		printf("%s:%d PABT taken from HYP mode at %x with HSR: %x\n",
-		    __func__, __LINE__, vmexit->u.hyp.hifar, vmexit->u.hyp.hsr);
-		break;
-#endif
 	case EXCP_HVC:
 		eprintf("Unsupported HVC call from guest\n");
 		printf("\tESR_EL2: 0x%08x\n", vmexit->u.hyp.esr_el2);
@@ -462,15 +407,9 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 		esr_sas = (esr_iss & ISS_DATA_SAS_MASK) >> ISS_DATA_SAS_SHIFT;
 		vie->access_size = 1 << esr_sas;
 
-		if (esr_iss & ISS_DATA_SSE)
-			vie->sign_extend = 1;
-		else
-			vie->sign_extend = 0;
-
-		if (esr_iss & ISS_DATA_WnR)
-			vie->dir = VM_VIE_DIR_WRITE;
-		else
-			vie->dir = VM_VIE_DIR_READ;
+		vie->sign_extend = (esr_iss & ISS_DATA_SSE) ? 1 : 0;
+		vie->dir = (esr_iss & ISS_DATA_WnR) ? \
+			   VM_VIE_DIR_WRITE : VM_VIE_DIR_READ;
 
 		reg_nr = (esr_iss & ISS_DATA_SRT_MASK) >> ISS_DATA_SRT_SHIFT;
 		vie->reg = get_vm_reg_name(reg_nr, UNUSED);
@@ -478,15 +417,9 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 		vmexit->exitcode = VM_EXITCODE_INST_EMUL;
 		break;
 
-	/* TODO: not implemented yet. */
-#if 0
-	case HSR_EC_DABT_HYP:
-		printf("%s:%d DABT taken from HYP mode at %x with HSR: %x\n",
-		    __func__, __LINE__, vmexit->u.hyp.hdfar, vmexit->u.hyp.hsr);
-		break;
-#endif
 	default:
-		eprintf("Unknown ESR_EC code: 0x%x\n", esr_ec);
+		eprintf("Unsupported synchronous exception from guest: 0x%x\n", esr_ec);
+		vmexit->exitcode = VM_EXITCODE_HYP;
 		break;
 	}
 
