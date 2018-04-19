@@ -74,7 +74,8 @@ struct hypctx {
 	} exit_info;
 
 	struct vtimer_cpu vtimer_cpu;
-	struct vgic_v3_cpu_if	vgic;
+	struct vgic_v3_cpu_if	vgic_cpu_if;
+	struct vgic_v3_redist	vgic_redist;
 #ifdef VFP
 	struct vfpstate host_vfp_state;
 	struct vfpstate guest_vfp_state;
@@ -84,7 +85,7 @@ struct hypctx {
 struct hyp {
 	pmap_t		stage2_map;
 	struct hypctx	ctx[VM_MAXCPU];
-	struct vgic_distributor	vgic_distributor;
+	struct vgic_v3_dist	vgic_distributor;
 	struct vm	*vm;
 	struct vtimer	vtimer;
 	uint64_t	vmid_generation;
@@ -96,13 +97,15 @@ uint64_t vmm_call_hyp(void *hyp_func_addr, ...);
 void vmm_cleanup(void *hyp_stub_vectors);
 uint64_t vmm_enter_guest(struct hypctx *hypctx);
 
-#define VMID_GENERATION_MASK 		((1UL<<8) - 1)
-#define build_vttbr(vmid, ptaddr) 	((((vmid) & VMID_GENERATION_MASK) << VTTBR_VMID_SHIFT) | \
+#define	eprintf(fmt, ...)	printf("%s:%d " fmt, __func__, __LINE__, ##__VA_ARGS__)
+
+#define	VMID_GENERATION_MASK 		((1UL<<8) - 1)
+#define	build_vttbr(vmid, ptaddr) 	((((vmid) & VMID_GENERATION_MASK) << VTTBR_VMID_SHIFT) | \
 						(uint64_t)(ptaddr))
 
-#define MPIDR_SMP_MASK 		(0x3 << 30)
-#define MPIDR_AFF1_LEVEL(x) 	((x >> 2) << 8)
-#define MPIDR_AFF0_LEVEL(x) 	((x & 0x3) << 0)
+#define	MPIDR_SMP_MASK 		(0x3 << 30)
+#define	MPIDR_AFF1_LEVEL(x) 	(((x) >> 2) << 8)
+#define	MPIDR_AFF0_LEVEL(x) 	(((x) & 0x3) << 0)
 
 /*
  * Return true if the exception was caused by a translation fault in the stage 2
@@ -110,7 +113,7 @@ uint64_t vmm_enter_guest(struct hypctx *hypctx);
  * 0b0001LL, where LL (bits [1:0]) represents the level where the fault occured
  * (page D7-2280 of the ARMv8 Architecture Manual).
  */
-#define ISS_DATA_DFSC_TF(esr_iss)	(!((esr_iss) & 0b111000) && \
+#define	ISS_DATA_DFSC_TF(esr_iss)	(!((esr_iss) & 0b111000) && \
 						((esr_iss) & 0b000100))
 
 #endif /* !_VMM_ARM64_H_ */

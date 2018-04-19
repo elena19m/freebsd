@@ -53,15 +53,8 @@
 struct vm;
 struct vm_exit;
 
-struct vgic_distributor {
+struct vgic_v3_dist {
 	struct mtx distributor_lock;
-
-	uint64_t distributor_base;
-	uint64_t cpu_int_base;
-
-	uint32_t enabled;
-
-	/* Bitmaps for IRQ state in the distributor*/
 
 	/* Interrupt enabled */
 	uint32_t irq_enabled_prv[VGIC_MAXCPU][VGIC_PRV_INT_NUM / (sizeof(uint32_t) * 8)];
@@ -84,9 +77,14 @@ struct vgic_distributor {
 
 	uint8_t irq_sgi_source[VGIC_MAXCPU][VGIC_SGI_NUM];
 
-	uint32_t sgir;
-
+	uint64_t ipa;
+	uint32_t enabled;
 	uint32_t irq_pending_on_cpu;
+	uint32_t sgir;
+};
+
+struct vgic_v3_redist {
+	uint64_t ipa;
 };
 
 struct vgic_v3_cpu_if {

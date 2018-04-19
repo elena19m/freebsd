@@ -358,127 +358,136 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 	uint32_t esr_ec, esr_iss, esr_sas;
 	//struct hypctx *hypctx = &hyp->ctx[vcpu];
 
-	handled = UNHANDLED;
-
 	esr_ec = ESR_ELx_EXCEPTION(vmexit->u.hyp.esr_el2);
 	esr_iss = vmexit->u.hyp.esr_el2 & ESR_ELx_ISS_MASK;
 
 	switch(esr_ec) {
-		case EXCP_UNKNOWN:
-			printf("%s:%d Unknown exception\n",__func__, __LINE__);
-			break;
+	case EXCP_UNKNOWN:
+		printf("%s:%d Unknown exception\n", __func__, __LINE__);
+		handled = UNHANDLED;
+		break;
 
-		/* TODO: Not implemented yet */
+	/* TODO: Not implemented yet */
 #if 0
-		case HSR_EC_WFI_WFE:
-			vmexit->exitcode = VM_EXITCODE_WFI;
-			vmexit->u.wfi.hypctx = hypctx;
-			break;
-		case HSR_EC_MCR_MRC_CP15:
-			printf("%s:%d MCR/MRC CP15 - unimplemented\n",
-			    __func__, __LINE__);
-			break;
-		case HSR_EC_MCRR_MRRC_CP15:
-			printf("%s:%d MCRR/MRRC CP15 - unimplemented\n",
-			    __func__, __LINE__);
-			break;
-		case HSR_EC_MCR_MRC_CP14:
-			printf("%s:%d MCR/MRC CP14 - unimplemented\n",
-			    __func__, __LINE__);
-			break;
-		case HSR_EC_LDC_STC_CP14:
-			printf("%s:%d LDC/STC CP14 - unimplemented\n",
-			    __func__, __LINE__);
-			break;
-		case HSR_EC_HCPTR_CP0_CP13:
-			printf("%s:%d MCR/MRC CP14 - unimplemented\n",
-			    __func__, __LINE__);
-			break;
-		case HSR_EC_MRC_VMRS_CP10:
-			printf("%s:%d MCR/VMRS CP14 - unimplemented\n",
-			    __func__, __LINE__);
-			break;
-		case HSR_EC_BXJ:
-			printf("%s:%d BXJ - unimplemented\n",
-			    __func__, __LINE__);
-			break;
-		case HSR_EC_MRRC_CP14:
-			printf("%s:%d MRRC CP14 - unimplemented\n",
-			    __func__, __LINE__);
-			break;
-		case HSR_EC_SVC:
-			panic("%s:%d SVC called from hyp-mode\n",
-			    __func__, __LINE__);
-			break;
-		case HSR_EC_SMC:
-			printf("%s:%d SMC called from hyp-mode - unsupported\n",
-			    __func__, __LINE__);
-			break;
-		case HSR_EC_PABT:
-			printf("%s:%d PABT from guest at address %x - unimplemented\n",
-			    __func__, __LINE__, vmexit->u.hyp.hifar);
-			break;
-		case HSR_EC_PABT_HYP:
-			printf("%s:%d PABT taken from HYP mode at %x with HSR: %x\n",
-			    __func__, __LINE__, vmexit->u.hyp.hifar, vmexit->u.hyp.hsr);
-			break;
+	case HSR_EC_WFI_WFE:
+		vmexit->exitcode = VM_EXITCODE_WFI;
+		vmexit->u.wfi.hypctx = hypctx;
+		break;
+	case HSR_EC_MCR_MRC_CP15:
+		printf("%s:%d MCR/MRC CP15 - unimplemented\n",
+		    __func__, __LINE__);
+		break;
+	case HSR_EC_MCRR_MRRC_CP15:
+		printf("%s:%d MCRR/MRRC CP15 - unimplemented\n",
+		    __func__, __LINE__);
+		break;
+	case HSR_EC_MCR_MRC_CP14:
+		printf("%s:%d MCR/MRC CP14 - unimplemented\n",
+		    __func__, __LINE__);
+		break;
+	case HSR_EC_LDC_STC_CP14:
+		printf("%s:%d LDC/STC CP14 - unimplemented\n",
+		    __func__, __LINE__);
+		break;
+	case HSR_EC_HCPTR_CP0_CP13:
+		printf("%s:%d MCR/MRC CP14 - unimplemented\n",
+		    __func__, __LINE__);
+		break;
+	case HSR_EC_MRC_VMRS_CP10:
+		printf("%s:%d MCR/VMRS CP14 - unimplemented\n",
+		    __func__, __LINE__);
+		break;
+	case HSR_EC_BXJ:
+		printf("%s:%d BXJ - unimplemented\n",
+		    __func__, __LINE__);
+		break;
+	case HSR_EC_MRRC_CP14:
+		printf("%s:%d MRRC CP14 - unimplemented\n",
+		    __func__, __LINE__);
+		break;
+	case HSR_EC_SVC:
+		panic("%s:%d SVC called from hyp-mode\n",
+		    __func__, __LINE__);
+		break;
+	case HSR_EC_SMC:
+		printf("%s:%d SMC called from hyp-mode - unsupported\n",
+		    __func__, __LINE__);
+		break;
+	case HSR_EC_PABT:
+		printf("%s:%d PABT from guest at address %x - unimplemented\n",
+		    __func__, __LINE__, vmexit->u.hyp.hifar);
+		break;
+	case HSR_EC_PABT_HYP:
+		printf("%s:%d PABT taken from HYP mode at %x with HSR: %x\n",
+		    __func__, __LINE__, vmexit->u.hyp.hifar, vmexit->u.hyp.hsr);
+		break;
 #endif
-		case EXCP_HVC:
-			printf("%s:%d HVC called from guest - unsupported\n",
-			    __func__, __LINE__);
-			printf("\tESR_EL2: 0x%08x\n", vmexit->u.hyp.esr_el2);
+	case EXCP_HVC:
+		eprintf("HVC called from guest - unsupported\n");
+		printf("\tESR_EL2: 0x%08x\n", vmexit->u.hyp.esr_el2);
+		handled = UNHANDLED;
+		break;
+
+	case EXCP_DATA_ABORT_L:
+		/* Check if instruction syndrome is valid */
+		if (!(esr_iss & ISS_DATA_ISV)) {
+			eprintf("Data abort from guest with invalid instruction syndrome\n");
+			printf("\tHPFAR_EL2: 0x%016lx\n", vmexit->u.hyp.hpfar_el2);
+			printf("\tESR_EL2:   0x%08x\n", vmexit->u.hyp.esr_el2);
+			handled = UNHANDLED;
 			break;
-		case EXCP_DATA_ABORT_L:
-			/* Check if instruction syndrome is valid */
-			if (esr_iss & ISS_DATA_ISV) {
-				if (ISS_DATA_DFSC_TF(esr_iss)) {
-					vmexit->exitcode = VM_EXITCODE_INST_EMUL;
+		}
 
-					/*
-					 * FIPA holds bits [47:12] of the IPA,
-					 * bits [11:0] are zero for a 4KB page.
-					 */
-					vmexit->u.inst_emul.gpa = (vmexit->u.hyp.hpfar_el2 >> HPFAR_EL2_FIPA_SHIFT) << 12;
-
-					esr_sas = (esr_iss & ISS_DATA_SAS_MASK) >> ISS_DATA_SAS_SHIFT;
-					vmexit->u.inst_emul.vie.access_size = 1 << esr_sas;
-
-					if (esr_iss & ISS_DATA_SSE)
-						vmexit->u.inst_emul.vie.sign_extend = 1;
-					else
-						vmexit->u.inst_emul.vie.sign_extend = 0;
-
-					if (esr_iss & ISS_DATA_WnR)
-						vmexit->u.inst_emul.vie.dir = VM_VIE_DIR_WRITE;
-					else
-						vmexit->u.inst_emul.vie.dir = VM_VIE_DIR_READ;
-
-					vmexit->u.inst_emul.vie.reg = get_vm_reg_name(
-							(esr_iss & ISS_DATA_SRT_MASK) >> ISS_DATA_SRT_SHIFT, 0);
-				} else {
-					printf("%s:%d Data abort from guest not on a stage 2 translation fault\n",
-					    __func__, __LINE__);
-					printf("\tHPFAR_EL2: 0x%016lx\n", vmexit->u.hyp.hpfar_el2);
-					printf("\tESR_EL2:   0x%08x\n", vmexit->u.hyp.esr_el2);
-				}
-			} else {
-				printf("%s:%d Data abort from guest with invalid instruction syndrome\n",
-				    __func__, __LINE__);
-				printf("\tHPFAR_EL2: 0x%016lx\n", vmexit->u.hyp.hpfar_el2);
-				printf("\tESR_EL2:   0x%08x\n", vmexit->u.hyp.esr_el2);
-			}
+		/*
+		 * Check if the data abort was caused by a translation fault.
+		 * Any other type of data abort is an error.
+		 */
+		if (!(ISS_DATA_DFSC_TF(esr_iss))) {
+			eprintf("Data abort from guest NOT on a stage 2 translation\n");
+			printf("\tHPFAR_EL2: 0x%016lx\n", vmexit->u.hyp.hpfar_el2);
+			printf("\tESR_EL2:   0x%08x\n", vmexit->u.hyp.esr_el2);
+			handled = UNHANDLED;
 			break;
+		}
 
-		/* TODO: not implemented yet. */
+		/*
+		 * HPFAR_EL2 holds bits [47:12] of the IPA, the rest of the
+		 * HPFAR_EL2 bits are RES0.
+		 */
+		vmexit->u.inst_emul.gpa = vmexit->u.hyp.hpfar_el2 >> HPFAR_EL2_FIPA_SHIFT;
+		/* The IPA for a 4KB page has bits [11:0] zero. */
+		vmexit->u.inst_emul.gpa	<<= PAGE_SHIFT;
+
+		esr_sas = (esr_iss & ISS_DATA_SAS_MASK) >> ISS_DATA_SAS_SHIFT;
+		vmexit->u.inst_emul.vie.access_size = 1 << esr_sas;
+
+		if (esr_iss & ISS_DATA_SSE)
+			vmexit->u.inst_emul.vie.sign_extend = 1;
+		else
+			vmexit->u.inst_emul.vie.sign_extend = 0;
+
+		if (esr_iss & ISS_DATA_WnR)
+			vmexit->u.inst_emul.vie.dir = VM_VIE_DIR_WRITE;
+		else
+			vmexit->u.inst_emul.vie.dir = VM_VIE_DIR_READ;
+
+		vmexit->u.inst_emul.vie.reg = get_vm_reg_name(
+				(esr_iss & ISS_DATA_SRT_MASK) >> ISS_DATA_SRT_SHIFT, 0);
+		vmexit->exitcode = VM_EXITCODE_INST_EMUL;
+		handled = UNHANDLED;
+		break;
+
+	/* TODO: not implemented yet. */
 #if 0
-		case HSR_EC_DABT_HYP:
-			printf("%s:%d DABT taken from HYP mode at %x with HSR: %x\n",
-			    __func__, __LINE__, vmexit->u.hyp.hdfar, vmexit->u.hyp.hsr);
-			break;
+	case HSR_EC_DABT_HYP:
+		printf("%s:%d DABT taken from HYP mode at %x with HSR: %x\n",
+		    __func__, __LINE__, vmexit->u.hyp.hdfar, vmexit->u.hyp.hsr);
+		break;
 #endif
-		default:
-			printf("%s:%d Unknown ESR_EC code: 0x%x\n", __func__, __LINE__, esr_ec);
-			break;
+	default:
+		eprintf("Unknown ESR_EC code: 0x%x\n", esr_ec);
+		handled = UNHANDLED;
+		break;
 	}
 
 	return handled;
@@ -487,24 +496,36 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 static int
 handle_world_switch(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 {
+	int excp_type;
 	int handled;
 
-	handled = UNHANDLED;
-
 	vmexit->exitcode = VM_EXITCODE_BOGUS;
-	switch (vmexit->u.hyp.exception_nr) {
+	excp_type = vmexit->u.hyp.exception_nr;
+
+	switch (excp_type) {
 	case EXCP_TYPE_EL1_SYNC:
 		vmexit->exitcode = VM_EXITCODE_HYP;
 		handled = handle_el1_sync_exception(hyp, vcpu, vmexit);
 		break;
+
 	case EXCP_TYPE_EL1_IRQ:
 	case EXCP_TYPE_EL1_FIQ:
-	case EXCP_TYPE_EL1_ERROR:
-	default:
-		//printf("%s unhandled exception: %d\n",__func__, vmexit->u.hyp.exception_nr);
-		//vmexit->exitcode = VM_EXITCODE_HYP;
-		//printf("%s exception: %d\n", __func__, vmexit->u.hyp.exception_nr);
+		/* The host kernel will handle IRQs and FIQs. */
+		handled = UNHANDLED;
 		break;
+
+	case EXCP_TYPE_EL1_ERROR:
+	case EXCP_TYPE_EL2_SYNC:
+	case EXCP_TYPE_EL2_IRQ:
+	case EXCP_TYPE_EL2_FIQ:
+	case EXCP_TYPE_EL2_ERROR:
+		eprintf("Unhandled exception type: %s\n", excp_type_str(excp_type));
+		handled = UNHANDLED;
+		break;
+
+	default:
+		eprintf("Unknown exception type: %d\n", excp_type);
+		handled = UNHANDLED;
 	}
 
 	return (handled);
@@ -519,7 +540,7 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	register_t daif;
 	struct hyp *hyp;
 	struct hypctx *hypctx;
-	struct vm *vm;
+		struct vm *vm;
 	struct vm_exit *vmexit;
 
 	hyp = arg;
@@ -528,9 +549,7 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 
 	hypctx = &hyp->ctx[vcpu];
 	hypctx->elr_el2 = (uint64_t)pc;
-	do {
-		handled = UNHANDLED;
-
+	for (;;) {
 		//vgic_flush_hwstate(hypctx);
 		//vtimer_flush_hwstate(hypctx);
 
@@ -545,66 +564,23 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 		vmexit->u.hyp.far_el2 = hypctx->exit_info.far_el2;
 		vmexit->u.hyp.hpfar_el2 = hypctx->exit_info.hpfar_el2;
 
-		/*
-		switch (vmexit->u.hyp.exception_nr) {
-		case 0:
-			printf("EXCP_TYPE_EL1_SYNC\n");
-			break;
-		case 1:
-			printf("EXCP_TYPE_EL1_IRQ\n");
-			break;
-		case 2:
-			printf("EXCP_TYPE_EL1_FIQ\n");
-			break;
-		case 3:
-			printf("EXCP_TYPE_EL1_ERROR\n");
-			break;
-		case 4:
-			printf("EXCP_TYPE_EL2_SYNC\n");
-			break;
-		case 5:
-			printf("EXCP_TYPE_EL2_IRQ\n");
-			break;
-		case 6:
-			printf("EXCP_TYPE_EL2_FIQ\n");
-			break;
-		case 7:
-			printf("EXCP_TYPE_EL2_ERROR\n");
-			break;
-		}
-
-		printf("\n");
-		printf("esr_el2 = 0x%08x\n", hypctx->exit_info.esr_el2);
-		printf("far_el2 = 0x%016lx\n", hypctx->exit_info.far_el2);
-		printf("hpfar_el2 = 0x%016lx\n", hypctx->exit_info.hpfar_el2);
-
-		printf("\n");
-		printf("far_el1 = 0x%016lx\n", hypctx->far_el1);
-		printf("par_el1 = 0x%016lx\n", hypctx->par_el1);
-
-		printf("\n");
-		printf("spsr_el2 = 0x%08x\n", hypctx->spsr_el2);
-		printf("sctlr_el1 = 0x%08x\n", hypctx->sctlr_el1);
-		*/
-
 		/* TODO: ARMv8 has fixed instruction length (4 bytes) */
 		vmexit->inst_length = 4;
 		handled = handle_world_switch(hyp, vcpu, vmexit);
 
+		/* TODO: sync here or when resuming and not when emulating? */
 		//vtimer_sync_hwstate(hypctx);
 		//vgic_sync_hwstate(hypctx);
 
-		if (excp_type == EXCP_TYPE_EL1_IRQ) {
-			/* Ignore IRQs for now */
-			handled = HANDLED;
-		} else {
-			/* Resume guest execution from the next instruction */
+		if (handled == UNHANDLED)
+			/* Emulate instruction. */
+			break;
+		else
+			/* Resume guest execution from the next instruction. */
 			hypctx->elr_el2 += vmexit->inst_length;
-		}
+	}
 
-	} while (handled == HANDLED);
-
-	return 0;
+	return (0);
 }
 
 static void
