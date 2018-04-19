@@ -142,7 +142,7 @@ vgic_dist_mmio_read(void *vm, int vcpuid, uint64_t gpa, uint64_t *rval, int size
 	struct vgic_v3_dist *dist;
 
 	hyp = vm_get_cookie(vm);
-	dist = &hyp->vgic_distributor;
+	dist = &hyp->vgic_dist;
 
 	/* offset of distributor register */
 	offset = gpa - dist->ipa;
@@ -266,7 +266,7 @@ vgic_dist_mmio_write(void *vm, int vcpuid, uint64_t gpa, uint64_t val, int size,
 	struct vgic_v3_dist *dist;
 
 	hyp = vm_get_cookie(vm);
-	dist = &hyp->vgic_distributor;
+	dist = &hyp->vgic_dist;
 
 	offset = gpa - dist->ipa;
 	base_offset = offset - (offset & 3);
@@ -402,8 +402,8 @@ vgic_v3_emulate_distributor(void *arg, int vcpuid, struct vm_exit *vme,
 
 	hyp = arg;
 
-	if (vme->u.inst_emul.gpa < hyp->vgic_distributor.ipa ||
-	    vme->u.inst_emul.gpa > hyp->vgic_distributor.ipa + PAGE_SIZE ||
+	if (vme->u.inst_emul.gpa < hyp->vgic_dist.ipa ||
+	    vme->u.inst_emul.gpa > hyp->vgic_dist.ipa + PAGE_SIZE ||
 	    !hyp->vgic_attached) {
 		*retu = true;
 		return (0);
@@ -433,8 +433,8 @@ vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
 	 * Set the distributor address which will be emulated using the MMIO
 	 * infrastructure.
 	 */
-	hyp->vgic_distributor.ipa = dist_ipa;
-	hyp->vgic_distributor.size = dist_size;
+	hyp->vgic_dist.ipa = dist_ipa;
+	hyp->vgic_dist.size = dist_size;
 
 	/* Only one CPU per virtual machine supported. */
 	hypctx = &hyp->ctx[0];
@@ -467,12 +467,12 @@ vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
 
 		for (j = 0; j < GIC_I_NUM_MAX; j++) {
 			if (j < VGIC_PPI_NUM)
-				vgic_bitmap_set_irq_val(hyp->vgic_distributor.irq_enabled_prv[i],
-										hyp->vgic_distributor.irq_enabled_shr, j, 1);
+				vgic_bitmap_set_irq_val(hyp->vgic_dist.irq_enabled_prv[i],
+										hyp->vgic_dist.irq_enabled_shr, j, 1);
 
 			if (j < VGIC_PRV_INT_NUM)
-				vgic_bitmap_set_irq_val(hyp->vgic_distributor.irq_conf_prv[i],
-										hyp->vgic_distributor.irq_conf_shr, j, VGIC_CFG_EDGE);
+				vgic_bitmap_set_irq_val(hyp->vgic_dist.irq_conf_prv[i],
+										hyp->vgic_dist.irq_conf_shr, j, VGIC_CFG_EDGE);
 
 			hypctx->vgic_cpu_if.irq_to_lr[j] = VGIC_LR_EMPTY;
 		}
@@ -522,75 +522,75 @@ vgic_bitmap_set_irq_val(uint32_t *irq_prv, uint32_t *irq_shr, int irq, int val)
 static bool
 vgic_irq_is_edge(struct hypctx *hypctx, int irq)
 {
-	struct vgic_v3_dist *vgic_distributor = &hypctx->hyp->vgic_distributor;
+	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
 	int irq_val;
 
-	irq_val = vgic_bitmap_get_irq_val(vgic_distributor->irq_conf_prv[hypctx->vcpu], 
-									  vgic_distributor->irq_conf_shr, irq);
+	irq_val = vgic_bitmap_get_irq_val(dist->irq_conf_prv[hypctx->vcpu],
+					dist->irq_conf_shr, irq);
 	return irq_val == VGIC_CFG_EDGE;
 }
 
 static int
 vgic_irq_is_enabled(struct hypctx *hypctx, int irq)
 {
-	struct vgic_v3_dist *vgic_distributor = &hypctx->hyp->vgic_distributor;
+	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
 
-	return vgic_bitmap_get_irq_val(vgic_distributor->irq_enabled_prv[hypctx->vcpu],
-								   vgic_distributor->irq_enabled_shr, irq);
+	return vgic_bitmap_get_irq_val(dist->irq_enabled_prv[hypctx->vcpu],
+					dist->irq_enabled_shr, irq);
 }
 
 static int
 vgic_irq_is_active(struct hypctx *hypctx, int irq)
 {
-	struct vgic_v3_dist *vgic_distributor = &hypctx->hyp->vgic_distributor;
+	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
 
-	return vgic_bitmap_get_irq_val(vgic_distributor->irq_active_prv[hypctx->vcpu],
-								   vgic_distributor->irq_active_shr, irq);
+	return vgic_bitmap_get_irq_val(dist->irq_active_prv[hypctx->vcpu],
+					dist->irq_active_shr, irq);
 }
 
 static void
 vgic_irq_set_active(struct hypctx *hypctx, int irq)
 {
-	struct vgic_v3_dist *vgic_distributor = &hypctx->hyp->vgic_distributor;
+	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
 
-	vgic_bitmap_set_irq_val(vgic_distributor->irq_active_prv[hypctx->vcpu],
-							vgic_distributor->irq_active_shr, irq, 1);
+	vgic_bitmap_set_irq_val(dist->irq_active_prv[hypctx->vcpu],
+					dist->irq_active_shr, irq, 1);
 }
 
 static void
 vgic_irq_clear_active(struct hypctx *hypctx, int irq)
 {
-	struct vgic_v3_dist *vgic_distributor = &hypctx->hyp->vgic_distributor;
+	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
 
-	vgic_bitmap_set_irq_val(vgic_distributor->irq_active_prv[hypctx->vcpu],
-							vgic_distributor->irq_active_shr, irq, 0);
+	vgic_bitmap_set_irq_val(dist->irq_active_prv[hypctx->vcpu],
+					dist->irq_active_shr, irq, 0);
 }
 
 static int
 vgic_dist_irq_is_pending(struct hypctx *hypctx, int irq)
 {
-	struct vgic_v3_dist *vgic_distributor = &hypctx->hyp->vgic_distributor;
+	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
 
-	return vgic_bitmap_get_irq_val(vgic_distributor->irq_state_prv[hypctx->vcpu],
-								   vgic_distributor->irq_state_shr, irq);
+	return vgic_bitmap_get_irq_val(dist->irq_state_prv[hypctx->vcpu],
+					dist->irq_state_shr, irq);
 }
 
 static void
 vgic_dist_irq_set(struct hypctx *hypctx, int irq)
 {
-	struct vgic_v3_dist *vgic_distributor = &hypctx->hyp->vgic_distributor;
+	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
 
-	vgic_bitmap_set_irq_val(vgic_distributor->irq_state_prv[hypctx->vcpu],
-							vgic_distributor->irq_state_shr, irq, 1);
+	vgic_bitmap_set_irq_val(dist->irq_state_prv[hypctx->vcpu],
+					dist->irq_state_shr, irq, 1);
 }
 
 static void
 vgic_dist_irq_clear(struct hypctx *hypctx, int irq)
 {
-	struct vgic_v3_dist *vgic_distributor = &hypctx->hyp->vgic_distributor;
+	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
 
-	vgic_bitmap_set_irq_val(vgic_distributor->irq_state_prv[hypctx->vcpu],
-							vgic_distributor->irq_state_shr, irq, 0);
+	vgic_bitmap_set_irq_val(dist->irq_state_prv[hypctx->vcpu],
+					dist->irq_state_shr, irq, 0);
 }
 
 static void
@@ -620,7 +620,7 @@ vgic_cpu_irq_clear(struct hypctx *hypctx, int irq)
 static int
 compute_pending_for_cpu(struct hyp *hyp, int vcpu)
 {
-	struct vgic_v3_dist *vgic_distributor = &hyp->vgic_distributor;
+	struct vgic_v3_dist *dist = &hyp->vgic_dist;
 	struct vgic_v3_cpu_if *cpu_if = &hyp->ctx[vcpu].vgic_cpu_if;
 
 	uint32_t *pending, *enabled, *pend_percpu, *pend_shared, *target;
@@ -629,14 +629,14 @@ compute_pending_for_cpu(struct hyp *hyp, int vcpu)
 	pend_percpu = cpu_if->pending_prv;
 	pend_shared = cpu_if->pending_shr;
 
-	pending = vgic_distributor->irq_state_prv[vcpu];
-	enabled = vgic_distributor->irq_enabled_prv[vcpu];
+	pending = dist->irq_state_prv[vcpu];
+	enabled = dist->irq_enabled_prv[vcpu];
 	bitstr_and((bitstr_t *)pend_percpu, (bitstr_t *)pending,
 		       (bitstr_t *)enabled, VGIC_PRV_INT_NUM);
 
-	pending = vgic_distributor->irq_state_shr;
-	enabled = vgic_distributor->irq_enabled_shr;
-	target = vgic_distributor->irq_target_shr;
+	pending = dist->irq_state_shr;
+	enabled = dist->irq_enabled_shr;
+	target = dist->irq_target_shr;
 	bitstr_and((bitstr_t *)pend_shared, (bitstr_t *)pending,
 		       (bitstr_t *)enabled, VGIC_SHR_INT_NUM);
 	bitstr_and((bitstr_t *)pend_shared, (bitstr_t *)pend_shared,
@@ -655,15 +655,15 @@ compute_pending_for_cpu(struct hyp *hyp, int vcpu)
 static void
 vgic_dispatch_sgi(struct hypctx *hypctx)
 {
-	struct vgic_v3_dist *vgic_distributor = &hypctx->hyp->vgic_distributor;
+	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
 	// TODO Get actual number of cpus on current machine
 	int vcpu_num = VM_MAXCPU;
 	int sgi, mode, cpu;
 	uint8_t targets;
 
-	sgi = vgic_distributor->sgir & 0xf;
-	targets = (vgic_distributor->sgir >> 16) & 0xff;
-	mode = (vgic_distributor->sgir >> 24) & 3;
+	sgi = dist->sgir & 0xf;
+	targets = (dist->sgir >> 16) & 0xff;
+	mode = (dist->sgir >> 24) & 3;
 
 	switch (mode) {
 	case 0:
@@ -682,7 +682,7 @@ vgic_dispatch_sgi(struct hypctx *hypctx)
 	for (cpu = 0; cpu < vcpu_num; ++cpu) {
 		if ((targets >> cpu) & 1) {
 			vgic_dist_irq_set(hypctx, sgi);
-			vgic_distributor->irq_sgi_source[cpu][sgi] |= 1 << hypctx->vcpu;
+			vgic_dist->irq_sgi_source[cpu][sgi] |= 1 << hypctx->vcpu;
 			//printf("SGI%d from CPU%d to CPU%d\n", sgi, vcpu_id, c);
 		}
 	}
@@ -696,13 +696,13 @@ vgic_dispatch_sgi(struct hypctx *hypctx)
 static void
 vgic_update_state(struct hyp *hyp)
 {
-	struct vgic_v3_dist *vgic_distributor = &hyp->vgic_distributor;
+	struct vgic_v3_dist *dist = &hyp->vgic_dist;
 	int cpu;
 
-	//mtx_lock_spin(&vgic_distributor->distributor_lock);
+	//mtx_lock_spin(&vgic_dist->dist_lock);
 
-	if (!vgic_distributor->enabled) {
-		bit_set((bitstr_t *)&vgic_distributor->irq_pending_on_cpu, 0);
+	if (!dist->enabled) {
+		bit_set((bitstr_t *)&dist->irq_pending_on_cpu, 0);
 		goto end;
 	}
 
@@ -710,12 +710,12 @@ vgic_update_state(struct hyp *hyp)
 	for (cpu = 0; cpu < VM_MAXCPU; ++cpu) {
 		if (compute_pending_for_cpu(hyp, cpu)) {
 			printf("CPU%d has pending interrupts\n", cpu);
-			bit_set((bitstr_t *)&vgic_distributor->irq_pending_on_cpu, cpu);
+			bit_set((bitstr_t *)&dist->irq_pending_on_cpu, cpu);
 		}
 	}
 
 end:
-	;//mtx_unlock_spin(&vgic_distributor->distributor_lock);
+	;//mtx_unlock_spin(&dist->dist_lock);
 }
 #endif
 
@@ -734,7 +734,7 @@ vgic_retire_disabled_irqs(struct hypctx *hypctx)
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	int lr_idx;
 
-	for_each_set_bit(lr_idx, cpu_if->lr_used, vgic->lr_num) {
+	for_each_set_bit(lr_idx, cpu_if->lr_used, cpu_if->lr_num) {
 
 		int irq = cpu_if->lr[lr_idx] & GICH_LR_VIRTID;
 
@@ -788,18 +788,18 @@ end:
 static bool
 vgic_queue_sgi(struct hypctx *hypctx, int irq)
 {
-	struct vgic_v3_dist *vgic_distributor = &hypctx->hyp->vgic_distributor;
+	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
 	uint8_t source;
 	int cpu;
 
-	source = vgic_distributor->irq_sgi_source[hypctx->vcpu][irq];
+	source = dist->irq_sgi_source[hypctx->vcpu][irq];
 
 	for_each_set_bit(cpu, &source, VGIC_MAXCPU) {
 		if (vgic_queue_irq(hypctx, cpu, irq))
 			bit_clear((bitstr_t *)&source, cpu);
 	}
 
-	vgic_distributor->irq_sgi_source[hypctx->vcpu][irq] = source;
+	dist->irq_sgi_source[hypctx->vcpu][irq] = source;
 
 	if (!source) {
 		vgic_dist_irq_clear(hypctx, irq);
@@ -868,16 +868,16 @@ vgic_v3_flush_hwstate(void *arg)
 {
 	struct hypctx *hypctx;
 	struct vgic_v3_cpu_if *cpu_if;
-	struct vgic_v3_dist *vgic_distributor;
+	struct vgic_v3_dist *dist;
 	int i, overflow = 0;
 
 	hypctx = arg;
 	cpu_if = &hypctx->vgic_cpu_if;
-	vgic_distributor = &hypctx->hyp->vgic_distributor;
+	dist = &hypctx->hyp->vgic_dist;
 
 	//printf("vgic_flush_hwstate\n");
 
-	//mtx_lock_spin(&vgic_distributor->distributor_lock);
+	//mtx_lock_spin(&vgic_dist->dist_lock);
 
 	if (!vgic_v3_vcpu_pending_irq(hypctx)) {
 		//printf("CPU%d has no pending interrupt\n", hypctx->vcpu);
@@ -914,9 +914,9 @@ end:
 		cpu_if->ich_hcr_el2 |= GICH_HCR_UIE;
 	} else {
 		cpu_if->ich_hcr_el2 &= ~GICH_HCR_UIE;
-		bit_clear((bitstr_t *)&vgic_distributor->irq_pending_on_cpu, hypctx->vcpu);
+		bit_clear((bitstr_t *)&dist->irq_pending_on_cpu, hypctx->vcpu);
 	}
-	//mtx_unlock_spin(&vgic_distributor->distributor_lock);
+	//mtx_unlock_spin(&vgic_dist->dist_lock);
 }
 
 void
@@ -924,13 +924,13 @@ vgic_v3_sync_hwstate(void *arg)
 {
 	struct hypctx *hypctx;
 	struct vgic_v3_cpu_if *cpu_if;
-	struct vgic_v3_dist *vgic_distributor;
+	struct vgic_v3_dist *dist;
 	int lr_idx, pending, irq;
 	bool level_pending;
 
 	hypctx = arg;
 	cpu_if = &hypctx->vgic_cpu_if;
-	vgic_distributor = &hypctx->hyp->vgic_distributor;
+	dist = &hypctx->hyp->vgic_dist;
 
 	//printf("vgic_sync_hwstate\n");
 
@@ -947,20 +947,19 @@ vgic_v3_sync_hwstate(void *arg)
 
 	bit_ffc((bitstr_t *)&cpu_if->ich_elsr_el2, cpu_if->lr_num, &pending);
 	if (level_pending || pending > -1)
-		bit_set((bitstr_t *)&vgic_distributor->irq_pending_on_cpu, hypctx->vcpu);
+		bit_set((bitstr_t *)&dist->irq_pending_on_cpu, hypctx->vcpu);
 }
 
 int
 vgic_v3_vcpu_pending_irq(void *arg)
 {
 	struct hypctx *hypctx;
-	struct vgic_v3_dist *vgic_distributor;
+	struct vgic_v3_dist *dist;
 
 	hypctx = arg;
-	vgic_distributor = &hypctx->hyp->vgic_distributor;
+	dist = &hypctx->hyp->vgic_dist;
 
-	return bit_test((bitstr_t *)&vgic_distributor->irq_pending_on_cpu,
-		            hypctx->vcpu);
+	return bit_test((bitstr_t *)&dist->irq_pending_on_cpu, hypctx->vcpu);
 }
 
 static int
@@ -975,12 +974,12 @@ vgic_validate_injection(struct hypctx *hypctx, int irq, int level)
 static bool
 vgic_update_irq_state(struct hypctx *hypctx, unsigned int irq, bool level)
 {
-        struct vgic_v3_dist *vgic_distributor = &hypctx->hyp->vgic_distributor;
+        struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
         int is_edge, cpu = hypctx->vcpu;
         int enabled;
         bool ret = true;
 
-        //mtx_lock_spin(&vgic_distributor->distributor_lock);
+        //mtx_lock_spin(&vgic_dist->dist_lock);
 
         is_edge = vgic_irq_is_edge(hypctx, irq);
 
@@ -990,7 +989,7 @@ vgic_update_irq_state(struct hypctx *hypctx, unsigned int irq, bool level)
         }
 
         if (irq >= VGIC_PRV_INT_NUM) {
-                cpu = 0;//vgic_distributor->irq_spi_cpu[irq - VGIC_PRV_INT_NUM];
+                cpu = 0;//vgic_dist->irq_spi_cpu[irq - VGIC_PRV_INT_NUM];
                 hypctx = &hypctx->hyp->ctx[cpu];
         }
 
@@ -1015,11 +1014,11 @@ vgic_update_irq_state(struct hypctx *hypctx, unsigned int irq, bool level)
 
         if (level) {
                 vgic_cpu_irq_set(hypctx, irq);
-                bit_set((bitstr_t *)&vgic_distributor->irq_pending_on_cpu, cpu);
+                bit_set((bitstr_t *)&dist->irq_pending_on_cpu, cpu);
         }
 
 end:
-        //mtx_unlock_spin(&vgic_distributor->distributor_lock);
+        //mtx_unlock_spin(&vgic_dist->dist_lock);
 
         return ret;
 }
