@@ -55,12 +55,16 @@
 
 #include "boot.h"
 
-#define gvatovm(addr)		((uint64_t)(addr) - KERNBASE + \
+#define	gvatovm(addr)		((uint64_t)(addr) - KERNBASE + \
 				kernel_load_address - memory_base_address)
+#if 0
+#define	IN_INTERVAL(between, start, end)			\
+				((between) >= (start) && (between) < (end))
+#endif
 
 #define	MB			(1024 * 1024UL)
 #define	BSP			0
-#define KERNEL_IMAGE_NAME_LEN	32
+#define	KERNEL_IMAGE_NAME_LEN	32
 
 #define	GIC_V3_DIST_IPA		0x2f000000UL
 #define	GIC_V3_DIST_SIZE	0x10000UL
@@ -261,6 +265,7 @@ main(int argc, char** argv)
 		case 'h':
 			usage(0);
 		default:
+			fprintf(stderr, "Unknown argument '%c'\n", opt);
 			usage(1);
 		}
 	}
@@ -268,8 +273,10 @@ main(int argc, char** argv)
 	argc -= optind;
 	argv += optind;
 
-	if (argc != 1)
+	if (argc != 1) {
+		fprintf(stderr, "Missing or unknown arguments\n");
 		usage(1);
+	}
 
 	if (kernel_load_address < memory_base_address) {
 		fprintf(stderr, "Kernel load address is below memory base address\n");
@@ -310,6 +317,10 @@ main(int argc, char** argv)
 
 	if ((uint64_t)st.st_size > mem_size) {
 		fprintf(stderr, "Kernel image larger than memory size\n");
+		exit(1);
+	}
+	if (kernel_load_address + st.st_size >= memory_base_address + mem_size) {
+		fprintf(stderr, "Kernel image out of bounds of guest memory\n");
 		exit(1);
 	}
 
@@ -362,11 +373,29 @@ main(int argc, char** argv)
 		exit(1);
 	}
 
-	error = vm_attach_vgic(ctx, GIC_V3_DIST_IPA, GIC_V3_REDIST_IPA);
+#if 0
+	uint64_t mem_end = memory_base_address + mem_size;
+	uint64_t gic_dist_end = GIC_V3_DIST_IPA + GIC_V3_DIST_SIZE;
+	if (IN_INTERVAL(mem_end, GIC_V3_DIST_IPA, gic_dist_end) ||
+	    IN_INTERVAL(gic_dist_end, memory_base_address, mem_end)) {
+		fprintf(stderr, "Guest memory overlaps with VGIC Distributor\n");
+		exit(1);
+	}
+
+	uint64_t gic_redist_end = GIC_V3_REDIST_IPA + GIC_V3_REDIST_SIZE;
+	if (IN_INTERVAL(mem_end, GIC_V3_REDIST_IPA, gic_redist_end) ||
+	    IN_INTERVAL(gic_redist_end, memory_base_address, mem_end)) {
+		fprintf(stderr, "Guest memory overlaps with VGIC Redistributor\n");
+		exit(1);
+	}
+
+	error = vm_attach_vgic(ctx, GIC_V3_DIST_IPA, GIC_V3_DIST_SIZE,
+			GIC_V3_REDIST_IPA, GIC_V3_REDIST_SIZE);
 	if (error) {
 		fprintf(stderr, "Error attaching VGIC to the virtual machine\n");
 		exit(1);
 	}
+#endif
 	munmap(addr, st.st_size);
 
 	guest_setreg(VM_REG_ELR_EL2, kernel_load_address + bootparams.entry_off);
