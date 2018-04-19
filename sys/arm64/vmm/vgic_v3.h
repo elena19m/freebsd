@@ -54,7 +54,7 @@ struct vm;
 struct vm_exit;
 
 struct vgic_v3_dist {
-	struct mtx distributor_lock;
+	struct mtx dist_lock;
 
 	/* Interrupt enabled */
 	uint32_t irq_enabled_prv[VGIC_MAXCPU][VGIC_PRV_INT_NUM / (sizeof(uint32_t) * 8)];
