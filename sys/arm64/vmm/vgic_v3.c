@@ -139,13 +139,13 @@ vgic_dist_mmio_read(void *vm, int vcpuid, uint64_t gpa, uint64_t *rval, int size
 	uint64_t byte_offset;
 	uint64_t mask;
 	struct hyp *hyp;
-	struct vgic_distributor *dist;
+	struct vgic_v3_dist *dist;
 
 	hyp = vm_get_cookie(vm);
 	dist = &hyp->vgic_distributor;
 
 	/* offset of distributor register */
-	offset = gpa - dist->distributor_base;
+	offset = gpa - dist->ipa;
 	base_offset = offset - (offset & 3);
 	byte_offset = (offset - base_offset) * 8;
 	mask = (1 << size * 8) - 1;
@@ -263,12 +263,12 @@ vgic_dist_mmio_write(void *vm, int vcpuid, uint64_t gpa, uint64_t val, int size,
 	uint64_t byte_offset;
 	uint64_t mask;
 	struct hyp *hyp;
-	struct vgic_distributor *dist;
+	struct vgic_v3_dist *dist;
 
 	hyp = vm_get_cookie(vm);
 	dist = &hyp->vgic_distributor;
 
-	offset = gpa - dist->distributor_base;
+	offset = gpa - dist->ipa;
 	base_offset = offset - (offset & 3);
 	byte_offset = (offset - base_offset) * 8;
 	mask = (1 << size * 8) - 1;
@@ -402,13 +402,16 @@ vgic_v3_emulate_distributor(void *arg, int vcpuid, struct vm_exit *vme,
 
 	hyp = arg;
 
-	if (vme->u.inst_emul.gpa < hyp->vgic_distributor.distributor_base ||
-		vme->u.inst_emul.gpa > hyp->vgic_distributor.distributor_base + PAGE_SIZE ||
-		!hyp->vgic_attached) {
-
+	if (vme->u.inst_emul.gpa < hyp->vgic_distributor.ipa ||
+	    vme->u.inst_emul.gpa > hyp->vgic_distributor.ipa + PAGE_SIZE ||
+	    !hyp->vgic_attached) {
 		*retu = true;
 		return (0);
 	}
+
+	eprintf("Address DOES target the distributor, emulate in userspace anyway.\n");
+	*retu = true;
+	return (1);
 
 	*retu = false;
 	error = vmm_emulate_instruction(hyp->vm, vcpuid, vme->u.inst_emul.gpa, &vme->u.inst_emul.vie,
@@ -421,30 +424,31 @@ int
 vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, uint64_t redist_ipa)
 {
 	struct hyp *hyp;
-	//struct hypctx *hypctx;
+	struct hypctx *hypctx;
 	//int i, j;
 
 	hyp = arg;
 
 	printf("[vgic_v3: vgic_v3_attach_to_vm()]\n");
 
-#if 0
 	/*
 	 * Set the distributor address which will be emulated using the MMIO
 	 * infrastructure.
 	 */
-	hyp->vgic_distributor.distributor_base = dist_ipa;
-	hyp->vgic_distributor.cpu_int_base = (uint64_t) redist_ipas;
-	hyp->vgic_attached = true;
+	hyp->vgic_distributor.ipa = dist_ipa;
+	hypctx = &hyp->ctx[0];
+	hypctx->vgic_redist.ipa = redist_ipa;
 
+
+#if 0
 	/*
 	 * Set the Virtual Interface Control address to save/restore registers
 	 * at context switch and initiate the List Registers.
 	 */
 	for (i = 0; i < VM_MAXCPU; i++) {
 		hypctx = &hyp->ctx[i];
-		hypctx->vgic.lr_num = virt_features.lr_num;
-		hypctx->vgic.ich_hcr_el2 = ICH_HCR_EL2_EN;
+		hypctx->vgic_cpu_if.lr_num = virt_features.lr_num;
+		hypctx->vgic_cpu_if.ich_hcr_el2 = ICH_HCR_EL2_EN;
 
 		/*
 		 * Set up the Virtual Machine Control Register:
@@ -455,7 +459,7 @@ vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, uint64_t redist_ipa)
 		 * deactivation.
 		 * ICH_VMCR_EL2_VENG1: virtual Group 1 interrupts are enabled.
 		 */
-		hypctx->vgic.ich_vmcr_el2 = (ICH_VMCR_EL2_VPMR_PRIO_LOWEST | \
+		hypctx->vgic_cpu_if.ich_vmcr_el2 = (ICH_VMCR_EL2_VPMR_PRIO_LOWEST | \
 					    ICH_VMCR_EL2_VENG1) & \
 					    ~ICH_VMCR_EL2_VEOIM;
 
@@ -468,7 +472,7 @@ vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, uint64_t redist_ipa)
 				vgic_bitmap_set_irq_val(hyp->vgic_distributor.irq_conf_prv[i],
 										hyp->vgic_distributor.irq_conf_shr, j, VGIC_CFG_EDGE);
 
-			hypctx->vgic.irq_to_lr[j] = VGIC_LR_EMPTY;
+			hypctx->vgic_cpu_if.irq_to_lr[j] = VGIC_LR_EMPTY;
 		}
 	}
 #endif
@@ -481,6 +485,7 @@ vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, uint64_t redist_ipa)
 	    virtual_cpu_int_size,
 	    VM_PROT_READ | VM_PROT_WRITE);
 #endif
+	hyp->vgic_attached = true;
 
 	return (0);
 }
@@ -515,7 +520,7 @@ vgic_bitmap_set_irq_val(uint32_t *irq_prv, uint32_t *irq_shr, int irq, int val)
 static bool
 vgic_irq_is_edge(struct hypctx *hypctx, int irq)
 {
-	struct vgic_distributor *vgic_distributor = &hypctx->hyp->vgic_distributor;
+	struct vgic_v3_dist *vgic_distributor = &hypctx->hyp->vgic_distributor;
 	int irq_val;
 
 	irq_val = vgic_bitmap_get_irq_val(vgic_distributor->irq_conf_prv[hypctx->vcpu], 
@@ -526,7 +531,7 @@ vgic_irq_is_edge(struct hypctx *hypctx, int irq)
 static int
 vgic_irq_is_enabled(struct hypctx *hypctx, int irq)
 {
-	struct vgic_distributor *vgic_distributor = &hypctx->hyp->vgic_distributor;
+	struct vgic_v3_dist *vgic_distributor = &hypctx->hyp->vgic_distributor;
 
 	return vgic_bitmap_get_irq_val(vgic_distributor->irq_enabled_prv[hypctx->vcpu],
 								   vgic_distributor->irq_enabled_shr, irq);
@@ -535,7 +540,7 @@ vgic_irq_is_enabled(struct hypctx *hypctx, int irq)
 static int
 vgic_irq_is_active(struct hypctx *hypctx, int irq)
 {
-	struct vgic_distributor *vgic_distributor = &hypctx->hyp->vgic_distributor;
+	struct vgic_v3_dist *vgic_distributor = &hypctx->hyp->vgic_distributor;
 
 	return vgic_bitmap_get_irq_val(vgic_distributor->irq_active_prv[hypctx->vcpu],
 								   vgic_distributor->irq_active_shr, irq);
@@ -544,7 +549,7 @@ vgic_irq_is_active(struct hypctx *hypctx, int irq)
 static void
 vgic_irq_set_active(struct hypctx *hypctx, int irq)
 {
-	struct vgic_distributor *vgic_distributor = &hypctx->hyp->vgic_distributor;
+	struct vgic_v3_dist *vgic_distributor = &hypctx->hyp->vgic_distributor;
 
 	vgic_bitmap_set_irq_val(vgic_distributor->irq_active_prv[hypctx->vcpu],
 							vgic_distributor->irq_active_shr, irq, 1);
@@ -553,7 +558,7 @@ vgic_irq_set_active(struct hypctx *hypctx, int irq)
 static void
 vgic_irq_clear_active(struct hypctx *hypctx, int irq)
 {
-	struct vgic_distributor *vgic_distributor = &hypctx->hyp->vgic_distributor;
+	struct vgic_v3_dist *vgic_distributor = &hypctx->hyp->vgic_distributor;
 
 	vgic_bitmap_set_irq_val(vgic_distributor->irq_active_prv[hypctx->vcpu],
 							vgic_distributor->irq_active_shr, irq, 0);
@@ -562,7 +567,7 @@ vgic_irq_clear_active(struct hypctx *hypctx, int irq)
 static int
 vgic_dist_irq_is_pending(struct hypctx *hypctx, int irq)
 {
-	struct vgic_distributor *vgic_distributor = &hypctx->hyp->vgic_distributor;
+	struct vgic_v3_dist *vgic_distributor = &hypctx->hyp->vgic_distributor;
 
 	return vgic_bitmap_get_irq_val(vgic_distributor->irq_state_prv[hypctx->vcpu],
 								   vgic_distributor->irq_state_shr, irq);
@@ -571,7 +576,7 @@ vgic_dist_irq_is_pending(struct hypctx *hypctx, int irq)
 static void
 vgic_dist_irq_set(struct hypctx *hypctx, int irq)
 {
-	struct vgic_distributor *vgic_distributor = &hypctx->hyp->vgic_distributor;
+	struct vgic_v3_dist *vgic_distributor = &hypctx->hyp->vgic_distributor;
 
 	vgic_bitmap_set_irq_val(vgic_distributor->irq_state_prv[hypctx->vcpu],
 							vgic_distributor->irq_state_shr, irq, 1);
@@ -580,7 +585,7 @@ vgic_dist_irq_set(struct hypctx *hypctx, int irq)
 static void
 vgic_dist_irq_clear(struct hypctx *hypctx, int irq)
 {
-	struct vgic_distributor *vgic_distributor = &hypctx->hyp->vgic_distributor;
+	struct vgic_v3_dist *vgic_distributor = &hypctx->hyp->vgic_distributor;
 
 	vgic_bitmap_set_irq_val(vgic_distributor->irq_state_prv[hypctx->vcpu],
 							vgic_distributor->irq_state_shr, irq, 0);
@@ -589,36 +594,38 @@ vgic_dist_irq_clear(struct hypctx *hypctx, int irq)
 static void
 vgic_cpu_irq_set(struct hypctx *hypctx, int irq)
 {
-	struct vgic_v3_cpu_if *vgic = &hypctx->vgic;
+	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 
 	if (irq < VGIC_PRV_INT_NUM)
-		bit_set((bitstr_t *)vgic->pending_prv, irq);
+		bit_set((bitstr_t *)cpu_if->pending_prv, irq);
 	else
-		bit_set((bitstr_t *)vgic->pending_shr, irq - VGIC_PRV_INT_NUM);
+		bit_set((bitstr_t *)cpu_if->pending_shr,
+				irq - VGIC_PRV_INT_NUM);
 }
 
 static void
 vgic_cpu_irq_clear(struct hypctx *hypctx, int irq)
 {
-	struct vgic_v3_cpu_if *vgic = &hypctx->vgic;
+	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 
 	if (irq < VGIC_PRV_INT_NUM)
-		bit_clear((bitstr_t *)vgic->pending_prv, irq);
+		bit_clear((bitstr_t *)cpu_if->pending_prv, irq);
 	else
-		bit_clear((bitstr_t *)vgic->pending_shr, irq - VGIC_PRV_INT_NUM);
+		bit_clear((bitstr_t *)cpu_if->pending_shr,
+				irq - VGIC_PRV_INT_NUM);
 }
 
 static int
 compute_pending_for_cpu(struct hyp *hyp, int vcpu)
 {
-	struct vgic_distributor *vgic_distributor = &hyp->vgic_distributor;
-	struct vgic_v3_cpu_if *vgic = &hyp->ctx[vcpu].vgic;
+	struct vgic_v3_dist *vgic_distributor = &hyp->vgic_distributor;
+	struct vgic_v3_cpu_if *cpu_if = &hyp->ctx[vcpu].vgic_cpu_if;
 
 	uint32_t *pending, *enabled, *pend_percpu, *pend_shared, *target;
 	int32_t pending_private, pending_shared;
 
-	pend_percpu = vgic->pending_prv;
-	pend_shared = vgic->pending_shr;
+	pend_percpu = cpu_if->pending_prv;
+	pend_shared = cpu_if->pending_shr;
 
 	pending = vgic_distributor->irq_state_prv[vcpu];
 	enabled = vgic_distributor->irq_enabled_prv[vcpu];
@@ -646,7 +653,7 @@ compute_pending_for_cpu(struct hyp *hyp, int vcpu)
 static void
 vgic_dispatch_sgi(struct hypctx *hypctx)
 {
-	struct vgic_distributor *vgic_distributor = &hypctx->hyp->vgic_distributor;
+	struct vgic_v3_dist *vgic_distributor = &hypctx->hyp->vgic_distributor;
 	// TODO Get actual number of cpus on current machine
 	int vcpu_num = VM_MAXCPU;
 	int sgi, mode, cpu;
@@ -687,7 +694,7 @@ vgic_dispatch_sgi(struct hypctx *hypctx)
 static void
 vgic_update_state(struct hyp *hyp)
 {
-	struct vgic_distributor *vgic_distributor = &hyp->vgic_distributor;
+	struct vgic_v3_dist *vgic_distributor = &hyp->vgic_distributor;
 	int cpu;
 
 	//mtx_lock_spin(&vgic_distributor->distributor_lock);
@@ -722,17 +729,17 @@ end:
 static void
 vgic_retire_disabled_irqs(struct hypctx *hypctx)
 {
-	struct vgic_v3_cpu_if *vgic = &hypctx->vgic;
+	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	int lr_idx;
 
-	for_each_set_bit(lr_idx, vgic->lr_used, vgic->lr_num) {
+	for_each_set_bit(lr_idx, cpu_if->lr_used, vgic->lr_num) {
 
-		int irq = vgic->lr[lr_idx] & GICH_LR_VIRTID;
+		int irq = cpu_if->lr[lr_idx] & GICH_LR_VIRTID;
 
 		if (!vgic_irq_is_enabled(hypctx, irq)) {
-			vgic->irq_to_lr[irq] = VGIC_LR_EMPTY;
-			bit_clear((bitstr_t *)vgic->lr_used, lr_idx);
-			vgic->ich_lr_el2[lr_idx] &= ~GICH_LR_STATE;
+			cpu_if->irq_to_lr[irq] = VGIC_LR_EMPTY;
+			bit_clear((bitstr_t *)cpu_if->lr_used, lr_idx);
+			cpu_if->ich_lr_el2[lr_idx] &= ~GICH_LR_STATE;
 			if (vgic_irq_is_active(hypctx, irq))
 				vgic_irq_clear_active(hypctx, irq);
 		}
@@ -743,35 +750,35 @@ vgic_retire_disabled_irqs(struct hypctx *hypctx)
 static bool
 vgic_queue_irq(struct hypctx *hypctx, uint8_t sgi_source_cpu, int irq)
 {
-	struct vgic_v3_cpu_if *vgic = &hypctx->vgic;
+	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	int lr_idx;
 
 	//printf("Queue IRQ%d\n", irq);
 
-	lr_idx = vgic->irq_to_lr[irq];
+	lr_idx = cpu_if->irq_to_lr[irq];
 
 	if (lr_idx != VGIC_LR_EMPTY &&
-	    (LR_CPUID(vgic->ich_lr_el2[lr_idx]) == sgi_source_cpu)) {
+	    (LR_CPUID(cpu_if->ich_lr_el2[lr_idx]) == sgi_source_cpu)) {
 
-		//printf("LR%d piggyback for IRQ%d %x\n", lr, irq, vgic_cpu->vgic_lr[lr]);
+		//printf("LR%d piggyback for IRQ%d %x\n", lr, irq, cpu_if->vgic_lr[lr]);
 
-		vgic->ich_lr_el2[lr_idx] |= GICH_LR_PENDING;
+		cpu_if->ich_lr_el2[lr_idx] |= GICH_LR_PENDING;
 
 		goto end;
 	}
 
-	bit_ffc((bitstr_t *)vgic->lr_used, vgic->lr_num, &lr_idx);
+	bit_ffc((bitstr_t *)cpu_if->lr_used, cpu_if->lr_num, &lr_idx);
 	if (lr_idx == -1)
 		return false;
 
 	//printf("LR%d allocated for IRQ%d %x\n", lr, irq, sgi_source_id);
-	vgic->ich_lr_el2[lr_idx] = MK_LR_PEND(sgi_source_cpu, irq);
-	vgic->irq_to_lr[irq] = lr_idx;
-	bit_set((bitstr_t *)vgic->lr_used, lr_idx);
+	cpu_if->ich_lr_el2[lr_idx] = MK_LR_PEND(sgi_source_cpu, irq);
+	cpu_if->irq_to_lr[irq] = lr_idx;
+	bit_set((bitstr_t *)cpu_if->lr_used, lr_idx);
 
 end:
 	if (!vgic_irq_is_edge(hypctx, irq))
-		vgic->ich_lr_el2[lr_idx] |= GICH_LR_EOI;
+		cpu_if->ich_lr_el2[lr_idx] |= GICH_LR_EOI;
 
 	return true;
 }
@@ -779,7 +786,7 @@ end:
 static bool
 vgic_queue_sgi(struct hypctx *hypctx, int irq)
 {
-	struct vgic_distributor *vgic_distributor = &hypctx->hyp->vgic_distributor;
+	struct vgic_v3_dist *vgic_distributor = &hypctx->hyp->vgic_distributor;
 	uint8_t source;
 	int cpu;
 
@@ -824,20 +831,20 @@ vgic_queue_hwirq(struct hypctx *hypctx, int irq)
 static bool
 vgic_process_maintenance(struct hypctx *hypctx)
 {
-	struct vgic_v3_cpu_if *vgic = &hypctx->vgic;
+	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	int lr_idx, irq;
 	bool level_pending = false;
 
 	//printf("MISR = %08x\n", vgic->misr);
 
-	if (vgic->ich_misr_el2 & GICH_MISR_EOI) {
+	if (cpu_if->ich_misr_el2 & GICH_MISR_EOI) {
 
-		for_each_set_bit(lr_idx, &vgic->ich_eisr_el2, vgic->lr_num) {
+		for_each_set_bit(lr_idx, &cpu_if->ich_eisr_el2, cpu_if->lr_num) {
 
-			irq = vgic->ich_lr_el2[lr_idx] & GICH_LR_VIRTID;
+			irq = cpu_if->ich_lr_el2[lr_idx] & GICH_LR_VIRTID;
 
 			vgic_irq_clear_active(hypctx, irq);
-			vgic->ich_lr_el2[lr_idx] &= ~GICH_LR_EOI;
+			cpu_if->ich_lr_el2[lr_idx] &= ~GICH_LR_EOI;
 
 			if (vgic_dist_irq_is_pending(hypctx, irq)) {
 				vgic_cpu_irq_set(hypctx, irq);
@@ -848,8 +855,8 @@ vgic_process_maintenance(struct hypctx *hypctx)
 		}
 	}
 
-	if (vgic->ich_misr_el2 & GICH_MISR_U)
-		vgic->ich_hcr_el2 &= ~GICH_HCR_UIE;
+	if (cpu_if->ich_misr_el2 & GICH_MISR_U)
+		cpu_if->ich_hcr_el2 &= ~GICH_HCR_UIE;
 
 	return level_pending;
 }
@@ -858,12 +865,12 @@ void
 vgic_v3_flush_hwstate(void *arg)
 {
 	struct hypctx *hypctx;
-	struct vgic_v3_cpu_if *vgic;
-	struct vgic_distributor *vgic_distributor;
+	struct vgic_v3_cpu_if *cpu_if;
+	struct vgic_v3_dist *vgic_distributor;
 	int i, overflow = 0;
 
 	hypctx = arg;
-	vgic = &hypctx->vgic;
+	cpu_if = &hypctx->vgic_cpu_if;
 	vgic_distributor = &hypctx->hyp->vgic_distributor;
 
 	//printf("vgic_flush_hwstate\n");
@@ -878,7 +885,7 @@ vgic_v3_flush_hwstate(void *arg)
 	/* SGIs */
 	/* TODO - check bounds for i */
 	i = GIC_FIRST_SGI;
-	for_each_set_bit_from(i, vgic->pending_prv, GIC_LAST_SGI + 1) {
+	for_each_set_bit_from(i, cpu_if->pending_prv, GIC_LAST_SGI + 1) {
 		//printf("Pending SGI %d\n", i);
 		if (!vgic_queue_sgi(hypctx, i))
 			overflow = 1;
@@ -886,7 +893,7 @@ vgic_v3_flush_hwstate(void *arg)
 
 	/* PPIs */
 	i = GIC_FIRST_PPI;
-	for_each_set_bit_from(i, vgic->pending_prv, GIC_LAST_PPI + 1) {
+	for_each_set_bit_from(i, cpu_if->pending_prv, GIC_LAST_PPI + 1) {
 		//printf("Pending PPI %d\n", i);
 		if (!vgic_queue_hwirq(hypctx, i))
 			overflow = 1;
@@ -894,7 +901,7 @@ vgic_v3_flush_hwstate(void *arg)
 
 	/* SPIs */
 	i = 0;
-	for_each_set_bit(i, vgic->pending_shr, VGIC_SPI_NUM) {
+	for_each_set_bit(i, cpu_if->pending_shr, VGIC_SPI_NUM) {
 		//printf("Pending SPI %d\n", i);
 		if (!vgic_queue_hwirq(hypctx, i + VGIC_PRV_INT_NUM))
 			overflow = 1;
@@ -902,9 +909,9 @@ vgic_v3_flush_hwstate(void *arg)
 
 end:
 	if (overflow) {
-		vgic->ich_hcr_el2 |= GICH_HCR_UIE;
+		cpu_if->ich_hcr_el2 |= GICH_HCR_UIE;
 	} else {
-		vgic->ich_hcr_el2 &= ~GICH_HCR_UIE;
+		cpu_if->ich_hcr_el2 &= ~GICH_HCR_UIE;
 		bit_clear((bitstr_t *)&vgic_distributor->irq_pending_on_cpu, hypctx->vcpu);
 	}
 	//mtx_unlock_spin(&vgic_distributor->distributor_lock);
@@ -914,29 +921,29 @@ void
 vgic_v3_sync_hwstate(void *arg)
 {
 	struct hypctx *hypctx;
-	struct vgic_v3_cpu_if *vgic;
-	struct vgic_distributor *vgic_distributor;
+	struct vgic_v3_cpu_if *cpu_if;
+	struct vgic_v3_dist *vgic_distributor;
 	int lr_idx, pending, irq;
 	bool level_pending;
 
 	hypctx = arg;
-	vgic = &hypctx->vgic;
+	cpu_if = &hypctx->vgic_cpu_if;
 	vgic_distributor = &hypctx->hyp->vgic_distributor;
 
 	//printf("vgic_sync_hwstate\n");
 
 	level_pending = vgic_process_maintenance(hypctx);
 
-	for_each_set_bit(lr_idx, &vgic->ich_elsr_el2, vgic->lr_num) {
+	for_each_set_bit(lr_idx, &cpu_if->ich_elsr_el2, cpu_if->lr_num) {
 
-		if (!bit_test_and_clear((bitstr_t *)vgic->lr_used, lr_idx))
+		if (!bit_test_and_clear((bitstr_t *)cpu_if->lr_used, lr_idx))
 			continue;
 
-		irq = vgic->ich_lr_el2[lr_idx] & GICH_LR_VIRTID;
-		vgic->irq_to_lr[irq] = VGIC_LR_EMPTY;
+		irq = cpu_if->ich_lr_el2[lr_idx] & GICH_LR_VIRTID;
+		cpu_if->irq_to_lr[irq] = VGIC_LR_EMPTY;
 	}
 
-	bit_ffc((bitstr_t *)&vgic->ich_elsr_el2, vgic->lr_num, &pending);
+	bit_ffc((bitstr_t *)&cpu_if->ich_elsr_el2, cpu_if->lr_num, &pending);
 	if (level_pending || pending > -1)
 		bit_set((bitstr_t *)&vgic_distributor->irq_pending_on_cpu, hypctx->vcpu);
 }
@@ -945,7 +952,7 @@ int
 vgic_v3_vcpu_pending_irq(void *arg)
 {
 	struct hypctx *hypctx;
-	struct vgic_distributor *vgic_distributor;
+	struct vgic_v3_dist *vgic_distributor;
 
 	hypctx = arg;
 	vgic_distributor = &hypctx->hyp->vgic_distributor;
@@ -960,13 +967,13 @@ vgic_validate_injection(struct hypctx *hypctx, int irq, int level)
         int is_edge = vgic_irq_is_edge(hypctx, irq);
         int state = vgic_dist_irq_is_pending(hypctx, irq);
 
-        return is_edge ? (level > state) : (level != state);
+        return (is_edge ? (level > state) : (level != state));
 }
 
 static bool
 vgic_update_irq_state(struct hypctx *hypctx, unsigned int irq, bool level)
 {
-        struct vgic_distributor *vgic_distributor = &hypctx->hyp->vgic_distributor;
+        struct vgic_v3_dist *vgic_distributor = &hypctx->hyp->vgic_distributor;
         int is_edge, cpu = hypctx->vcpu;
         int enabled;
         bool ret = true;
