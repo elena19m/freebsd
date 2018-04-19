@@ -55,12 +55,11 @@
 
 #include "boot.h"
 
-#define	gvatovm(addr)		((uint64_t)(addr) - KERNBASE + \
+#define	gvatovm(addr)		((uint64_t)(addr) - KERNBASE + 	\
 				kernel_load_address - memory_base_address)
-#if 0
-#define	IN_INTERVAL(between, start, end)			\
-				((between) >= (start) && (between) < (end))
-#endif
+#define	overlap(x_start, x_end, y_start, y_end)					\
+			((x_start) >= (y_start) && (x_start) < (y_end) || 	\
+		 	(x_end) >= (y_start) && (x_end) < (y_end))
 
 #define	MB			(1024 * 1024UL)
 #define	BSP			0
@@ -373,18 +372,16 @@ main(int argc, char** argv)
 		exit(1);
 	}
 
-#if 0
 	uint64_t mem_end = memory_base_address + mem_size;
-	uint64_t gic_dist_end = GIC_V3_DIST_IPA + GIC_V3_DIST_SIZE;
-	if (IN_INTERVAL(mem_end, GIC_V3_DIST_IPA, gic_dist_end) ||
-	    IN_INTERVAL(gic_dist_end, memory_base_address, mem_end)) {
+	uint64_t dist_end = GIC_V3_DIST_IPA + GIC_V3_DIST_SIZE;
+	uint64_t redist_end = GIC_V3_REDIST_IPA + GIC_V3_REDIST_SIZE;
+
+	if (overlap(GIC_V3_DIST_IPA, dist_end, memory_base_address, mem_end)) {
 		fprintf(stderr, "Guest memory overlaps with VGIC Distributor\n");
 		exit(1);
 	}
 
-	uint64_t gic_redist_end = GIC_V3_REDIST_IPA + GIC_V3_REDIST_SIZE;
-	if (IN_INTERVAL(mem_end, GIC_V3_REDIST_IPA, gic_redist_end) ||
-	    IN_INTERVAL(gic_redist_end, memory_base_address, mem_end)) {
+	if (overlap(GIC_V3_REDIST_IPA, redist_end, memory_base_address, mem_end)) {
 		fprintf(stderr, "Guest memory overlaps with VGIC Redistributor\n");
 		exit(1);
 	}
@@ -395,7 +392,7 @@ main(int argc, char** argv)
 		fprintf(stderr, "Error attaching VGIC to the virtual machine\n");
 		exit(1);
 	}
-#endif
+
 	munmap(addr, st.st_size);
 
 	guest_setreg(VM_REG_ELR_EL2, kernel_load_address + bootparams.entry_off);

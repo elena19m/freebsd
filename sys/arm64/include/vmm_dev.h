@@ -97,7 +97,9 @@ struct vm_activate_cpu {
 
 struct vm_attach_vgic {
 	uint64_t	dist_ipa;
+	size_t		dist_size;
 	uint64_t	redist_ipa;
+	size_t		redist_size;
 };
 
 #define	VM_ACTIVE_CPUS		0

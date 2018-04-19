@@ -411,7 +411,7 @@ vgic_v3_emulate_distributor(void *arg, int vcpuid, struct vm_exit *vme,
 
 	eprintf("Address DOES target the distributor, emulate in userspace anyway.\n");
 	*retu = true;
-	return (1);
+	return (0);
 
 	*retu = false;
 	error = vmm_emulate_instruction(hyp->vm, vcpuid, vme->u.inst_emul.gpa, &vme->u.inst_emul.vie,
@@ -421,13 +421,11 @@ vgic_v3_emulate_distributor(void *arg, int vcpuid, struct vm_exit *vme,
 }
 
 int
-vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, uint64_t redist_ipa)
+vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
+		uint64_t redist_ipa, size_t redist_size)
 {
-	struct hyp *hyp;
+	struct hyp *hyp = (struct hyp *)arg;
 	struct hypctx *hypctx;
-	//int i, j;
-
-	hyp = arg;
 
 	printf("[vgic_v3: vgic_v3_attach_to_vm()]\n");
 
@@ -436,8 +434,12 @@ vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, uint64_t redist_ipa)
 	 * infrastructure.
 	 */
 	hyp->vgic_distributor.ipa = dist_ipa;
+	hyp->vgic_distributor.size = dist_size;
+
+	/* Only one CPU per virtual machine supported. */
 	hypctx = &hyp->ctx[0];
 	hypctx->vgic_redist.ipa = redist_ipa;
+	hypctx->vgic_redist.size = redist_size;
 
 
 #if 0

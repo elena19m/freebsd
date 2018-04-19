@@ -197,7 +197,8 @@ vmmdev_ioctl(struct cdev *cdev, u_long cmd, caddr_t data, int fflag,
 		break;
 	case VM_ATTACH_VGIC:
 		vav = (struct vm_attach_vgic *)data;
-		error = vm_attach_vgic(sc->vm, vav->dist_ipa, vav->redist_ipa);
+		error = vm_attach_vgic(sc->vm, vav->dist_ipa, vav->dist_size,
+				vav->redist_ipa, vav->redist_size);
 		break;
 	default:
 		error = ENOTTY;
