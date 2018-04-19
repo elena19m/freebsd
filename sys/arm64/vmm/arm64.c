@@ -59,6 +59,8 @@
 #define	HANDLED		1
 #define	UNHANDLED	0
 
+#define	UNUSED		0
+
 MALLOC_DEFINE(M_HYP, "ARM VMM HYP", "ARM VMM HYP");
 
 extern char hyp_init_vectors[];
@@ -213,7 +215,6 @@ arm_vminit(struct vm *vm)
 		 *
 		 * HCR_RW: use AArch64 for EL1
 		 * HCR_HCD: disable the HVC instruction from EL1 ** HVC ENABLED FOR NOW **
-		 * HCR_TSC: trap SMC (Secure Monitor Call) from EL1
 		 * HCR_SWIO: turn set/way invalidate into set/way clean and
 		 * invalidate
 		 * HCR_FB: broadcast maintenance operations
@@ -224,9 +225,8 @@ arm_vminit(struct vm *vm)
 		 * HCR_FMO: route physical FIQ interrupts to EL2
 		 * HCR_VM: use stage 2 translation
 		 */
-		hypctx->hcr_el2 = HCR_RW | HCR_TSC | HCR_BSU_IS | \
-				HCR_SWIO | HCR_FB | HCR_VM | \
-				HCR_AMO | HCR_IMO | HCR_FMO;
+		hypctx->hcr_el2 = HCR_RW | HCR_BSU_IS | HCR_SWIO | HCR_FB | \
+				  HCR_VM | HCR_AMO | HCR_IMO | HCR_FMO;
 
 		/* The guest will detect a uniprocessor system */
 		hypctx->vmpidr_el2 = get_mpidr();
@@ -354,8 +354,8 @@ get_vm_reg_name(uint32_t reg_nr, uint32_t mode __attribute__((unused)))
 
 static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 {
-	int handled;
-	uint32_t esr_ec, esr_iss, esr_sas;
+	uint32_t esr_ec, esr_iss, esr_sas, reg_nr;
+	struct vie *vie;
 	//struct hypctx *hypctx = &hyp->ctx[vcpu];
 
 	esr_ec = ESR_ELx_EXCEPTION(vmexit->u.hyp.esr_el2);
@@ -363,11 +363,10 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 
 	switch(esr_ec) {
 	case EXCP_UNKNOWN:
-		printf("%s:%d Unknown exception\n", __func__, __LINE__);
-		handled = UNHANDLED;
+		eprintf("Unknown exception\n");
+		vmexit->exitcode = VM_EXITCODE_HYP;
 		break;
 
-	/* TODO: Not implemented yet */
 #if 0
 	case HSR_EC_WFI_WFE:
 		vmexit->exitcode = VM_EXITCODE_WFI;
@@ -423,9 +422,9 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 		break;
 #endif
 	case EXCP_HVC:
-		eprintf("HVC called from guest - unsupported\n");
+		eprintf("Unsupported HVC call from guest\n");
 		printf("\tESR_EL2: 0x%08x\n", vmexit->u.hyp.esr_el2);
-		handled = UNHANDLED;
+		vmexit->exitcode = VM_EXITCODE_HYP;
 		break;
 
 	case EXCP_DATA_ABORT_L:
@@ -434,19 +433,19 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 			eprintf("Data abort from guest with invalid instruction syndrome\n");
 			printf("\tHPFAR_EL2: 0x%016lx\n", vmexit->u.hyp.hpfar_el2);
 			printf("\tESR_EL2:   0x%08x\n", vmexit->u.hyp.esr_el2);
-			handled = UNHANDLED;
+			vmexit->exitcode = VM_EXITCODE_HYP;
 			break;
 		}
 
 		/*
 		 * Check if the data abort was caused by a translation fault.
-		 * Any other type of data abort is an error.
+		 * Any other type of data fault will be treated as an error.
 		 */
 		if (!(ISS_DATA_DFSC_TF(esr_iss))) {
 			eprintf("Data abort from guest NOT on a stage 2 translation\n");
 			printf("\tHPFAR_EL2: 0x%016lx\n", vmexit->u.hyp.hpfar_el2);
 			printf("\tESR_EL2:   0x%08x\n", vmexit->u.hyp.esr_el2);
-			handled = UNHANDLED;
+			vmexit->exitcode = VM_EXITCODE_HYP;
 			break;
 		}
 
@@ -458,23 +457,25 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 		/* The IPA for a 4KB page has bits [11:0] zero. */
 		vmexit->u.inst_emul.gpa	<<= PAGE_SHIFT;
 
+		vie = &vmexit->u.inst_emul.vie;
+
 		esr_sas = (esr_iss & ISS_DATA_SAS_MASK) >> ISS_DATA_SAS_SHIFT;
-		vmexit->u.inst_emul.vie.access_size = 1 << esr_sas;
+		vie->access_size = 1 << esr_sas;
 
 		if (esr_iss & ISS_DATA_SSE)
-			vmexit->u.inst_emul.vie.sign_extend = 1;
+			vie->sign_extend = 1;
 		else
-			vmexit->u.inst_emul.vie.sign_extend = 0;
+			vie->sign_extend = 0;
 
 		if (esr_iss & ISS_DATA_WnR)
-			vmexit->u.inst_emul.vie.dir = VM_VIE_DIR_WRITE;
+			vie->dir = VM_VIE_DIR_WRITE;
 		else
-			vmexit->u.inst_emul.vie.dir = VM_VIE_DIR_READ;
+			vie->dir = VM_VIE_DIR_READ;
 
-		vmexit->u.inst_emul.vie.reg = get_vm_reg_name(
-				(esr_iss & ISS_DATA_SRT_MASK) >> ISS_DATA_SRT_SHIFT, 0);
+		reg_nr = (esr_iss & ISS_DATA_SRT_MASK) >> ISS_DATA_SRT_SHIFT;
+		vie->reg = get_vm_reg_name(reg_nr, UNUSED);
+
 		vmexit->exitcode = VM_EXITCODE_INST_EMUL;
-		handled = UNHANDLED;
 		break;
 
 	/* TODO: not implemented yet. */
@@ -486,11 +487,10 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 #endif
 	default:
 		eprintf("Unknown ESR_EC code: 0x%x\n", esr_ec);
-		handled = UNHANDLED;
 		break;
 	}
 
-	return handled;
+	return UNHANDLED;
 }
 
 static int
@@ -499,18 +499,17 @@ handle_world_switch(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 	int excp_type;
 	int handled;
 
-	vmexit->exitcode = VM_EXITCODE_BOGUS;
 	excp_type = vmexit->u.hyp.exception_nr;
-
 	switch (excp_type) {
 	case EXCP_TYPE_EL1_SYNC:
-		vmexit->exitcode = VM_EXITCODE_HYP;
+		/* The exit code will be set by handle_el1_sync_exception(). */
 		handled = handle_el1_sync_exception(hyp, vcpu, vmexit);
 		break;
 
 	case EXCP_TYPE_EL1_IRQ:
 	case EXCP_TYPE_EL1_FIQ:
 		/* The host kernel will handle IRQs and FIQs. */
+		vmexit->exitcode = VM_EXITCODE_BOGUS;
 		handled = UNHANDLED;
 		break;
 
@@ -520,12 +519,15 @@ handle_world_switch(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 	case EXCP_TYPE_EL2_FIQ:
 	case EXCP_TYPE_EL2_ERROR:
 		eprintf("Unhandled exception type: %s\n", excp_type_str(excp_type));
+		vmexit->exitcode = VM_EXITCODE_BOGUS;
 		handled = UNHANDLED;
 		break;
 
 	default:
 		eprintf("Unknown exception type: %d\n", excp_type);
+		vmexit->exitcode = VM_EXITCODE_BOGUS;
 		handled = UNHANDLED;
+		break;
 	}
 
 	return (handled);
