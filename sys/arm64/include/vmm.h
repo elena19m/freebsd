@@ -167,7 +167,8 @@ void* vm_get_cookie(struct vm *vm);
 int vm_get_capability(struct vm *vm, int vcpu, int type, int *val);
 int vm_set_capability(struct vm *vm, int vcpu, int type, int val);
 int vm_activate_cpu(struct vm *vm, int vcpu);
-int vm_attach_vgic(struct vm *vm, uint64_t dist_ipa, uint64_t redist_ipa);
+int vm_attach_vgic(struct vm *vm, uint64_t dist_ipa, size_t dist_size,
+		uint64_t redist_ipa, size_t redist_size);
 struct vm_exit *vm_exitinfo(struct vm *vm, int vcpuid);
 void vm_exit_suspended(struct vm *vm, int vcpuid, uint64_t rip);
 void vm_exit_rendezvous(struct vm *vm, int vcpuid, uint64_t rip);

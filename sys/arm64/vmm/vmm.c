@@ -403,9 +403,7 @@ restart:
 		case VM_EXITCODE_INST_EMUL:
 			/* Check if we need to do in-kernel emulation */
 			pc = vme->pc + vme->inst_length;
-			retu = true;
-			//error = vgic_v3_emulate_distributor(vm->cookie, vcpuid, vme, &retu);
-			error = 0;
+			error = vgic_v3_emulate_distributor(vm->cookie, vcpuid, vme, &retu);
 			break;
 
 		case VM_EXITCODE_WFI:
@@ -735,9 +733,11 @@ vm_malloc(struct vm *vm, uint64_t ipa, size_t len)
 }
 
 int
-vm_attach_vgic(struct vm *vm, uint64_t dist_ipa, uint64_t redist_ipa)
+vm_attach_vgic(struct vm *vm, uint64_t dist_ipa, size_t dist_size,
+		uint64_t redist_ipa, size_t redist_size)
 {
-	return vgic_v3_attach_to_vm(vm->cookie, dist_ipa, redist_ipa);
+	return vgic_v3_attach_to_vm(vm->cookie, dist_ipa, dist_size,
+			redist_ipa, redist_size);
 }
 
 static int

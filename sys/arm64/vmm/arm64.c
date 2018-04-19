@@ -368,7 +368,7 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 
 	case EXCP_HVC:
 		eprintf("Unsupported HVC call from guest\n");
-		printf("\tESR_EL2: 0x%08x\n", vmexit->u.hyp.esr_el2);
+		printf("\tesr_el2: 0x%08x\n", vmexit->u.hyp.esr_el2);
 		vmexit->exitcode = VM_EXITCODE_HYP;
 		break;
 
@@ -376,8 +376,8 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 		/* Check if instruction syndrome is valid */
 		if (!(esr_iss & ISS_DATA_ISV)) {
 			eprintf("Data abort from guest with invalid instruction syndrome\n");
-			printf("\tHPFAR_EL2: 0x%016lx\n", vmexit->u.hyp.hpfar_el2);
-			printf("\tESR_EL2:   0x%08x\n", vmexit->u.hyp.esr_el2);
+			printf("\thpfar_el2: 0x%016lx\n", vmexit->u.hyp.hpfar_el2);
+			printf("\tesr_el2:   0x%08x\n", vmexit->u.hyp.esr_el2);
 			vmexit->exitcode = VM_EXITCODE_HYP;
 			break;
 		}
@@ -388,8 +388,8 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 		 */
 		if (!(ISS_DATA_DFSC_TF(esr_iss))) {
 			eprintf("Data abort from guest NOT on a stage 2 translation\n");
-			printf("\tHPFAR_EL2: 0x%016lx\n", vmexit->u.hyp.hpfar_el2);
-			printf("\tESR_EL2:   0x%08x\n", vmexit->u.hyp.esr_el2);
+			printf("\thpfar_el2: 0x%016lx\n", vmexit->u.hyp.hpfar_el2);
+			printf("\tesr_el2:   0x%08x\n", vmexit->u.hyp.esr_el2);
 			vmexit->exitcode = VM_EXITCODE_HYP;
 			break;
 		}
@@ -405,20 +405,20 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 		vie = &vmexit->u.inst_emul.vie;
 
 		esr_sas = (esr_iss & ISS_DATA_SAS_MASK) >> ISS_DATA_SAS_SHIFT;
-		vie->access_size = 1 << esr_sas;
+		reg_nr = (esr_iss & ISS_DATA_SRT_MASK) >> ISS_DATA_SRT_SHIFT;
 
+		vie->access_size = 1 << esr_sas;
 		vie->sign_extend = (esr_iss & ISS_DATA_SSE) ? 1 : 0;
 		vie->dir = (esr_iss & ISS_DATA_WnR) ? \
 			   VM_VIE_DIR_WRITE : VM_VIE_DIR_READ;
-
-		reg_nr = (esr_iss & ISS_DATA_SRT_MASK) >> ISS_DATA_SRT_SHIFT;
 		vie->reg = get_vm_reg_name(reg_nr, UNUSED);
 
 		vmexit->exitcode = VM_EXITCODE_INST_EMUL;
 		break;
 
 	default:
-		eprintf("Unsupported synchronous exception from guest: 0x%x\n", esr_ec);
+		eprintf("Unsupported synchronous exception from guest: 0x%x\n",
+		    esr_ec);
 		vmexit->exitcode = VM_EXITCODE_HYP;
 		break;
 	}
@@ -442,6 +442,7 @@ handle_world_switch(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 	case EXCP_TYPE_EL1_IRQ:
 	case EXCP_TYPE_EL1_FIQ:
 		/* The host kernel will handle IRQs and FIQs. */
+		//vmexit->exitcode = VM_EXITCODE_BOGUS;
 		vmexit->exitcode = VM_EXITCODE_BOGUS;
 		handled = UNHANDLED;
 		break;

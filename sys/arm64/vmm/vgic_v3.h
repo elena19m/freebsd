@@ -75,9 +75,11 @@ struct vgic_v3_dist {
 	/* Interrupt targets */
 	uint32_t irq_target_shr[VGIC_SHR_INT_NUM / sizeof(uint32_t)];
 
-	uint8_t irq_sgi_source[VGIC_MAXCPU][VGIC_SGI_NUM];
+	uint8_t  irq_sgi_source[VGIC_MAXCPU][VGIC_SGI_NUM];
 
 	uint64_t ipa;
+	size_t   size;
+
 	uint32_t enabled;
 	uint32_t irq_pending_on_cpu;
 	uint32_t sgir;
@@ -85,6 +87,7 @@ struct vgic_v3_dist {
 
 struct vgic_v3_redist {
 	uint64_t ipa;
+	size_t 	 size;
 };
 
 struct vgic_v3_cpu_if {
@@ -111,7 +114,8 @@ int vgic_v3_map(pmap_t el2_pmap);
 int vgic_v3_emulate_distributor(void *arg, int vcpuid,
 		struct vm_exit *vme, bool *retu);
 
-int vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, uint64_t redist_ipa);
+int vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
+		uint64_t redist_ipa, size_t redist_size);
 
 void vgic_v3_sync_hwstate(void *arg);
 

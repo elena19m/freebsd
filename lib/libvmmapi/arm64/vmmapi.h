@@ -71,6 +71,7 @@ const char *vm_get_stat_desc(struct vmctx *ctx, int index);
 /* Reset vcpu register state */
 int	vcpu_reset(struct vmctx *ctx, int vcpu);
 
-int	vm_attach_vgic(struct vmctx *ctx, uint64_t distributor_paddr, uint64_t cpu_int_paddr);
+int	vm_attach_vgic(struct vmctx *ctx, uint64_t dist_ipa, size_t dist_size,
+		uint64_t redist_ipa, size_t redist_size);
 
 #endif	/* _VMMAPI_H_ */
