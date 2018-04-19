@@ -203,7 +203,7 @@ arm_vminit(struct vm *vm)
 	hypmap_init(hyp->stage2_map, PT_STAGE2);
 	set_vttbr(hyp);
 
-	mtx_init(&hyp->vgic_distributor.distributor_lock, "Distributor Lock", "", MTX_SPIN);
+	mtx_init(&hyp->vgic_dist.dist_lock, "Distributor Lock", "", MTX_SPIN);
 
 	for (i = 0; i < VM_MAXCPU; i++) {
 		hypctx = &hyp->ctx[i];
@@ -352,10 +352,40 @@ get_vm_reg_name(uint32_t reg_nr, uint32_t mode __attribute__((unused)))
 	return VM_REG_LAST;
 }
 
-static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
+static inline void print_hyp_regs(struct vm_exit *vme)
 {
-	uint32_t esr_ec, esr_iss, esr_sas, reg_nr;
+	printf("esr_el2:   0x%08x\n", vme->u.hyp.esr_el2);
+	printf("far_el2:   0x%016lx\n", vme->u.hyp.far_el2);
+	printf("hpfar_el2: 0x%016lx\n", vme->u.hyp.hpfar_el2);
+}
+
+static void gen_inst_emul_data(uint32_t esr_iss, struct vm_exit *vme_ret)
+{
 	struct vie *vie;
+	uint32_t esr_sas, reg_nr;
+
+	/*
+	 * HPFAR_EL2 holds bits [47:12] of the IPA, the rest of the
+	 * HPFAR_EL2 bits are RES0.
+	 */
+	vme_ret->u.inst_emul.gpa = vme_ret->u.hyp.hpfar_el2 >> HPFAR_EL2_FIPA_SHIFT;
+	/* The IPA for a 4KB page has bits [11:0] zero. */
+	vme_ret->u.inst_emul.gpa <<= PAGE_SHIFT;
+
+	esr_sas = (esr_iss & ISS_DATA_SAS_MASK) >> ISS_DATA_SAS_SHIFT;
+	reg_nr = (esr_iss & ISS_DATA_SRT_MASK) >> ISS_DATA_SRT_SHIFT;
+
+	vie = &vme_ret->u.inst_emul.vie;
+	vie->access_size = 1 << esr_sas;
+	vie->sign_extend = (esr_iss & ISS_DATA_SSE) ? 1 : 0;
+	vie->dir = (esr_iss & ISS_DATA_WnR) ? VM_VIE_DIR_WRITE : VM_VIE_DIR_READ;
+	vie->reg = get_vm_reg_name(reg_nr, UNUSED);
+}
+
+static int
+handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
+{
+	uint32_t esr_ec, esr_iss;
 
 	esr_ec = ESR_ELx_EXCEPTION(vmexit->u.hyp.esr_el2);
 	esr_iss = vmexit->u.hyp.esr_el2 & ESR_ELx_ISS_MASK;
@@ -363,12 +393,13 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 	switch(esr_ec) {
 	case EXCP_UNKNOWN:
 		eprintf("Unknown exception from guest\n");
+		print_hyp_regs(vmexit);
 		vmexit->exitcode = VM_EXITCODE_HYP;
 		break;
 
 	case EXCP_HVC:
 		eprintf("Unsupported HVC call from guest\n");
-		printf("\tesr_el2: 0x%08x\n", vmexit->u.hyp.esr_el2);
+		print_hyp_regs(vmexit);
 		vmexit->exitcode = VM_EXITCODE_HYP;
 		break;
 
@@ -376,8 +407,7 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 		/* Check if instruction syndrome is valid */
 		if (!(esr_iss & ISS_DATA_ISV)) {
 			eprintf("Data abort from guest with invalid instruction syndrome\n");
-			printf("\thpfar_el2: 0x%016lx\n", vmexit->u.hyp.hpfar_el2);
-			printf("\tesr_el2:   0x%08x\n", vmexit->u.hyp.esr_el2);
+			print_hyp_regs(vmexit);
 			vmexit->exitcode = VM_EXITCODE_HYP;
 			break;
 		}
@@ -388,42 +418,24 @@ static int handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *
 		 */
 		if (!(ISS_DATA_DFSC_TF(esr_iss))) {
 			eprintf("Data abort from guest NOT on a stage 2 translation\n");
-			printf("\thpfar_el2: 0x%016lx\n", vmexit->u.hyp.hpfar_el2);
-			printf("\tesr_el2:   0x%08x\n", vmexit->u.hyp.esr_el2);
+			print_hyp_regs(vmexit);
 			vmexit->exitcode = VM_EXITCODE_HYP;
 			break;
 		}
 
-		/*
-		 * HPFAR_EL2 holds bits [47:12] of the IPA, the rest of the
-		 * HPFAR_EL2 bits are RES0.
-		 */
-		vmexit->u.inst_emul.gpa = vmexit->u.hyp.hpfar_el2 >> HPFAR_EL2_FIPA_SHIFT;
-		/* The IPA for a 4KB page has bits [11:0] zero. */
-		vmexit->u.inst_emul.gpa	<<= PAGE_SHIFT;
-
-		vie = &vmexit->u.inst_emul.vie;
-
-		esr_sas = (esr_iss & ISS_DATA_SAS_MASK) >> ISS_DATA_SAS_SHIFT;
-		reg_nr = (esr_iss & ISS_DATA_SRT_MASK) >> ISS_DATA_SRT_SHIFT;
-
-		vie->access_size = 1 << esr_sas;
-		vie->sign_extend = (esr_iss & ISS_DATA_SSE) ? 1 : 0;
-		vie->dir = (esr_iss & ISS_DATA_WnR) ? \
-			   VM_VIE_DIR_WRITE : VM_VIE_DIR_READ;
-		vie->reg = get_vm_reg_name(reg_nr, UNUSED);
-
+		gen_inst_emul_data(esr_iss, vmexit);
 		vmexit->exitcode = VM_EXITCODE_INST_EMUL;
 		break;
 
 	default:
 		eprintf("Unsupported synchronous exception from guest: 0x%x\n",
 		    esr_ec);
+		print_hyp_regs(vmexit);
 		vmexit->exitcode = VM_EXITCODE_HYP;
 		break;
 	}
 
-	return UNHANDLED;
+	return (UNHANDLED);
 }
 
 static int
