@@ -148,9 +148,7 @@ arm_init(int ipinum)
 	 * x1 - the physical address of the hypervisor translation table
 	 * x2 - stack top address
 	 */
-	uint64_t ich_vtr_el2_addr;
-	ich_vtr_el2_addr = vmm_call_hyp((void *)vtophys(hyp_vectors), vtophys(hyp_pmap->pm_l0), ktohyp(stack_top));
-	printf("ich_vtr_el2_addr = 0x%016lx\n", ich_vtr_el2_addr);
+	vmm_call_hyp((void *)vtophys(hyp_vectors), vtophys(hyp_pmap->pm_l0), ktohyp(stack_top));
 
 	/* Initialize VGIC infrastructure */
 	error = vgic_v3_map(hyp_pmap);

@@ -46,12 +46,6 @@
 	.align 12
 hyp_code_start:
 
-	.align 3
-	.globl _C_LABEL(ich_vtr_el2_reg)
-_C_LABEL(ich_vtr_el2_reg):
-	.zero 8
-
-
 ENTRY(vmm_call_hyp)
 	hvc	#0x42
 	ret
