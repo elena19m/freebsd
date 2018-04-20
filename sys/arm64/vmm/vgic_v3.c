@@ -71,6 +71,8 @@ extern uint64_t ich_vtr_el2_reg;
 
 struct vgic_v3_virt_features {
 	size_t lr_num;
+	uint32_t prebits;
+	uint32_t pribits;
 };
 
 static struct vgic_v3_virt_features virt_features;
@@ -86,7 +88,7 @@ static uint32_t virtual_cpu_int_size;
 static struct vgic_v3_softc softc;
 
 static void vgic_bitmap_set_irq_val(uint32_t *irq_prv,
-						uint32_t *irq_shr, int irq, int val);
+					uint32_t *irq_shr, int irq, int val);
 static void vgic_update_state(struct hyp *hyp);
 static void vgic_retire_disabled_irqs(struct hypctx *hypctx);
 static void vgic_dispatch_sgi(struct hypctx *hypctx);
@@ -127,28 +129,76 @@ static uint16_t vgic_dist_conf_compress(uint32_t val)
 }
 #endif
 
+static int
+vgic_v3_redist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
+		int size, void *arg)
+{
+	uint64_t reg;
+	struct hyp *hyp;
+	struct vgic_v3_redist *redist;
+
+	hyp = vm_get_cookie(vm);
+	redist = &hyp->ctx[vcpuid].vgic_redist;
+
+	/* Offset of redistributor register. */
+	reg = fault_ipa - redist->ipa;
+
+	eprintf("reg: 0x%04lx\n", reg);
+
+	return (0);
+}
+
+static int
+vgic_v3_redist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
+		int size, void *arg)
+{
+	uint64_t reg;
+	struct hyp *hyp;
+	struct vgic_v3_redist *redist;
+
+	hyp = vm_get_cookie(vm);
+	redist = &hyp->ctx[vcpuid].vgic_redist;
+
+	/* Offset of redistributor register. */
+	reg = fault_ipa - redist->ipa;
+
+	eprintf("reg: 0x%04lx\n", reg);
+
+	return (0);
+}
+
 /*
  * TODO
  */
 static int
-vgic_dist_mmio_read(void *vm, int vcpuid, uint64_t gpa, uint64_t *rval, int size,
-    void *arg)
+vgic_v3_dist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
+		int size, void *arg)
 {
-	uint64_t offset;
-	uint64_t base_offset;
-	uint64_t byte_offset;
-	uint64_t mask;
+	uint64_t reg;
 	struct hyp *hyp;
 	struct vgic_v3_dist *dist;
 
 	hyp = vm_get_cookie(vm);
 	dist = &hyp->vgic_dist;
 
-	/* offset of distributor register */
-	offset = gpa - dist->ipa;
-	base_offset = offset - (offset & 3);
-	byte_offset = (offset - base_offset) * 8;
-	mask = (1 << size * 8) - 1;
+	/* Offset of distributor register. */
+	reg = fault_ipa - dist->ipa;
+
+	/* TODO: GICD_IROUTER<n> is 64 bits wide, the rest are 32 bits wide. */
+
+	if (reg == GICD_CTLR) {
+		eprintf("read: GICD_CTLR\n");
+	} else if (reg == GICD_TYPER) {
+		eprintf("read: GICD_TYPER\n");
+	} else if (reg == GICD_IIDR) {
+		eprintf("read: GICD_IIDR\n");
+	} else {
+		eprintf("Unknown register: 0x%04lx\n", reg);
+	}
+
+	*rval = 0;
+
+	return (0);
 
 #if 0
 	if (base_offset >= GICD_CTLR && base_offset < GICD_TYPER) {
@@ -248,30 +298,44 @@ vgic_dist_mmio_read(void *vm, int vcpuid, uint64_t gpa, uint64_t *rval, int size
 
 	printf("%s on cpu: %d with gpa: %llx size: %x\n", __func__, vcpuid, gpa, size);
 #endif
-	return (0);
 }
 
 /*
  * TODO
  */
 static int
-vgic_dist_mmio_write(void *vm, int vcpuid, uint64_t gpa, uint64_t val, int size,
-    void *arg)
+vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
+		int size, void *arg)
 {
-	uint64_t offset;
-	uint64_t base_offset;
-	uint64_t byte_offset;
-	uint64_t mask;
+
+	uint64_t reg;
 	struct hyp *hyp;
 	struct vgic_v3_dist *dist;
 
 	hyp = vm_get_cookie(vm);
 	dist = &hyp->vgic_dist;
 
-	offset = gpa - dist->ipa;
-	base_offset = offset - (offset & 3);
-	byte_offset = (offset - base_offset) * 8;
-	mask = (1 << size * 8) - 1;
+	/* Offset of distributor register. */
+	reg = fault_ipa - dist->ipa;
+
+	/* TODO: GICD_IROUTER<n> is 64 bits wide, the rest are 32 bits wide. */
+
+	if (reg == GICD_CTLR) {
+		eprintf("read: GICD_CTLR\n");
+	} else if (reg == GICD_TYPER) {
+		eprintf("read: GICD_TYPER\n");
+	} else if (reg == GICD_IIDR) {
+		eprintf("read: GICD_IIDR\n");
+	} else {
+		eprintf("Unknown register: 0x%04lx\n", reg);
+	}
+
+	/* TODO: update the emulated register with val. */
+
+	return (0);
+
+
+	//eprintf("Dist write\n");
 
 #if 0
 	if (base_offset >= GICD_CTLR && base_offset < GICD_TYPER) {
@@ -281,10 +345,8 @@ vgic_dist_mmio_write(void *vm, int vcpuid, uint64_t gpa, uint64_t val, int size,
 	} else if (base_offset >= GICD_IGROUPR(0) && base_offset < GICD_ISENABLER(0)) {
 		/* irq group control is WI */
 	} else if (base_offset >= GICD_ISENABLER(0) && base_offset < GICD_ISENABLER(VGIC_PRV_INT_NUM)) {
-
 		/* private set-enable irq */
 		dist->irq_enabled_prv[vcpuid][0] |= (val & mask) << byte_offset;
-		
 	} else if (base_offset >= GICD_ISENABLER(VGIC_PRV_INT_NUM) && base_offset < GICD_ICENABLER(0)) {
 
 		/* shared set-enable irq */
@@ -394,28 +456,45 @@ end:
 }
 
 int
-vgic_v3_emulate_distributor(void *arg, int vcpuid, struct vm_exit *vme,
-		bool *retu)
+vgic_v3_do_emulation(void *arg, int vcpuid, struct vm_exit *vme, bool *retu)
 {
 	struct hyp *hyp;
+	struct vgic_v3_dist *dist;
+	struct vgic_v3_redist *redist;
+	uint64_t fault_ipa;
 	int error;
 
-	hyp = arg;
+	hyp = (struct hyp *)arg;
 
-	if (vme->u.inst_emul.gpa < hyp->vgic_dist.ipa ||
-	    vme->u.inst_emul.gpa > hyp->vgic_dist.ipa + PAGE_SIZE ||
-	    !hyp->vgic_attached) {
+	if (!hyp->vgic_attached) {
 		*retu = true;
 		return (0);
 	}
 
-	eprintf("Address DOES target the distributor, emulate in userspace anyway.\n");
-	*retu = true;
-	return (0);
+	fault_ipa = vme->u.inst_emul.gpa;
+	dist = &hyp->vgic_dist;
+	redist = &hyp->ctx[vcpuid].vgic_redist;
 
-	*retu = false;
-	error = vmm_emulate_instruction(hyp->vm, vcpuid, vme->u.inst_emul.gpa, &vme->u.inst_emul.vie,
-	    vgic_dist_mmio_read, vgic_dist_mmio_write, retu);
+	if (fault_ipa >= dist->ipa && fault_ipa < dist->ipa + dist->size) {
+		/* Emulate distributor. */
+		*retu = false;
+		error = vmm_emulate_instruction(hyp->vm, vcpuid, fault_ipa,
+				&vme->u.inst_emul.vie, vgic_v3_dist_read,
+				vgic_v3_dist_write, retu);
+	} else if (fault_ipa >= redist->ipa && fault_ipa < redist->ipa + redist->size) {
+		/* Emulate redistributor. */
+		*retu = false;
+		error = vmm_emulate_instruction(hyp->vm, vcpuid, fault_ipa,
+				&vme->u.inst_emul.vie, vgic_v3_redist_read,
+				vgic_v3_redist_write, retu);
+	} else {
+		/*
+		 * We cannot emulate the instruction in kernel space, return to
+		 * userspace for emulation.
+		 */
+		*retu = true;
+		error = 0;
+	}
 
 	return (error);
 }
@@ -1068,7 +1147,13 @@ vgic_v3_map(pmap_t el2_pmap)
 	virtual_cpu_int_paddr = 0;
 	virtual_cpu_int_size = 0;
 
-	virt_features.lr_num = ich_vtr_el2_reg & ICH_VTR_EL2_LISTREGS_MASK + 1;
+
+	printf("ICH_VTR_EL2 = 0x%016lx\n", ich_vtr_el2_reg);
+
+	/* ICH_VTR_EL2.ListRegs holds the number of list registers, minus one. */
+	virt_features.lr_num = (ich_vtr_el2_reg & ICH_VTR_EL2_LISTREGS_MASK) + 1;
+	virt_features.pribits = (ich_vtr_el2_reg & ICH_VTR_EL2_PRIBITS_MASK) >> ICH_VTR_EL2_PRIBITS_SHIFT;
+	virt_features.prebits = (ich_vtr_el2_reg & ICH_VTR_EL2_PREBITS_MASK) >> ICH_VTR_EL2_PREBITS_SHIFT;
 
 	return (0);
 }

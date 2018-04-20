@@ -136,7 +136,7 @@ arm_init(int ipinum)
 	/* We need an identity mapping for when we activate the MMU */
 	hypmap_map_identity(hyp_pmap, (vm_offset_t)hyp_code_start, hyp_code_len, VM_PROT_EXECUTE);
 
-	/* Create and map the hypevisor stack */
+	/* Create and map the hypervisor stack */
 	stack = malloc(PAGE_SIZE, M_HYP, M_WAITOK | M_ZERO);
 	stack_top = stack + PAGE_SIZE;
 	hypmap_map(hyp_pmap, (vm_offset_t)stack, PAGE_SIZE, VM_PROT_READ | VM_PROT_WRITE);
@@ -148,7 +148,9 @@ arm_init(int ipinum)
 	 * x1 - the physical address of the hypervisor translation table
 	 * x2 - stack top address
 	 */
-	vmm_call_hyp((void *)vtophys(hyp_vectors), vtophys(hyp_pmap->pm_l0), ktohyp(stack_top));
+	uint64_t ich_vtr_el2_addr;
+	ich_vtr_el2_addr = vmm_call_hyp((void *)vtophys(hyp_vectors), vtophys(hyp_pmap->pm_l0), ktohyp(stack_top));
+	printf("ich_vtr_el2_addr = 0x%016lx\n", ich_vtr_el2_addr);
 
 	/* Initialize VGIC infrastructure */
 	error = vgic_v3_map(hyp_pmap);
@@ -185,7 +187,7 @@ arm_cleanup(void)
 
 	mtx_destroy(&vmid_generation_mtx);
 
-	return 0;
+	return (0);
 }
 
 static void *
@@ -349,7 +351,7 @@ get_vm_reg_name(uint32_t reg_nr, uint32_t mode __attribute__((unused)))
 			break;
 	}
 
-	return VM_REG_LAST;
+	return (VM_REG_LAST);
 }
 
 static inline void print_hyp_regs(struct vm_exit *vme)
@@ -364,12 +366,9 @@ static void gen_inst_emul_data(uint32_t esr_iss, struct vm_exit *vme_ret)
 	struct vie *vie;
 	uint32_t esr_sas, reg_nr;
 
-	/*
-	 * HPFAR_EL2 holds bits [47:12] of the IPA, the rest of the
-	 * HPFAR_EL2 bits are RES0.
-	 */
+	/* Get bits [47:12] of the IPA from HPFAR_EL2. */
 	vme_ret->u.inst_emul.gpa = vme_ret->u.hyp.hpfar_el2 >> HPFAR_EL2_FIPA_SHIFT;
-	/* The IPA for a 4KB page has bits [11:0] zero. */
+	/* The IPA is the base address of a 4KB page, make bits [11:0] zero. */
 	vme_ret->u.inst_emul.gpa <<= PAGE_SHIFT;
 
 	esr_sas = (esr_iss & ISS_DATA_SAS_MASK) >> ISS_DATA_SAS_SHIFT;
@@ -383,32 +382,32 @@ static void gen_inst_emul_data(uint32_t esr_iss, struct vm_exit *vme_ret)
 }
 
 static int
-handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
+handle_el1_sync_excp(struct hyp *hyp, int vcpu, struct vm_exit *vme_ret)
 {
 	uint32_t esr_ec, esr_iss;
 
-	esr_ec = ESR_ELx_EXCEPTION(vmexit->u.hyp.esr_el2);
-	esr_iss = vmexit->u.hyp.esr_el2 & ESR_ELx_ISS_MASK;
+	esr_ec = ESR_ELx_EXCEPTION(vme_ret->u.hyp.esr_el2);
+	esr_iss = vme_ret->u.hyp.esr_el2 & ESR_ELx_ISS_MASK;
 
 	switch(esr_ec) {
 	case EXCP_UNKNOWN:
 		eprintf("Unknown exception from guest\n");
-		print_hyp_regs(vmexit);
-		vmexit->exitcode = VM_EXITCODE_HYP;
+		print_hyp_regs(vme_ret);
+		vme_ret->exitcode = VM_EXITCODE_HYP;
 		break;
 
 	case EXCP_HVC:
 		eprintf("Unsupported HVC call from guest\n");
-		print_hyp_regs(vmexit);
-		vmexit->exitcode = VM_EXITCODE_HYP;
+		print_hyp_regs(vme_ret);
+		vme_ret->exitcode = VM_EXITCODE_HYP;
 		break;
 
 	case EXCP_DATA_ABORT_L:
 		/* Check if instruction syndrome is valid */
 		if (!(esr_iss & ISS_DATA_ISV)) {
 			eprintf("Data abort from guest with invalid instruction syndrome\n");
-			print_hyp_regs(vmexit);
-			vmexit->exitcode = VM_EXITCODE_HYP;
+			print_hyp_regs(vme_ret);
+			vme_ret->exitcode = VM_EXITCODE_HYP;
 			break;
 		}
 
@@ -418,20 +417,21 @@ handle_el1_sync_exception(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 		 */
 		if (!(ISS_DATA_DFSC_TF(esr_iss))) {
 			eprintf("Data abort from guest NOT on a stage 2 translation\n");
-			print_hyp_regs(vmexit);
-			vmexit->exitcode = VM_EXITCODE_HYP;
+			print_hyp_regs(vme_ret);
+			vme_ret->exitcode = VM_EXITCODE_HYP;
 			break;
 		}
 
-		gen_inst_emul_data(esr_iss, vmexit);
-		vmexit->exitcode = VM_EXITCODE_INST_EMUL;
+		gen_inst_emul_data(esr_iss, vme_ret);
+
+		vme_ret->exitcode = VM_EXITCODE_INST_EMUL;
 		break;
 
 	default:
 		eprintf("Unsupported synchronous exception from guest: 0x%x\n",
 		    esr_ec);
-		print_hyp_regs(vmexit);
-		vmexit->exitcode = VM_EXITCODE_HYP;
+		print_hyp_regs(vme_ret);
+		vme_ret->exitcode = VM_EXITCODE_HYP;
 		break;
 	}
 
@@ -447,14 +447,13 @@ handle_world_switch(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 	excp_type = vmexit->u.hyp.exception_nr;
 	switch (excp_type) {
 	case EXCP_TYPE_EL1_SYNC:
-		/* The exit code will be set by handle_el1_sync_exception(). */
-		handled = handle_el1_sync_exception(hyp, vcpu, vmexit);
+		/* The exit code will be set by handle_el1_sync_excp(). */
+		handled = handle_el1_sync_excp(hyp, vcpu, vmexit);
 		break;
 
 	case EXCP_TYPE_EL1_IRQ:
 	case EXCP_TYPE_EL1_FIQ:
 		/* The host kernel will handle IRQs and FIQs. */
-		//vmexit->exitcode = VM_EXITCODE_BOGUS;
 		vmexit->exitcode = VM_EXITCODE_BOGUS;
 		handled = UNHANDLED;
 		break;
@@ -488,7 +487,7 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	register_t daif;
 	struct hyp *hyp;
 	struct hypctx *hypctx;
-		struct vm *vm;
+	struct vm *vm;
 	struct vm_exit *vmexit;
 
 	hyp = arg;

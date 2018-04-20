@@ -403,7 +403,7 @@ restart:
 		case VM_EXITCODE_INST_EMUL:
 			/* Check if we need to do in-kernel emulation */
 			pc = vme->pc + vme->inst_length;
-			error = vgic_v3_emulate_distributor(vm->cookie, vcpuid, vme, &retu);
+			error = vgic_v3_do_emulation(vm->cookie, vcpuid, vme, &retu);
 			break;
 
 		case VM_EXITCODE_WFI:
