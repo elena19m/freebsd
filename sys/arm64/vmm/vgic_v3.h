@@ -111,8 +111,8 @@ struct vgic_v3_cpu_if {
 
 int vgic_v3_map(pmap_t el2_pmap);
 
-int vgic_v3_emulate_distributor(void *arg, int vcpuid,
-		struct vm_exit *vme, bool *retu);
+int vgic_v3_do_emulation(void *arg, int vcpuid, struct vm_exit *vme,
+		bool *retu);
 
 int vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
 		uint64_t redist_ipa, size_t redist_size);

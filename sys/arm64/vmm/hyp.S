@@ -44,22 +44,19 @@
 	.globl	hyp_code_end
 
 	.align 12
-
 hyp_code_start:
 
 	.align 3
+	.globl _C_LABEL(ich_vtr_el2_reg)
+_C_LABEL(ich_vtr_el2_reg):
+	.zero 8
 
-	.globl _C_LABEL(hyp_debug1)
-_C_LABEL(hyp_debug1):
-	.zero 8
-	.globl _C_LABEL(hyp_debug2)
-_C_LABEL(hyp_debug2):
-	.zero 8
 
 ENTRY(vmm_call_hyp)
 	hvc	#0x42
 	ret
 END(vmm_call_hyp)
+
 
 .macro vempty
 	.align 7
@@ -72,7 +69,6 @@ END(vmm_call_hyp)
 .endm
 
 	.align 11
-
 	.globl	hyp_init_vectors
 hyp_init_vectors:
 	vempty		/* Synchronous EL2t */
@@ -95,8 +91,8 @@ hyp_init_vectors:
 	vempty		/* FIQ 32-bit EL1 */
 	vempty		/* Error 32-bit EL1 */
 
-	.align 3
 
+	.align 3
 tcr:
 	/* 48 bits physical addresses */
 	.quad (TCR_EL2_RES1 | TCR_EL2_PS_48BITS)
@@ -109,6 +105,7 @@ sctlr_el2_clear:
 vtcr:
 	.quad (VTCR_EL2_RES1 | VTCR_EL2_IRGN0_WBWA | VTCR_EL2_ORGN0_WBWA | \
 		VTCR_EL2_SH0_IS | VTCR_EL2_SL0_LVL1)
+
 
 /*
  * Initialize the hypervisor mode with a new exception vector table, translation
@@ -182,14 +179,14 @@ ENTRY(handle_hyp_init)
 	msr	sctlr_el2, x3
 
 	/* Return success */
-	mrs	x0, vtcr_el2
+	mov	x0, #0
 
 	/* MMU is up and running */
 	eret
 END(handle_hyp_init)
 
-	.align 11
 
+	.align 11
 	.globl	hyp_vectors
 hyp_vectors:
 	vempty			/* Synchronous EL2t */
@@ -212,6 +209,7 @@ hyp_vectors:
 	vempty			/* FIQ 32-bit EL1 */
 	vempty			/* Error 32-bit EL1 */
 
+
 .macro do_world_switch_to_host
 	.align 	7
 	SAVE_GUEST_REGS()
@@ -222,6 +220,7 @@ hyp_vectors:
 	mov	x1, #VTTBR_HOST
 	msr	vttbr_el2, x1
 .endm
+
 
 .macro handle_el2_excp type
 	.align 	7
@@ -245,6 +244,7 @@ hyp_vectors:
 	eret
 .endm
 
+
 ENTRY(handle_el2_sync)
 	handle_el2_excp #EXCP_TYPE_EL2_SYNC
 END(handle_el2_sync)
@@ -260,6 +260,7 @@ END(handle_el2_sync)
 ENTRY(handle_el2_error)
 	handle_el2_excp #EXCP_TYPE_EL2_ERROR
 END(handle_el2_sync)
+
 
 ENTRY(handle_el1_sync)
 	/* Save registers before modifying so we can restore them */
@@ -292,6 +293,7 @@ exit:
 	eret
 END(handle_el1_sync)
 
+
 /*
  * Call a function in EL2 context
  *
@@ -316,10 +318,12 @@ ENTRY(call_function)
 	br 	x9
 END(call_function)
 
+
 /*
  * We only trap IRQ, FIQ and SError exceptions when a guest is running. Do a
  * world switch to host to handle these exceptions.
  */
+
 
 ENTRY(handle_el1_irq)
 	do_world_switch_to_host
@@ -339,6 +343,7 @@ ENTRY(handle_el1_error)
 	eret
 END(handle_el1_error)
 
+
 /*
  * Usage:
  * void vmm_enter_guest(struct hypctx *hypctx)
@@ -356,6 +361,7 @@ ENTRY(vmm_enter_guest)
 	/* Enter guest */
 	eret
 END(vmm_enter_guest)
+
 
 /*
  * Usage:

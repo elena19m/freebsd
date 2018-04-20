@@ -60,7 +60,6 @@ vmm_emulate_instruction(void *vm, int vcpuid, uint64_t gpa, struct vie *vie,
 		error = vm_get_register(vm, vcpuid, vie->reg, &val);
 		if (error)
 			goto out;
-
 		error = memwrite(vm, vcpuid, gpa, val, vie->access_size, memarg);
 	} else {
 		error = memread(vm, vcpuid, gpa, &val, vie->access_size, memarg);
