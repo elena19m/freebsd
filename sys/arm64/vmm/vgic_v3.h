@@ -83,6 +83,8 @@ struct vgic_v3_dist {
 	uint32_t enabled;
 	uint32_t irq_pending_on_cpu;
 	uint32_t sgir;
+
+	uint32_t gicd_ctlr;		/* Distributor Control Register */
 };
 
 struct vgic_v3_redist {

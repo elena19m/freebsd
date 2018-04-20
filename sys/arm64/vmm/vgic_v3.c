@@ -321,11 +321,14 @@ vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 	/* TODO: GICD_IROUTER<n> is 64 bits wide, the rest are 32 bits wide. */
 
 	if (reg == GICD_CTLR) {
-		eprintf("read: GICD_CTLR\n");
+		/* TODO: check what it is being written. */
+		dist->gicd_ctlr = (uint32_t)val;
+		printf("\tval = 0x%08x\n", dist->gicd_ctlr);
+		eprintf("write: GICD_CTLR\n");
 	} else if (reg == GICD_TYPER) {
-		eprintf("read: GICD_TYPER\n");
+		eprintf("write: GICD_TYPER\n");
 	} else if (reg == GICD_IIDR) {
-		eprintf("read: GICD_IIDR\n");
+		eprintf("write: GICD_IIDR\n");
 	} else {
 		eprintf("Unknown register: 0x%04lx\n", reg);
 	}
@@ -503,23 +506,26 @@ int
 vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
 		uint64_t redist_ipa, size_t redist_size)
 {
-	struct hyp *hyp = (struct hyp *)arg;
-	struct hypctx *hypctx;
+	struct hyp *hyp;
+	struct vgic_v3_dist *dist;
+	struct vgic_v3_redist *redist;
 
 	printf("[vgic_v3: vgic_v3_attach_to_vm()]\n");
 
-	/*
-	 * Set the distributor address which will be emulated using the MMIO
-	 * infrastructure.
-	 */
-	hyp->vgic_dist.ipa = dist_ipa;
-	hyp->vgic_dist.size = dist_size;
+	hyp = (struct hyp *)arg;
+	dist = &hyp->vgic_dist;
+	/* XXX Only one CPU per virtual machine supported. */
+	redist = &hyp->ctx[0].vgic_redist;
 
-	/* Only one CPU per virtual machine supported. */
-	hypctx = &hyp->ctx[0];
-	hypctx->vgic_redist.ipa = redist_ipa;
-	hypctx->vgic_redist.size = redist_size;
+	/* Set the distributor address and size for trapping guest access. */
+	dist->ipa = dist_ipa;
+	dist->size = dist_size;
+	/* Distributor is disabled at start, the guest will configure it. */
+	dist->gicd_ctlr = 0;
 
+	/* Set the redistributor address and size for trapping guest access. */
+	redist->ipa = redist_ipa;
+	redist->size = redist_size;
 
 #if 0
 	/*
@@ -1147,13 +1153,11 @@ vgic_v3_map(pmap_t el2_pmap)
 	virtual_cpu_int_paddr = 0;
 	virtual_cpu_int_size = 0;
 
-
 	printf("ICH_VTR_EL2 = 0x%016lx\n", ich_vtr_el2_reg);
 
-	/* ICH_VTR_EL2.ListRegs holds the number of list registers, minus one. */
-	virt_features.lr_num = (ich_vtr_el2_reg & ICH_VTR_EL2_LISTREGS_MASK) + 1;
-	virt_features.pribits = (ich_vtr_el2_reg & ICH_VTR_EL2_PRIBITS_MASK) >> ICH_VTR_EL2_PRIBITS_SHIFT;
-	virt_features.prebits = (ich_vtr_el2_reg & ICH_VTR_EL2_PREBITS_MASK) >> ICH_VTR_EL2_PREBITS_SHIFT;
+	virt_features.lr_num = ICH_VTR_EL2_LISTREGS(ich_vtr_el2_reg);
+	virt_features.pribits = ICH_VTR_EL2_PRIBITS(ich_vtr_el2_reg);
+	virt_features.prebits = ICH_VTR_EL2_PREBITS(ich_vtr_el2_reg);
 
 	return (0);
 }

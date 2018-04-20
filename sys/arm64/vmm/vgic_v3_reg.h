@@ -71,12 +71,22 @@
 /* Interrupt Controller VGIC Type Register */
 #define ICH_VTR_EL2_PRIBITS_SHIFT	29
 #define ICH_VTR_EL2_PRIBITS_MASK	(0x7 << ICH_VTR_EL2_PRIBITS_SHIFT)
+#define	ICH_VTR_EL2_PRIBITS(x)		\
+		(((x) & ICH_VTR_EL2_PRIBITS_MASK) >> ICH_VTR_EL2_PRIBITS_SHIFT)
 #define ICH_VTR_EL2_PREBITS_SHIFT	26
 #define ICH_VTR_EL2_PREBITS_MASK	(0x7 << ICH_VTR_EL2_PREBITS_SHIFT)
+#define	ICH_VTR_EL2_PREBITS(x)		\
+		(((x) & ICH_VTR_EL2_PREBITS_MASK) >> ICH_VTR_EL2_PREBITS_SHIFT)
 #define ICH_VTR_EL2_SEIS		(1 << 22)	/* System Error Interrupt (SEI) Support */
 #define ICH_VTR_EL2_A3V			(1 << 21)	/* Affinity 3 Valid */
 #define ICH_VTR_EL2_NV4			(1 << 20)	/* Direct injection of virtual interrupts. RES1 for GICv3 */
 #define ICH_VTR_EL2_TDS			(1 << 19)	/* Implementation supports ICH_HCR_EL2.TDIR */
 #define ICH_VTR_EL2_LISTREGS_MASK	0x1f
+/*
+ * ICH_VTR_EL2.ListRegs holds the number of list registers, minus one. Add one
+ * to get the actual number of list registers.
+ */
+#define	ICH_VTR_EL2_LISTREGS(x)		\
+		(((x) & ICH_VTR_EL2_LISTREGS_MASK) + 1)
 
 #endif /* !_VGIC_V3_REG_H_ */
