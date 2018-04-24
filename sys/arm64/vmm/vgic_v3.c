@@ -74,8 +74,13 @@ struct vgic_v3_virt_features {
 	uint32_t prebits;
 	uint32_t pribits;
 };
-
 static struct vgic_v3_virt_features virt_features;
+
+struct vgic_v3_ro_regs {
+	uint32_t gicd_typer;
+	uint32_t gicd_pidr2;
+};
+static struct vgic_v3_ro_regs ro_regs;
 
 static uint64_t virtual_int_ctrl_vaddr;
 static uint64_t virtual_int_ctrl_paddr;
@@ -188,121 +193,24 @@ vgic_v3_dist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 
 	if (reg == GICD_CTLR) {
 		eprintf("read: GICD_CTLR\n");
+		*rval = dist->gicd_ctlr;
 	} else if (reg == GICD_TYPER) {
 		eprintf("read: GICD_TYPER\n");
+		*rval = ro_regs.gicd_typer;
 	} else if (reg == GICD_IIDR) {
 		eprintf("read: GICD_IIDR\n");
+		*rval = 0;
+	} else if (reg == GICD_PIDR2) {
+		eprintf("read: GICD_PIDR2\n");
+		*rval = ro_regs.gicd_pidr2;
 	} else {
 		eprintf("Unknown register: 0x%04lx\n", reg);
+		*rval = 0;
 	}
-
-	*rval = 0;
 
 	return (0);
-
-#if 0
-	if (base_offset >= GICD_CTLR && base_offset < GICD_TYPER) {
-
-		*rval = (dist->enabled >> byte_offset) & mask;
-
-	} else if (base_offset >= GICD_TYPER && base_offset < GICD_IIDR) {
-
-		*rval = (((VGIC_MAXCPU - 1) << 5) | ((GIC_I_NUM_MAX / 32) - 1) >> byte_offset) & mask;
-
-	} else if (base_offset >= GICD_IIDR && base_offset < GICD_IGROUPR(0)) {
-
-		*rval = (0x0000043B >> byte_offset) & mask;
-
-	} else if (base_offset >= GICD_IGROUPR(0) && base_offset < GICD_ISENABLER(0)) {
-
-		/* irq group control is RAZ */
-		*rval = 0;
-
-	} else if (base_offset >= GICD_ISENABLER(0) && base_offset < GICD_ISENABLER(VGIC_PRV_INT_NUM)) {
-
-		/* private set-enable irq */
-		*rval = (dist->irq_enabled_prv[vcpuid][0] >> byte_offset) & mask;
-
-	} else if (base_offset >= GICD_ISENABLER(VGIC_PRV_INT_NUM) && base_offset < GICD_ICENABLER(0)) {
-
-		/* shared set-enable irq */
-		*rval = (dist->irq_enabled_shr[(base_offset - GICD_ISENABLER(VGIC_PRV_INT_NUM)) / sizeof(uint32_t)] >> byte_offset) & mask;
-
-	} else if (base_offset >= GICD_ICENABLER(0) && base_offset < GICD_ICENABLER(VGIC_PRV_INT_NUM)) {
-
-		/* private clear-enable irq */
-		*rval = (dist->irq_enabled_prv[vcpuid][0] >> byte_offset) & mask;
-
-	} else if (offset >= GICD_ICENABLER(VGIC_PRV_INT_NUM) && offset < GICD_ISPENDR(0)) {
-
-		/* shared clear-enable irq */
-		*rval = (dist->irq_enabled_shr[(base_offset - GICD_ICENABLER(VGIC_PRV_INT_NUM)) / sizeof(uint32_t)] >> byte_offset) & mask;
-
-	} else if (base_offset >= GICD_ISPENDR(0) && base_offset < GICD_ISPENDR(VGIC_PRV_INT_NUM)) {
-
-		/* private set-pending irq */
-		*rval = (dist->irq_state_prv[vcpuid][0] >> byte_offset) & mask;
-
-	} else if (base_offset >= GICD_ISPENDR(VGIC_PRV_INT_NUM) && base_offset < GICD_ICPENDR(0)) {
-
-		/* shared set-pending irq */
-		*rval = (dist->irq_state_shr[(base_offset - GICD_ISPENDR(VGIC_PRV_INT_NUM)) / sizeof(uint32_t)] >> byte_offset) & mask;
-
-	} else if (base_offset >= GICD_ICPENDR(0) && base_offset < GICD_ICPENDR(VGIC_PRV_INT_NUM)) {
-
-		/* private clear-pending irq */
-		*rval = (dist->irq_state_prv[vcpuid][0] >> byte_offset) & mask;
-
-	} else if (base_offset >= GICD_ICPENDR(VGIC_PRV_INT_NUM) && base_offset < GICD_ICACTIVER(0)) {
-
-		/* shared clear-pending irq */
-		*rval = (dist->irq_state_shr[(base_offset - GICD_ICPENDR(VGIC_PRV_INT_NUM)) / sizeof(uint32_t)] >> byte_offset) & mask;
-
-	} else if (base_offset >= GICD_ISACTIVER(0) && base_offset < GICD_IPRIORITYR(0)) {
-
-		/* active irq is RAZ */
-		*rval = 0;
-
-	} else if (base_offset >= GICD_ITARGETSR(0) && base_offset < GICD_ITARGETSR(VGIC_PRV_INT_NUM)) {
-
-		/* target for banked interrupts is read-only and returns the processor reading this register */
-		*rval = (1 << vcpuid);
-		*rval |= *rval << 8;
-		*rval |= *rval << 16;
-		*rval = (*rval >> byte_offset) & mask;
-
-	} else if (base_offset >= GICD_ITARGETSR(VGIC_PRV_INT_NUM) && base_offset < GICD_ICFGR(0)) {
-
-		/* target for shared irqs */
-		*rval = (dist->irq_target_shr[(base_offset - GICD_ITARGETSR(8)) / sizeof(uint32_t)] >> byte_offset) & mask;
-
-	} else if (base_offset >= GICD_ICFGR(0) && base_offset < GICD_ICFGR(16)) {
-
-		/* private configure irq */
-		if (offset & 2) {
-			*rval = (vgic_dist_conf_expand(dist->irq_conf_prv[vcpuid][0] >> 16) >> byte_offset) & mask;
-		} else {
-			*rval = (vgic_dist_conf_expand(dist->irq_conf_prv[vcpuid][0] & 0xffff) >> byte_offset) & mask;
-		}
-
-	} else if (base_offset >= GICD_ICFGR(16) && base_offset < GICD_SGIR(0)) {
-
-		/* shared configure irq */
-		if (offset & 2) {
-			*rval = (vgic_dist_conf_expand(dist->irq_conf_shr[(base_offset - GICD_ICFGR(16)) / sizeof(uint32_t) / 2] >> 16) >> byte_offset) & mask;
-		} else {
-			*rval = (vgic_dist_conf_expand(dist->irq_conf_shr[(base_offset - GICD_ICFGR(16)) / sizeof(uint32_t) / 2] & 0xffff) >> byte_offset) & mask;
-		}
-
-	}
-
-	printf("%s on cpu: %d with gpa: %llx size: %x\n", __func__, vcpuid, gpa, size);
-#endif
 }
 
-/*
- * TODO
- */
 static int
 vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 		int size, void *arg)
@@ -321,12 +229,14 @@ vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 	/* TODO: GICD_IROUTER<n> is 64 bits wide, the rest are 32 bits wide. */
 
 	if (reg == GICD_CTLR) {
-		/* TODO: check what it is being written. */
-		dist->gicd_ctlr = (uint32_t)val;
-		printf("\tval = 0x%08x\n", dist->gicd_ctlr);
+		/* Guest will always read that no writes are pending. */
+		dist->gicd_ctlr = (uint32_t)val & GICD_CTLR_RES0 & ~GICD_CTLR_RWP;
 		eprintf("write: GICD_CTLR\n");
+		eprintf("\t\tval = 0x%08x\n", dist->gicd_ctlr);
 	} else if (reg == GICD_TYPER) {
-		eprintf("write: GICD_TYPER\n");
+		eprintf("Warning: Trying to write to read-only register GICD_TYPER.\n");
+	} else if (reg == GICD_PIDR2) {
+		eprintf("Warning: Trying to write to read-only register GICD_PIDR2.\n");
 	} else if (reg == GICD_IIDR) {
 		eprintf("write: GICD_IIDR\n");
 	} else {
@@ -335,126 +245,6 @@ vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 
 	/* TODO: update the emulated register with val. */
 
-	return (0);
-
-
-	//eprintf("Dist write\n");
-
-#if 0
-	if (base_offset >= GICD_CTLR && base_offset < GICD_TYPER) {
-
-		dist->enabled = ((val & mask) << byte_offset) & 1;
-
-	} else if (base_offset >= GICD_IGROUPR(0) && base_offset < GICD_ISENABLER(0)) {
-		/* irq group control is WI */
-	} else if (base_offset >= GICD_ISENABLER(0) && base_offset < GICD_ISENABLER(VGIC_PRV_INT_NUM)) {
-		/* private set-enable irq */
-		dist->irq_enabled_prv[vcpuid][0] |= (val & mask) << byte_offset;
-	} else if (base_offset >= GICD_ISENABLER(VGIC_PRV_INT_NUM) && base_offset < GICD_ICENABLER(0)) {
-
-		/* shared set-enable irq */
-		dist->irq_enabled_shr[(base_offset - GICD_ISENABLER(VGIC_PRV_INT_NUM)) / sizeof(uint32_t)] |= (val & mask) << byte_offset;
-		
-	} else if (base_offset >= GICD_ICENABLER(0) && base_offset < GICD_ICENABLER(VGIC_PRV_INT_NUM)) {
-
-		/* private clear-enable irq */
-		dist->irq_enabled_prv[vcpuid][0] &= ~((val & mask) << byte_offset);
-		vgic_retire_disabled_irqs(&hyp->ctx[vcpuid]);
-
-	} else if (offset >= GICD_ICENABLER(VGIC_PRV_INT_NUM) && offset < GICD_ISPENDR(0)) {
-
-		/* shared clear-enable irq */
-		dist->irq_enabled_shr[(base_offset - GICD_ICENABLER(VGIC_PRV_INT_NUM)) / sizeof(uint32_t)] &= ~((val & mask) << byte_offset);
-		vgic_retire_disabled_irqs(&hyp->ctx[vcpuid]);
-
-	} else if (base_offset >= GICD_ISPENDR(0) && base_offset < GICD_ISPENDR(VGIC_PRV_INT_NUM)) {
-
-		/* private set-pending irq */
-		dist->irq_state_prv[vcpuid][0] |= (val & mask) << byte_offset;
-
-	} else if (base_offset >= GICD_ISPENDR(VGIC_PRV_INT_NUM) && base_offset < GICD_ICPENDR(0)) {
-
-		/* shared set-pending irq */
-		dist->irq_state_shr[(base_offset - GICD_ISPENDR(VGIC_PRV_INT_NUM)) / sizeof(uint32_t)] |= (val & mask) << byte_offset;
-
-	} else if (base_offset >= GICD_ICPENDR(0) && base_offset < GICD_ICPENDR(VGIC_PRV_INT_NUM)) {
-
-		/* private clear-pending irq */
-		dist->irq_state_prv[vcpuid][0] &= ~((val & mask) << byte_offset);
-
-	} else if (base_offset >= GICD_ICPENDR(VGIC_PRV_INT_NUM) && base_offset < GICD_ICACTIVER(0)) {
-
-		/* shared clear-pending irq */
-		dist->irq_state_shr[(base_offset - GICD_ICPENDR(VGIC_PRV_INT_NUM)) / sizeof(uint32_t)] &= ~((val & mask) << byte_offset);
-
-	} else if (base_offset >= GICD_ISACTIVER(0) && base_offset < GICD_IPRIORITYR(0)) {
-		/*  active irq is WI */
-	} else if (base_offset >= GICD_ITARGETSR(0) && base_offset < GICD_ITARGETSR(VGIC_PRV_INT_NUM)) {
-		/* target for banked interrupts is WI */
-	} else if (base_offset >= GICD_ITARGETSR(VGIC_PRV_INT_NUM) && base_offset < GICD_ICFGR(0)) {
-
-		/* target for shared irqs */
-		dist->irq_target_shr[(base_offset - GICD_ITARGETSR(VGIC_PRV_INT_NUM)) / sizeof(uint32_t)] =
-			(dist->irq_target_shr[(base_offset - GICD_ITARGETSR(VGIC_PRV_INT_NUM)) / sizeof(uint32_t)] & ~(mask << byte_offset))
-			| ((val & mask) << byte_offset);
-
-	} else if (base_offset >= GICD_ICFGR(0) && base_offset < GICD_ICFGR(16)) {
-
-		/* private configure irq */
-		if (offset < 4) {
-			dist->irq_conf_prv[vcpuid][0] |= ~0U;
-			goto end;
-		}
-
-		if (offset & 2) {
-			val = (vgic_dist_conf_expand(dist->irq_conf_prv[vcpuid][0] >> 16) & ~(mask << byte_offset))
-				| ((val & mask) << byte_offset);
-			val = vgic_dist_conf_compress(val);
-			dist->irq_conf_prv[vcpuid][0] &= 0xffff;
-			dist->irq_conf_prv[vcpuid][0] |= val << 16;
-
-		} else {
-			val = (vgic_dist_conf_expand(dist->irq_conf_prv[vcpuid][0] & 0xffff) & ~(mask << byte_offset))
-				| ((val & mask) << byte_offset);
-			val = vgic_dist_conf_compress(val);
-			dist->irq_conf_prv[vcpuid][0] &= 0xffff << 16;
-			dist->irq_conf_prv[vcpuid][0] |= val;
-		}
-
-	} else if (base_offset >= GICD_ICFGR(16) && base_offset < GICD_SGIR(0)) {
-
-		/* shared configure irq */
-		if (offset < 4) {
-			dist->irq_conf_shr[(base_offset - GICD_ICFGR(16)) / sizeof(uint32_t) / 2] |= ~0U;
-			goto end;
-		}
-
-		if (offset & 2) {
-			val = (vgic_dist_conf_expand(dist->irq_conf_shr[(base_offset - GICD_ICFGR(1)) / sizeof(uint32_t) / 2] >> 16) & ~(mask << byte_offset))
-				| ((val & mask) << byte_offset);
-			val = vgic_dist_conf_compress(val);
-			dist->irq_conf_shr[(base_offset - GICD_ICFGR(16)) / sizeof(uint32_t) / 2] &= 0xffff;
-			dist->irq_conf_shr[(base_offset - GICD_ICFGR(16)) / sizeof(uint32_t) / 2] |= val << 16;
-		} else {
-			val = (vgic_dist_conf_expand(dist->irq_conf_shr[(base_offset - GICD_ICFGR(1)) / sizeof(uint32_t) / 2] & 0xffff) & ~(mask << byte_offset))
-				| ((val & mask) << byte_offset);
-			val = vgic_dist_conf_compress(val);
-			dist->irq_conf_shr[(base_offset - GICD_ICFGR(16)) / sizeof(uint32_t) / 2] &= 0xffff << 16;
-			dist->irq_conf_shr[(base_offset - GICD_ICFGR(16)) / sizeof(uint32_t) / 2] |= val;
-		}
-
-	} else if (base_offset >= GICD_SGIR(0) && base_offset < GICD_SGIR(1)) {
-
-		dist->sgir = (dist->sgir & ~(mask << byte_offset)) | ((val & mask) << byte_offset);
-		vgic_dispatch_sgi(&hyp->ctx[vcpuid]);
-
-	}
-
-end:
-	vgic_update_state(hyp);
-
-	printf("%s on cpu: %d with gpa: %llx size: %x with val: %llx\n", __func__, vcpuid, gpa, size, val);
-#endif
 	return (0);
 }
 
@@ -493,7 +283,7 @@ vgic_v3_do_emulation(void *arg, int vcpuid, struct vm_exit *vme, bool *retu)
 	} else {
 		/*
 		 * We cannot emulate the instruction in kernel space, return to
-		 * userspace for emulation.
+		 * user space for emulation.
 		 */
 		*retu = true;
 		error = 0;
@@ -520,6 +310,7 @@ vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
 	/* Set the distributor address and size for trapping guest access. */
 	dist->ipa = dist_ipa;
 	dist->size = dist_size;
+
 	/* Distributor is disabled at start, the guest will configure it. */
 	dist->gicd_ctlr = 0;
 
@@ -891,7 +682,7 @@ vgic_queue_sgi(struct hypctx *hypctx, int irq)
 		vgic_cpu_irq_clear(hypctx, irq);
 		return true;
 	}
-	
+
 	return false;
 }
 
@@ -1153,12 +944,6 @@ vgic_v3_map(pmap_t el2_pmap)
 	virtual_cpu_int_paddr = 0;
 	virtual_cpu_int_size = 0;
 
-	printf("ICH_VTR_EL2 = 0x%016lx\n", ich_vtr_el2_reg);
-
-	virt_features.lr_num = ICH_VTR_EL2_LISTREGS(ich_vtr_el2_reg);
-	virt_features.pribits = ICH_VTR_EL2_PRIBITS(ich_vtr_el2_reg);
-	virt_features.prebits = ICH_VTR_EL2_PREBITS(ich_vtr_el2_reg);
-
 	return (0);
 }
 
@@ -1216,20 +1001,49 @@ arm_vgic_detach(device_t dev)
 	return (error);
 }
 
-static int
-arm_vgic_attach(device_t dev)
+static void vgic_v3_set_ro_regs(device_t dev)
+{
+	device_t gic;
+	struct gic_v3_softc *gic_sc;
+
+	gic = device_get_parent(dev);
+	gic_sc = device_get_softc(gic);
+
+	/*
+	 * Configure the GIC type register for the guest.
+	 *
+	 * ~GICD_TYPER_SECURITYEXTN: disable security extensions.
+	 * ~GICD_TYPER_DVIS: direct injection for virtual LPIs not supported.
+	 * ~GICD_TYPER_LPIS: LPIs not supported.
+	 */
+	ro_regs.gicd_typer = gic_d_read(gic_sc, 4, GICD_TYPER);
+	/* Security extensions are disabled from the guest. */
+	ro_regs.gicd_typer &= ~GICD_TYPER_SECURITYEXTN;
+	/* Direct injection of virtual LPIs not supported. */
+	ro_regs.gicd_typer &= ~GICD_TYPER_DVIS;
+	/* LPIs are not supported. */
+	ro_regs.gicd_typer &= ~GICD_TYPER_LPIS;
+
+	/*
+	 * XXX. Guest reads of GICD_PIDR2 should return the same ArchRev as
+	 * specified in the guest FDT.
+	 */
+	ro_regs.gicd_pidr2 = gic_d_read(gic_sc, 4, GICD_PIDR2);
+}
+
+static inline void vgic_v3_set_virt_features()
+{
+	virt_features.lr_num = ICH_VTR_EL2_LISTREGS(ich_vtr_el2_reg);
+	virt_features.pribits = ICH_VTR_EL2_PRIBITS(ich_vtr_el2_reg);
+	virt_features.prebits = ICH_VTR_EL2_PREBITS(ich_vtr_el2_reg);
+}
+
+static int arm_vgic_attach(device_t dev)
 {
 	int error;
-	device_t parent;
-	struct gic_v3_softc *parent_sc;
 
-	printf("[vgic.c:arm_vgic_attach] dev nameunit = %s\n", device_get_nameunit(dev));
-
-	parent = device_get_parent(dev);
-	printf("[vgic.c:arm_vgic_attach] parent nameunit = %s\n", device_get_nameunit(parent));
-	parent_sc = device_get_softc(parent);
-	printf("[vgic.c:arm_vgic_attach] gic_dist = %lx\n", (uint64_t)parent_sc->gic_dist);
-	printf("[vgic.c:arm_vgic_attach] gic_dist = %lx\n", (uint64_t)vtophys(parent_sc->gic_dist));
+	vgic_v3_set_ro_regs(dev);
+	vgic_v3_set_virt_features();
 
 	softc.maintenance_int_res = gic_get_maintenance_intr_res(dev);
 	/*
