@@ -100,7 +100,8 @@ uint64_t vmm_enter_guest(struct hypctx *hypctx);
 #define	eprintf(fmt, ...)	printf("%s:%d " fmt, __func__, __LINE__, ##__VA_ARGS__)
 
 #define	VMID_GENERATION_MASK 		((1UL<<8) - 1)
-#define	build_vttbr(vmid, ptaddr) 	((((vmid) & VMID_GENERATION_MASK) << VTTBR_VMID_SHIFT) | \
+#define	build_vttbr(vmid, ptaddr) 	\
+		((((vmid) & VMID_GENERATION_MASK) << VTTBR_VMID_SHIFT) | \
 						(uint64_t)(ptaddr))
 
 #define	MPIDR_SMP_MASK 		(0x3 << 30)
@@ -113,7 +114,8 @@ uint64_t vmm_enter_guest(struct hypctx *hypctx);
  * 0b0001LL, where LL (bits [1:0]) represents the level where the fault occured
  * (page D7-2280 of the ARMv8 Architecture Manual).
  */
-#define	ISS_DATA_DFSC_TF(esr_iss)	(!((esr_iss) & 0b111000) && \
-						((esr_iss) & 0b000100))
+#define	ISS_DATA_DFSC_TF(esr_iss)	\
+		(!((esr_iss) & 0b111000) && ((esr_iss) & 0b000100))
+#define	FAR_EL2_PAGE_OFFSET(x)		((x) & PAGE_MASK)
 
 #endif /* !_VMM_ARM64_H_ */
