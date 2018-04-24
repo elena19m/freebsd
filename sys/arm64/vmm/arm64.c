@@ -359,7 +359,8 @@ static inline void print_hyp_regs(struct vm_exit *vme)
 	printf("hpfar_el2: 0x%016lx\n", vme->u.hyp.hpfar_el2);
 }
 
-static void gen_inst_emul_data(uint32_t esr_iss, struct vm_exit *vme_ret)
+static void
+gen_inst_emul_data(uint32_t esr_iss, struct vm_exit *vme_ret)
 {
 	struct vie *vie;
 	uint32_t esr_sas, reg_nr;
@@ -368,6 +369,8 @@ static void gen_inst_emul_data(uint32_t esr_iss, struct vm_exit *vme_ret)
 	vme_ret->u.inst_emul.gpa = vme_ret->u.hyp.hpfar_el2 >> HPFAR_EL2_FIPA_SHIFT;
 	/* The IPA is the base address of a 4KB page, make bits [11:0] zero. */
 	vme_ret->u.inst_emul.gpa <<= PAGE_SHIFT;
+	/* Bits [11:0] are the same as bits [11:0] from the virtual address. */
+	vme_ret->u.inst_emul.gpa += FAR_EL2_PAGE_OFFSET(vme_ret->u.hyp.far_el2);
 
 	esr_sas = (esr_iss & ISS_DATA_SAS_MASK) >> ISS_DATA_SAS_SHIFT;
 	reg_nr = (esr_iss & ISS_DATA_SRT_MASK) >> ISS_DATA_SRT_SHIFT;
