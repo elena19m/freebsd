@@ -85,6 +85,8 @@ struct vgic_v3_dist {
 	uint32_t sgir;
 
 	uint32_t gicd_ctlr;		/* Distributor Control Register */
+	uint32_t gicd_typer;		/* Interrupt Controller Type Register */
+	uint32_t gicd_pidr2;		/* Distributor Peripheral ID2 Register */
 };
 
 struct vgic_v3_redist {
