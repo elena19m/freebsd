@@ -77,16 +77,28 @@ struct vgic_v3_dist {
 
 	uint8_t  irq_sgi_source[VGIC_MAXCPU][VGIC_SGI_NUM];
 
-	uint64_t ipa;
-	size_t   size;
+	uint64_t 	ipa;
+	size_t   	size;
 
-	uint32_t enabled;
-	uint32_t irq_pending_on_cpu;
-	uint32_t sgir;
+	uint32_t 	enabled;
+	uint32_t 	irq_pending_on_cpu;
+	uint32_t 	sgir;
 
-	uint32_t gicd_ctlr;		/* Distributor Control Register */
-	uint32_t gicd_typer;		/* Interrupt Controller Type Register */
-	uint32_t gicd_pidr2;		/* Distributor Peripheral ID2 Register */
+	uint32_t 	gicd_ctlr;	/* Distributor Control Register */
+	uint32_t 	gicd_typer;	/* Interrupt Controller Type Register */
+	uint32_t 	gicd_pidr2;	/* Distributor Peripheral ID2 Register */
+
+	size_t		nirqs;
+
+	/* Distributor Interrupt Group Register. */
+	uint32_t 	*gicd_igroupr;	
+	uint64_t	gicd_igroupr_addr_max;
+	size_t		gicd_igroupr_num;
+
+	/* Distributor Interrupt Configuration Registers. */
+	uint32_t	*gicd_icfgr;
+	uint64_t	gicd_icfgr_addr_max;
+	size_t		gicd_icfgr_num;
 };
 
 struct vgic_v3_redist {

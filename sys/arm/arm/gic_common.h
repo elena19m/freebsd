@@ -104,7 +104,9 @@ uint32_t arm_gic_get_lr_num(void);
 #define	 GICD_IIDR_IMPL_MASK	0x00000fff
 #define	 GICD_IIDR_IMPL(x)					\
     (((x) & GICD_IIDR_IMPL_MASK) >> GICD_IIDR_IMPL_SHIFT)
-#define	GICD_IGROUPR(n)		(0x0080 + (((n) >> 5) * 4))	/* v1 ICDISER */
+#define	GICD_IGROUPR_BASE	(0x0080)
+#define	GICD_IGROUPR(n)						\
+    (GICD_IGROUPR_BASE + (((n) >> 5) * 4))			/* v1 ICDISER */
 #define	 GICD_I_PER_IGROUPRn	32
 #define	GICD_ISENABLER(n)	(0x0100 + (((n) >> 5) * 4))	/* v1 ICDISER */
 #define	 GICD_I_MASK(n)		(1ul << ((n) & 0x1f))
@@ -117,7 +119,9 @@ uint32_t arm_gic_get_lr_num(void);
 #define	GICD_IPRIORITYR(n)	(0x0400 + (((n) >> 2) * 4))	/* v1 ICDIPR */
 #define	 GICD_I_PER_IPRIORITYn	4
 #define	GICD_ITARGETSR(n)	(0x0800 + (((n) >> 2) * 4))	/* v1 ICDIPTR */
-#define	GICD_ICFGR(n)		(0x0C00 + (((n) >> 4) * 4))	/* v1 ICDICFR */
+#define	GICD_ICFGR_BASE		(0x0C00)
+#define	GICD_ICFGR(n)						\
+    (GICD_ICFGR_BASE + (((n) >> 4) * 4))			/* v1 ICDICFR */
 #define	 GICD_I_PER_ICFGRn	16
 /* First bit is a polarity bit (0 - low, 1 - high) */
 #define	 GICD_ICFGR_POL_LOW	(0 << 0)
