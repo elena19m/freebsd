@@ -196,13 +196,13 @@ vgic_v3_dist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 		*rval = dist->gicd_ctlr;
 	} else if (reg == GICD_TYPER) {
 		eprintf("read: GICD_TYPER\n");
-		*rval = ro_regs.gicd_typer;
+		*rval = dist->gicd_typer;
 	} else if (reg == GICD_IIDR) {
 		eprintf("read: GICD_IIDR\n");
 		*rval = 0;
 	} else if (reg == GICD_PIDR2) {
 		eprintf("read: GICD_PIDR2\n");
-		*rval = ro_regs.gicd_pidr2;
+		*rval = dist->gicd_pidr2;
 	} else {
 		eprintf("Unknown register: 0x%04lx\n", reg);
 		*rval = 0;
@@ -313,6 +313,8 @@ vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
 
 	/* Distributor is disabled at start, the guest will configure it. */
 	dist->gicd_ctlr = 0;
+	dist->gicd_typer = ro_regs.gicd_typer;
+	dist->gicd_pidr2 = ro_regs.gicd_pidr2;
 
 	/* Set the redistributor address and size for trapping guest access. */
 	redist->ipa = redist_ipa;
@@ -1017,11 +1019,8 @@ static void vgic_v3_set_ro_regs(device_t dev)
 	 * ~GICD_TYPER_LPIS: LPIs not supported.
 	 */
 	ro_regs.gicd_typer = gic_d_read(gic_sc, 4, GICD_TYPER);
-	/* Security extensions are disabled from the guest. */
 	ro_regs.gicd_typer &= ~GICD_TYPER_SECURITYEXTN;
-	/* Direct injection of virtual LPIs not supported. */
 	ro_regs.gicd_typer &= ~GICD_TYPER_DVIS;
-	/* LPIs are not supported. */
 	ro_regs.gicd_typer &= ~GICD_TYPER_LPIS;
 
 	/*
