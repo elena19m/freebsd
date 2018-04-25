@@ -82,12 +82,14 @@ struct vgic_v3_ro_regs {
 };
 static struct vgic_v3_ro_regs ro_regs;
 
+/* TODO: delete me. */
+/*
 static uint64_t virtual_int_ctrl_vaddr;
 static uint64_t virtual_int_ctrl_paddr;
 static uint32_t virtual_int_ctrl_size;
-
 static uint64_t virtual_cpu_int_paddr;
 static uint32_t virtual_cpu_int_size;
+*/
 
 /* TODO: Do not manage the softc directly and use the device's softc */
 static struct vgic_v3_softc softc;
@@ -922,31 +924,6 @@ vgic_v3_inject_irq(void *arg, unsigned int irq, bool level)
                 vgic_kick_vcpus(hypctx->hyp);
 
         return 0;
-}
-
-/*
- * TODO: map the GICD and GICR in el2_pmap.
- */
-int
-vgic_v3_map(pmap_t el2_pmap)
-{
-#if 0
-	lpae_vmmmap_set(NULL,
-	    (lpae_vm_vaddr_t)virtual_int_ctrl_vaddr,
-	    (lpae_vm_paddr_t)virtual_int_ctrl_paddr,
-	    virtual_int_ctrl_size,
-	    VM_PROT_READ | VM_PROT_WRITE);
-#endif
-
-	virtual_int_ctrl_vaddr = 0;
-	virtual_int_ctrl_paddr = 0;
-	virtual_int_ctrl_size = 0;
-
-	/* Virtual CPU Interface */
-	virtual_cpu_int_paddr = 0;
-	virtual_cpu_int_size = 0;
-
-	return (0);
 }
 
 static int
