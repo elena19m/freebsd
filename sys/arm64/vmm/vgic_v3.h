@@ -113,21 +113,14 @@ struct vgic_v3_cpu_if {
 	uint8_t		irq_to_lr[GIC_I_NUM_MAX];
 };
 
-int vgic_v3_map(pmap_t el2_pmap);
-
-int vgic_v3_do_emulation(void *arg, int vcpuid, struct vm_exit *vme,
+int 	vgic_v3_do_emulation(void *arg, int vcpuid, struct vm_exit *vme,
 		bool *retu);
-
-int vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
+int 	vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
 		uint64_t redist_ipa, size_t redist_size);
-
-void vgic_v3_sync_hwstate(void *arg);
-
-void vgic_v3_flush_hwstate(void *arg);
-
-int vgic_v3_vcpu_pending_irq(void *arg);
-
-int vgic_v3_inject_irq(void *arg, unsigned int irq, bool level);
+void 	vgic_v3_sync_hwstate(void *arg);
+void 	vgic_v3_flush_hwstate(void *arg);
+int 	vgic_v3_vcpu_pending_irq(void *arg);
+int 	vgic_v3_inject_irq(void *arg, unsigned int irq, bool level);
 
 struct vgic_v3_softc {
 	struct resource *maintenance_int_res;		/* Not used. */
