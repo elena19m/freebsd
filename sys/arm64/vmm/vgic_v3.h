@@ -90,15 +90,28 @@ struct vgic_v3_dist {
 
 	size_t		nirqs;
 
-	/* Distributor Interrupt Group Register. */
-	uint32_t 	*gicd_igroupr;	
-	uint64_t	gicd_igroupr_addr_max;
-	size_t		gicd_igroupr_num;
+	/* TODO: sort them alphabeticaly. */
 
-	/* Distributor Interrupt Configuration Registers. */
-	uint32_t	*gicd_icfgr;
+	/* Interrupt Group Register. */
+	uint64_t	gicd_igroupr_addr_max;
+	uint32_t 	*gicd_igroupr;	
+	size_t		gicd_igroupr_num;
+	/* Interrupt Configuration Registers. */
 	uint64_t	gicd_icfgr_addr_max;
+	uint32_t	*gicd_icfgr;
 	size_t		gicd_icfgr_num;
+	/* Interrupt Priority Registers. */
+	uint64_t	gicd_ipriorityr_addr_max;
+	uint32_t	*gicd_ipriorityr;
+	size_t		gicd_ipriorityr_num;
+	/* Interrupt Clear-Enable Registers. */
+	uint64_t	gicd_icenabler_addr_max;
+	uint32_t	*gicd_icenabler;
+	size_t		gicd_icenabler_num;
+	/* Interrupt Routing Registers. */
+	uint64_t	gicd_irouter_addr_max;
+	uint64_t	*gicd_irouter;
+	size_t		gicd_irouter_num;
 };
 
 struct vgic_v3_redist {
