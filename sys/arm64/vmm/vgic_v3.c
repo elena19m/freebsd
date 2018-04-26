@@ -225,6 +225,38 @@ vgic_v3_dist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 			eprintf("read: GICD_ICFGR<%zd>\n", n);
 		}
 
+	} else if (reg >= GICD_IPRIORITYR_BASE &&
+	    reg < dist->gicd_ipriorityr_addr_max) {
+		if (!valid_mm_reg32(reg)) {
+			/* XXX Byte access to GICD_IRPRIORITYR not implemented. */
+			eprintf("Warning: Byte read access to GICD_IPRIORITYR not implemented, offset: 0x%016lx\n", reg);
+		} else {
+			n = (reg - GICD_IPRIORITYR_BASE) / 4;
+			*rval = dist->gicd_ipriorityr[n];
+			eprintf("read: GICD_IPRIORITYR<%zd>\n", n);
+		}
+
+	} else if (reg >= GICD_ICENABLER_BASE &&
+	    reg < dist->gicd_icenabler_addr_max) {
+		if (!valid_mm_reg32(reg)) {
+			eprintf("Warning: Reading invalid register offset 0x%016lx\n", reg);
+		} else {
+			n = (reg - GICD_ICENABLER_BASE) / 4;
+			/* A write of 1 is read as 0. */
+			*rval = ~dist->gicd_icenabler[n];
+			eprintf("read: GICD_ICENABLER<%zd>\n", n);
+		}
+
+	} else if (reg >= GICD_IROUTER_BASE &&
+	    reg < dist->gicd_irouter_addr_max) {
+		if (!valid_mm_reg64(reg)) {
+			eprintf("Warning: Reading invalid register offset 0x%016lx\n", reg);
+		} else {
+			n = (reg - GICD_IROUTER_BASE) / 8;
+			*rval = dist->gicd_irouter[n];
+			eprintf("read: GICD_IROUTER<%zd>\n", n);
+		}
+
 
 	} else {
 		eprintf("Unknown register: 0x%04lx\n", reg);
@@ -250,6 +282,7 @@ vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 	reg = fault_ipa - dist->ipa;
 
 	/* TODO: GICD_IROUTER<n> is 64 bits wide, the rest are 32 bits wide. */
+	/* TODO: check the size? */
 
 	if (reg == GICD_CTLR) {
 		/* Guest will always read that no writes are pending. */
@@ -283,6 +316,37 @@ vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 			n = (reg - GICD_ICFGR_BASE) / 4;
 			dist->gicd_icfgr[n] = (uint32_t)val;
 			eprintf("write: GICD_ICFGR<%zd>\n", n);
+		}
+
+	} else if (reg >= GICD_IPRIORITYR_BASE &&
+	    reg < dist->gicd_ipriorityr_addr_max) {
+		if (!valid_mm_reg32(reg)) {
+			/* XXX Byte access to GICD_IRPRIORITYR not implemented. */
+			eprintf("Warning: Byte write access to GICD_IPRIORITYR not implemented, offset: 0x%016lx\n", reg);
+		} else {
+			n = (reg - GICD_IPRIORITYR_BASE) / 4;
+			dist->gicd_ipriorityr[n] = (uint32_t)val;
+			eprintf("write: GICD_IPRIORITYR<%zd>\n", n);
+		}
+
+	} else if (reg >= GICD_ICENABLER_BASE &&
+	    reg < dist->gicd_icenabler_addr_max) {
+		if (!valid_mm_reg32(reg)) {
+			eprintf("Warning: Writing invalid register offset 0x%016lx\n", reg);
+		} else {
+			n = (reg - GICD_ICENABLER_BASE) / 4;
+			dist->gicd_icenabler[n] = (uint32_t)val;
+			eprintf("write: GICD_ICENABLER<%zd>\n", n);
+		}
+
+	} else if (reg >= GICD_IROUTER_BASE &&
+	    reg < dist->gicd_irouter_addr_max) {
+		if (!valid_mm_reg64(reg)) {
+			eprintf("Warning: Writing invalid register offset 0x%016lx\n", reg);
+		} else {
+			n = (reg - GICD_IROUTER_BASE) / 8;
+			dist->gicd_irouter[n] = val;
+			eprintf("write: GICD_IROUTER<%zd>\n", n);
 		}
 
 	} else {
@@ -336,38 +400,14 @@ vgic_v3_do_emulation(void *arg, int vcpuid, struct vm_exit *vme, bool *retu)
 	return (error);
 }
 
-static inline void vgic_v3_set_gicd_igroupr(struct vgic_v3_dist *dist)
-{
-	size_t igroupr_num;
-
-	/*
-	 * GICD_IGROUPR is 32 bits wide and each bit represents an interrupt.
-	 * Round up to the nearest integer.
-	 */
-	igroupr_num = (dist->nirqs + 32 - 1) / 32;
-	dist->gicd_igroupr_num = igroupr_num;
-	dist->gicd_igroupr = malloc(igroupr_num * sizeof(*dist->gicd_igroupr),
-			M_VGIC_V3, M_WAITOK | M_ZERO);
-	dist->gicd_igroupr_addr_max = GICD_IGROUPR_BASE + igroupr_num * 4;
-}
-
-static inline void vgic_v3_set_gicd_icfgr(struct vgic_v3_dist *dist)
-{
-	size_t icfgr_num;
-
-	/*
-	 * GICD_ICFGR is used for configuring 16 interrupts. Round up to the
-	 * nearest integer.
-	 */
-	icfgr_num = (dist->nirqs + 16 - 1) / 16;
-	dist->gicd_icfgr_num = icfgr_num;
-	dist->gicd_icfgr = malloc(icfgr_num * sizeof(*dist->gicd_igroupr),
-			M_VGIC_V3, M_WAITOK | M_ZERO);
-	/* GICD_ICFGR0 is read-only. */
-	memcpy(&dist->gicd_icfgr[0], &ro_regs.gicd_icfgr0,
-			sizeof(dist->gicd_icfgr[0]));
-	dist->gicd_icfgr_addr_max = GICD_ICFGR_BASE + icfgr_num * 4;
-}
+#define	INIT_DIST_REG(reg_name, n, reg_base, dist)			\
+do {									\
+	(dist)->reg_name##_num = (n);					\
+	(dist)->reg_name = malloc((n) * sizeof(*(dist)->reg_name),	\
+			M_VGIC_V3, M_WAITOK | M_ZERO);			\
+	(dist)->reg_name##_addr_max = (reg_base) + 			\
+			(n) * sizeof(*(dist)->reg_name);		\
+} while (0)
 
 int
 vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
@@ -376,7 +416,7 @@ vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
 	struct hyp *hyp;
 	struct vgic_v3_dist *dist;
 	struct vgic_v3_redist *redist;
-	size_t igroupr_num, icfgr_num;
+	size_t n;
 
 	printf("[vgic_v3: vgic_v3_attach_to_vm()]\n");
 
@@ -396,8 +436,27 @@ vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
 
 	dist->nirqs = GICD_TYPER_I_NUM(dist->gicd_typer);
 
-	vgic_v3_set_gicd_igroupr(dist);
-	vgic_v3_set_gicd_icfgr(dist);
+	/* TODO: sort them alphabeticaly. */
+
+	/* Round up the number of registers to the nearest integer. */
+	n = (dist->nirqs + 32 - 1) / 32;
+	INIT_DIST_REG(gicd_igroupr, n, GICD_IGROUPR_BASE, dist);
+
+	/* ARM GIC Architecture Specification, page 8-471. */
+	n = (dist->gicd_typer & GICD_TYPER_ITLINESNUM_MASK) + 1;
+	INIT_DIST_REG(gicd_icenabler, n, GICD_ICENABLER_BASE, dist);
+
+	/* ARM GIC Architecture Specification, page 8-483. */
+	n = 8 * ((dist->gicd_typer & GICD_TYPER_ITLINESNUM_MASK) + 1);
+	INIT_DIST_REG(gicd_ipriorityr, n, GICD_IPRIORITYR_BASE, dist);
+
+	n = (dist->nirqs + 16 - 1) / 16;
+	INIT_DIST_REG(gicd_icfgr, n, GICD_ICFGR_BASE, dist);
+
+	/* ARM GIC Architecture Specification, page 8-485. */
+	n = 32 * (dist->gicd_typer & GICD_TYPER_ITLINESNUM_MASK + 1) - 1;
+	INIT_DIST_REG(gicd_irouter, n, GICD_IROUTER_BASE, dist);
+
 
 	/* Set the redistributor address and size for trapping guest access. */
 	redist->ipa = redist_ipa;
@@ -457,6 +516,8 @@ static void vgic_v3_detach_from_vm(void *arg)
 
 	free(dist->gicd_igroupr, M_VGIC_V3);
 	free(dist->gicd_icfgr, M_VGIC_V3);
+	free(dist->gicd_ipriorityr, M_VGIC_V3);
+	free(dist->gicd_icenabler, M_VGIC_V3);
 }
 
 static int
@@ -1110,6 +1171,8 @@ static int arm_vgic_attach(device_t dev)
 
 	vgic_v3_set_ro_regs(dev);
 	vgic_v3_set_virt_features();
+
+	printf("GICD_TYPER = 0x%x\n", ro_regs.gicd_typer);
 
 	softc.maintenance_int_res = gic_get_maintenance_intr_res(dev);
 	/*
