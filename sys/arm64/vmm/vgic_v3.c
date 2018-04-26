@@ -171,186 +171,148 @@ vgic_v3_redist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 	return (0);
 }
 
-/*
- * TODO
- */
+#define	read_reg(reg, off, base)						\
+({										\
+	size_t size = sizeof(*reg);						\
+	size_t idx;								\
+	uint64_t val;								\
+										\
+	if (((off) & (size - 1)) != 0) {					\
+		eprintf("Warning: Reading invalid register offset 0x%016lx\n",	\
+				(off));						\
+		val = 0;							\
+	} else {								\
+		idx = ((off) - (base)) / size;					\
+		eprintf("read: " #reg "<%zd>\n", idx);				\
+		val = reg[idx];							\
+	}									\
+	val;									\
+})
+
 static int
 vgic_v3_dist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 		int size, void *arg)
 {
-	uint64_t reg;
 	struct hyp *hyp;
 	struct vgic_v3_dist *dist;
-	size_t n;
+	uint64_t off;
 
 	hyp = vm_get_cookie(vm);
 	dist = &hyp->vgic_dist;
 
 	/* Offset of distributor register. */
-	reg = fault_ipa - dist->ipa;
+	off = fault_ipa - dist->ipa;
 
-	/* TODO: GICD_IROUTER<n> is 64 bits wide, the rest are 32 bits wide. */
-
-	if (reg == GICD_CTLR) {
+	if (off == GICD_CTLR) {
 		eprintf("read: GICD_CTLR\n");
 		*rval = dist->gicd_ctlr;
 
-	} else if (reg == GICD_TYPER) {
+	} else if (off == GICD_TYPER) {
 		eprintf("read: GICD_TYPER\n");
 		*rval = dist->gicd_typer;
 
-	} else if (reg == GICD_IIDR) {
+	} else if (off == GICD_IIDR) {
 		eprintf("read: GICD_IIDR\n");
 		*rval = 0;
 
-	} else if (reg == GICD_PIDR2) {
+	} else if (off == GICD_PIDR2) {
 		eprintf("read: GICD_PIDR2\n");
 		*rval = dist->gicd_pidr2;
 
-	} else if (reg >= GICD_IGROUPR_BASE && reg < dist->gicd_igroupr_addr_max) {
-		if (valid_mm_reg32(reg)) {
-			eprintf("Warning: Reading invalid register offset 0x%016lx\n", reg);
-		} else {
-			n = (reg - GICD_IGROUPR_BASE) / 4;
-			*rval = dist->gicd_igroupr[n];
-			eprintf("read: GICD_IGROUPR<%zd>\n", n);
-		}
+	} else if (off >= GICD_IGROUPR_BASE && off < dist->gicd_igroupr_addr_max) {
+		*rval = read_reg(dist->gicd_igroupr, off, GICD_IGROUPR_BASE);
 
-	} else if (reg >= GICD_ICFGR_BASE && reg < dist->gicd_icfgr_addr_max) {
-		if (!valid_mm_reg32(reg)) {
-			eprintf("Warning: Reading invalid register offset 0x%016lx\n", reg);
-		} else {
-			n = (reg - GICD_ICFGR_BASE) / 4;
-			*rval = dist->gicd_icfgr[n];
-			eprintf("read: GICD_ICFGR<%zd>\n", n);
-		}
+	} else if (off >= GICD_ICFGR_BASE && off < dist->gicd_icfgr_addr_max) {
+		*rval = read_reg(dist->gicd_icfgr, off, GICD_ICFGR_BASE);
 
-	} else if (reg >= GICD_IPRIORITYR_BASE &&
-	    reg < dist->gicd_ipriorityr_addr_max) {
-		if (!valid_mm_reg32(reg)) {
-			/* XXX Byte access to GICD_IRPRIORITYR not implemented. */
-			eprintf("Warning: Byte read access to GICD_IPRIORITYR not implemented, offset: 0x%016lx\n", reg);
-		} else {
-			n = (reg - GICD_IPRIORITYR_BASE) / 4;
-			*rval = dist->gicd_ipriorityr[n];
-			eprintf("read: GICD_IPRIORITYR<%zd>\n", n);
-		}
+	} else if (off >= GICD_IPRIORITYR_BASE &&
+	    off < dist->gicd_ipriorityr_addr_max) {
+		*rval = read_reg(dist->gicd_ipriorityr, off, GICD_IPRIORITYR_BASE);
 
-	} else if (reg >= GICD_ICENABLER_BASE &&
-	    reg < dist->gicd_icenabler_addr_max) {
-		if (!valid_mm_reg32(reg)) {
-			eprintf("Warning: Reading invalid register offset 0x%016lx\n", reg);
-		} else {
-			n = (reg - GICD_ICENABLER_BASE) / 4;
-			/* A write of 1 is read as 0. */
-			*rval = ~dist->gicd_icenabler[n];
-			eprintf("read: GICD_ICENABLER<%zd>\n", n);
-		}
+	} else if (off >= GICD_ICENABLER_BASE &&
+	    off < dist->gicd_icenabler_addr_max) {
+		*rval = read_reg(dist->gicd_icenabler, off, GICD_ICENABLER_BASE);
+		/* A write of 1 is read as 0. */
+		*rval = ~(*rval);
 
-	} else if (reg >= GICD_IROUTER_BASE &&
-	    reg < dist->gicd_irouter_addr_max) {
-		if (!valid_mm_reg64(reg)) {
-			eprintf("Warning: Reading invalid register offset 0x%016lx\n", reg);
-		} else {
-			n = (reg - GICD_IROUTER_BASE) / 8;
-			*rval = dist->gicd_irouter[n];
-			eprintf("read: GICD_IROUTER<%zd>\n", n);
-		}
-
+	} else if (off >= GICD_IROUTER_BASE && off < dist->gicd_irouter_addr_max) {
+		*rval = read_reg(dist->gicd_irouter, off, GICD_IROUTER_BASE);
 
 	} else {
-		eprintf("Unknown register: 0x%04lx\n", reg);
+		eprintf("Unknown register offset: 0x%04lx\n", off);
 		*rval = 0;
 	}
 
 	return (0);
 }
 
+#define write_reg(reg, off, base, val)						\
+do {										\
+	size_t size = sizeof(*reg);						\
+	size_t idx;								\
+										\
+	if (((off) & (size - 1)) != 0) {					\
+		eprintf("Warning: Writing invalid register offset 0x%016lx\n",	\
+				(off));						\
+	} else {								\
+		idx = ((off) - (base)) / size;					\
+		eprintf("write: " #reg "<%zd>\n", idx);				\
+		reg[idx] = val;							\
+	}									\
+} while (0)
+
 static int
 vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 		int size, void *arg)
 {
-	uint64_t reg;
 	struct hyp *hyp;
 	struct vgic_v3_dist *dist;
-	size_t n;
+	uint64_t off;
 
 	hyp = vm_get_cookie(vm);
 	dist = &hyp->vgic_dist;
 
 	/* Offset of distributor register. */
-	reg = fault_ipa - dist->ipa;
+	off = fault_ipa - dist->ipa;
 
-	/* TODO: GICD_IROUTER<n> is 64 bits wide, the rest are 32 bits wide. */
-	/* TODO: check the size? */
-
-	if (reg == GICD_CTLR) {
+	if (off == GICD_CTLR) {
 		/* Guest will always read that no writes are pending. */
 		dist->gicd_ctlr = (uint32_t)val & GICD_CTLR_RES0 & ~GICD_CTLR_RWP;
 		eprintf("write: GICD_CTLR\n");
 
-	} else if (reg == GICD_TYPER) {
-		eprintf("Warning: Trying to write to read-only register GICD_TYPER.\n");
+	} else if (off == GICD_TYPER) {
+		eprintf("Warning: Trying to write to read-only offister GICD_TYPER.\n");
 
-	} else if (reg == GICD_PIDR2) {
+	} else if (off == GICD_PIDR2) {
 		eprintf("Warning: Trying to write to read-only register GICD_PIDR2.\n");
 
-	} else if (reg == GICD_IIDR) {
+	} else if (off == GICD_IIDR) {
 		eprintf("write: GICD_IIDR\n");
 
-	} else if (reg >= GICD_IGROUPR_BASE && reg < dist->gicd_igroupr_addr_max) {
-		if (!valid_mm_reg32(reg)) {
-			eprintf("Warning: Writing invalid register offset 0x%016lx\n", reg);
-		} else {
-			n = (reg - GICD_IGROUPR_BASE) / 4;
-			dist->gicd_igroupr[n] = (uint32_t)val;
-			eprintf("write: GICD_IGROUPR<%zd>\n", n);
-		}
+	} else if (off >= GICD_IGROUPR_BASE && off < dist->gicd_igroupr_addr_max) {
+		write_reg(dist->gicd_igroupr, off, GICD_IGROUPR_BASE, val);
 
-	} else if (reg >= GICD_ICFGR_BASE && reg < dist->gicd_icfgr_addr_max) {
-		if (!valid_mm_reg32(reg)) {
-			eprintf("Warning: Writing invalid register offset 0x%016lx\n", reg);
-		} else if (reg == GICD_ICFGR_BASE) {
+	} else if (off >= GICD_ICFGR_BASE && off < dist->gicd_icfgr_addr_max) {
+		if (off == GICD_ICFGR_BASE)
 			eprintf("Warning: Trying to write to read-only register GICD_ICFGR0.\n");
-		} else {
-			n = (reg - GICD_ICFGR_BASE) / 4;
-			dist->gicd_icfgr[n] = (uint32_t)val;
-			eprintf("write: GICD_ICFGR<%zd>\n", n);
-		}
+		else
+			write_reg(dist->gicd_icfgr, off, GICD_ICFGR_BASE, val);
 
-	} else if (reg >= GICD_IPRIORITYR_BASE &&
-	    reg < dist->gicd_ipriorityr_addr_max) {
-		if (!valid_mm_reg32(reg)) {
-			/* XXX Byte access to GICD_IRPRIORITYR not implemented. */
-			eprintf("Warning: Byte write access to GICD_IPRIORITYR not implemented, offset: 0x%016lx\n", reg);
-		} else {
-			n = (reg - GICD_IPRIORITYR_BASE) / 4;
-			dist->gicd_ipriorityr[n] = (uint32_t)val;
-			eprintf("write: GICD_IPRIORITYR<%zd>\n", n);
-		}
+	} else if (off >= GICD_IPRIORITYR_BASE &&
+	    off < dist->gicd_ipriorityr_addr_max) {
+		/* XXX Byte access to GICD_IRPRIORITYR not implemented. */
+		write_reg(dist->gicd_ipriorityr, off, GICD_IPRIORITYR_BASE, val);
 
-	} else if (reg >= GICD_ICENABLER_BASE &&
-	    reg < dist->gicd_icenabler_addr_max) {
-		if (!valid_mm_reg32(reg)) {
-			eprintf("Warning: Writing invalid register offset 0x%016lx\n", reg);
-		} else {
-			n = (reg - GICD_ICENABLER_BASE) / 4;
-			dist->gicd_icenabler[n] = (uint32_t)val;
-			eprintf("write: GICD_ICENABLER<%zd>\n", n);
-		}
+	} else if (off >= GICD_ICENABLER_BASE &&
+	    off < dist->gicd_icenabler_addr_max) {
+		write_reg(dist->gicd_icenabler, off, GICD_ICENABLER_BASE, val);
 
-	} else if (reg >= GICD_IROUTER_BASE &&
-	    reg < dist->gicd_irouter_addr_max) {
-		if (!valid_mm_reg64(reg)) {
-			eprintf("Warning: Writing invalid register offset 0x%016lx\n", reg);
-		} else {
-			n = (reg - GICD_IROUTER_BASE) / 8;
-			dist->gicd_irouter[n] = val;
-			eprintf("write: GICD_IROUTER<%zd>\n", n);
-		}
+	} else if (off >= GICD_IROUTER_BASE &&
+	    off < dist->gicd_irouter_addr_max) {
+		write_reg(dist->gicd_irouter, off, GICD_IROUTER_BASE, val);
 
 	} else {
-		eprintf("Unknown register: 0x%04lx\n", reg);
+		eprintf("Unknown register offset: 0x%04lx\n", off);
 	}
 
 	return (0);
@@ -400,13 +362,12 @@ vgic_v3_do_emulation(void *arg, int vcpuid, struct vm_exit *vme, bool *retu)
 	return (error);
 }
 
-#define	INIT_DIST_REG(reg_name, n, reg_base, dist)			\
+#define	INIT_DIST_REG(name, n, base, dist)				\
 do {									\
-	(dist)->reg_name##_num = (n);					\
-	(dist)->reg_name = malloc((n) * sizeof(*(dist)->reg_name),	\
+	(dist)->name = malloc((n) * sizeof(*(dist)->name),		\
 			M_VGIC_V3, M_WAITOK | M_ZERO);			\
-	(dist)->reg_name##_addr_max = (reg_base) + 			\
-			(n) * sizeof(*(dist)->reg_name);		\
+	(dist)->name##_num = (n);					\
+	(dist)->name##_addr_max = (base)+ (n) * sizeof(*(dist)->name);	\
 } while (0)
 
 int
