@@ -33,6 +33,7 @@ static void devemu_lintr_update(struct devemu_inst *di);
 static struct devemu_info {
 	uint64_t size;			/* address size */
 	uint64_t baddr;			/* address */
+	uint64_t irq;			/* device interrupt number */
 	char *name;			/* device name */
 	char *arg;			/* device arguments */
 	struct devemu_info *next;		/* pointer for linked list */
@@ -42,19 +43,19 @@ static struct devemu_info {
 /*
  * MMIO options are in the form:
  *
- * size[@<base_addr>]:<emul>[,<config>]
+ * <size>@<base_addr>[#<irq>]:<emul>[,<config>]
  *
  * - size is the number of bytes required for the device mmio
- * - base_addr is an optional base address for the MMIO mapped device;
- *     if absent, a default value base on the emulated device will be
- *     used;
+ * - base_addr is the base address for the MMIO mapped device;
+ * - irq is an optional parameter that specifies the device interrupt number
+ *   the value MUST be a DECIMAL integer
  * - emul is a string describing the type of device - e.g., virtio-net;
  * - config is an optional string, depending on the device, that is used
  *     for configuration
  *
  * Examples of use:
- *   0x200@0x100000:virtio-net,tap0
- *   0x100@dummy
+ *   0x200@0x100000#25:virtio-net,tap0
+ *   0x100@0x200000@dummy
  */
 static void
 devemu_parse_opts_usage(const char *args)
@@ -88,7 +89,7 @@ int
 devemu_parse_opts(const char *args)
 {
 	char *emul, *config, *str;
-	uint64_t size, baddr;
+	uint64_t size, baddr, irq;
 	int error;
 	struct devemu_info *dif;
 
@@ -100,12 +101,12 @@ devemu_parse_opts(const char *args)
 	if ((emul = strchr(str, ':')) != NULL) {
 		*emul++ = '\0';
 
-		/* <size>@<base-addr> */
-		if (sscanf(str, "%llx@%llx", &size, &baddr) != 2 &&
-		    sscanf(str, "%llu@%llu", &size, &baddr) != 2) {
-			/* <size> */
-			if (sscanf(str, "%llx", &size) != 1 &&
-			    sscanf(str, "%llu", &size) != 1) {
+		/* <size>@<base-addr>#<irq> */
+		if (sscanf(str, "%llx@%llx#%llu", &size, &baddr, &irq) != 3 &&
+		    sscanf(str, "%llu@%llu#%llu", &size, &baddr, &irq) != 3) {
+			/* <size>@<base-addr> */
+			if (sscanf(str, "%llx@%llx", &size, &baddr) != 2 &&
+			    sscanf(str, "%llu@%llu", &size, &baddr) != 2) {
 				devemu_parse_opts_usage(str);
 				goto parse_error;
 			}
@@ -148,6 +149,7 @@ devemu_parse_opts(const char *args)
 
 	dif->size = size;
 	dif->baddr = baddr;
+	dif->irq = irq;
 	if ((emul != NULL) && (strlen(emul)) > 0)
 		dif->name = strdup(emul);
 	else
@@ -333,7 +335,7 @@ devemu_init(struct vmctx *ctx, struct devemu_dev *de, struct devemu_info *dif)
 	di->di_vmctx = ctx;
 	snprintf(di->di_name, DI_NAMESZ, "%s-mmio", de->de_emu);
 	di->di_lintr.state = IDLE;
-	di->di_lintr.irq = de->de_irq;
+	di->di_lintr.irq = dif->irq;
 	pthread_mutex_init(&di->di_lintr.lock, NULL);
 	di->addr.baddr = dif->baddr;
 	di->addr.size = dif->size;
