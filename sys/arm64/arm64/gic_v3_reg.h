@@ -57,13 +57,20 @@
 #define	 GICD_CTLR_G1A		(1 << 1)
 #define	 GICD_CTLR_ARE_NS	(1 << 4)
 #define	 GICD_CTLR_RWP		(1 << 31)
+/* Only one security state supported */
+#define	 GICD_CTLR_RES0		(0x80000093)
 /* GICD_TYPER */
 #define	 GICD_TYPER_IDBITS(n)	((((n) >> 19) & 0x1F) + 1)
+#define	 GICD_TYPER_SECURITYEXTN	\
+		(1 << 10)
+#define	 GICD_TYPER_DVIS	(1 << 18)
+#define	 GICD_TYPER_LPIS	(1 << 17)
 
 /*
  * Registers (v3)
  */
-#define	GICD_IROUTER(n)		(0x6000 + ((n) * 8))
+#define	GICD_IROUTER_BASE	(0x6000)
+#define	 GICD_IROUTER(n)	(GICD_IROUTER_BASE + ((n) * 8))
 
 #define	GICD_PIDR4		0xFFD0
 #define	GICD_PIDR5		0xFFD4
@@ -84,7 +91,8 @@
 
 /* Redistributor registers */
 #define	GICR_CTLR		GICD_CTLR
-#define		GICR_CTLR_LPI_ENABLE	(1 << 0)
+#define	 GICR_CTLR_RWP		(1 << 3)
+#define	 GICR_CTLR_LPI_ENABLE	(1 << 0)
 
 #define	GICR_PIDR2		GICD_PIDR2
 
