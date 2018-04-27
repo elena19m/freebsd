@@ -63,20 +63,20 @@ devemu_parse_opts_usage(const char *args)
 }
 
 /*
- * checks if the requested address is available
+ * checks if two memory regions overlap
  * checks are not required if one of the pointers is null
  */
 static int
-devemu_mem_available(uint64_t pa, uint64_t sa, uint64_t pb, uint64_t sb)
+devemu_mem_overlap(uint64_t pa, uint64_t sa, uint64_t pb, uint64_t sb)
 {
 #define IN_INTERVAL(lower, value, upper)	\
 	(((lower) < (value)) && ((value) < (upper)))
 
 	if ((pa == 0) || (pb == 0))
-		return 1;
+		return 0;
 
-	if ((!IN_INTERVAL(pa, pb, pa + sa)) &&
-	    (!IN_INTERVAL(pb, pa, pb + sb)))
+	if (IN_INTERVAL(pa, pb, pa + sa) &&
+	    IN_INTERVAL(pb, pa, pb + sb))
 		return 1;
 
 	return 0;
@@ -125,8 +125,8 @@ devemu_parse_opts(const char *args)
 	 */
 	if (baddr != 0) {
 		for (dif = devemu_info_head; dif != NULL; dif = dif->next)
-			if ((devemu_mem_available(dif->baddr, dif->size,
-						baddr, size)) == 0)
+			if (devemu_mem_overlap(dif->baddr, dif->size,
+					       baddr, size))
 				break;
 
 		if (dif != NULL) {
