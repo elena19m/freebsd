@@ -94,7 +94,7 @@ struct vgic_v3_dist {
 
 	/* Interrupt Group Register. */
 	uint64_t	gicd_igroupr_addr_max;
-	uint32_t 	*gicd_igroupr;	
+	uint32_t 	*gicd_igroupr;
 	size_t		gicd_igroupr_num;
 	/* Interrupt Configuration Registers. */
 	uint64_t	gicd_icfgr_addr_max;
@@ -115,8 +115,10 @@ struct vgic_v3_dist {
 };
 
 struct vgic_v3_redist {
-	uint64_t ipa;
-	size_t 	 size;
+	uint64_t 	ipa;
+	size_t 	 	size;
+
+	uint64_t	gicr_typer;	/* Redistributor Type Register */
 };
 
 struct vgic_v3_cpu_if {

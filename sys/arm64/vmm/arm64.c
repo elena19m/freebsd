@@ -222,7 +222,7 @@ arm_vminit(struct vm *vm)
 		hypctx->hcr_el2 = HCR_RW | HCR_BSU_IS | HCR_SWIO | HCR_FB | \
 				  HCR_VM | HCR_AMO | HCR_IMO | HCR_FMO;
 
-		/* The guest will detect a uniprocessor system */
+		/* The guest will detect a single-core, single-threaded CPU */
 		hypctx->vmpidr_el2 = get_mpidr();
 		hypctx->vmpidr_el2 |= VMPIDR_EL2_U;
 		hypctx->vmpidr_el2 &= ~VMPIDR_EL2_MT;

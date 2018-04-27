@@ -43,8 +43,9 @@
 
 #include <machine/bus.h>
 #include <machine/bitops.h>
-#include <machine/param.h>
 #include <machine/cpufunc.h>
+#include <machine/cpu.h>
+#include <machine/param.h>
 #include <machine/pmap.h>
 #include <machine/vmparam.h>
 #include <machine/intr.h>
@@ -137,17 +138,31 @@ static int
 vgic_v3_redist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 		int size, void *arg)
 {
-	uint64_t reg;
 	struct hyp *hyp;
 	struct vgic_v3_redist *redist;
+	struct vgic_v3_dist *dist;
+	uint64_t off;
 
 	hyp = vm_get_cookie(vm);
 	redist = &hyp->ctx[vcpuid].vgic_redist;
+	dist = &hyp->vgic_dist;
 
 	/* Offset of redistributor register. */
-	reg = fault_ipa - redist->ipa;
+	off = fault_ipa - redist->ipa;
 
-	eprintf("reg: 0x%04lx\n", reg);
+	if (off == GICR_PIDR2) {
+		eprintf("read: GICR_PIDR2\n");
+		/* GICR_PIDR2 has the same value as GICD_PIDR2 */
+		*rval = dist->gicd_pidr2;
+
+	} else if (off == GICR_TYPER) {
+		eprintf("read: GICR_TYPER\n");
+		*rval = redist->gicr_typer;
+
+	} else {
+		eprintf("Unknown register offset: 0x%04lx\n", off);
+		*rval = 0;
+	}
 
 	return (0);
 }
@@ -156,17 +171,26 @@ static int
 vgic_v3_redist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 		int size, void *arg)
 {
-	uint64_t reg;
 	struct hyp *hyp;
 	struct vgic_v3_redist *redist;
+	uint64_t off;
 
 	hyp = vm_get_cookie(vm);
 	redist = &hyp->ctx[vcpuid].vgic_redist;
 
 	/* Offset of redistributor register. */
-	reg = fault_ipa - redist->ipa;
+	off = fault_ipa - redist->ipa;
 
-	eprintf("reg: 0x%04lx\n", reg);
+	if (off == GICR_PIDR2) {
+		eprintf("Warning: Trying to write to read-only register GICR_PIDR2.\n");
+
+	} else if (off == GICR_TYPER) {
+		eprintf("Warning: Trying to write to read-only register GICR_TYPER.\n");
+
+	} else {
+		eprintf("Unknown register offset: 0x%04lx\n", off);
+	}
+
 
 	return (0);
 }
@@ -281,7 +305,7 @@ vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 		eprintf("write: GICD_CTLR\n");
 
 	} else if (off == GICD_TYPER) {
-		eprintf("Warning: Trying to write to read-only offister GICD_TYPER.\n");
+		eprintf("Warning: Trying to write to read-only register GICD_TYPER.\n");
 
 	} else if (off == GICD_PIDR2) {
 		eprintf("Warning: Trying to write to read-only register GICD_PIDR2.\n");
@@ -377,6 +401,7 @@ vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
 	struct hyp *hyp;
 	struct vgic_v3_dist *dist;
 	struct vgic_v3_redist *redist;
+	uint64_t aff, vmpidr_el2;
 	size_t n;
 
 	printf("[vgic_v3: vgic_v3_attach_to_vm()]\n");
@@ -418,10 +443,22 @@ vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
 	n = 32 * (dist->gicd_typer & GICD_TYPER_ITLINESNUM_MASK + 1) - 1;
 	INIT_DIST_REG(gicd_irouter, n, GICD_IROUTER_BASE, dist);
 
-
 	/* Set the redistributor address and size for trapping guest access. */
 	redist->ipa = redist_ipa;
 	redist->size = redist_size;
+
+	/* XXX GICR_TYPER is per-cpu specific. */
+	/* Set up GICR_TYPER. */
+	redist->gicr_typer = 0;
+	vmpidr_el2 = hyp->ctx[0].vmpidr_el2;
+	aff = (CPU_AFF3(vmpidr_el2) << 24) | (CPU_AFF2(vmpidr_el2) << 16) |
+		(CPU_AFF1(vmpidr_el2) << 8) | CPU_AFF0(vmpidr_el2);
+	redist->gicr_typer = aff << GICR_TYPER_AFF_SHIFT;
+	/* Redistributor doesn't support virtual or physical LPIS. */
+	redist->gicr_typer &= ~GICR_TYPER_VLPIS;
+	redist->gicr_typer &= ~GICR_TYPER_PLPIS;
+	/* Only one CPU supported, this is the last Redistributor. */
+	redist->gicr_typer |= GICR_TYPER_LAST;
 
 	/* TODO: set up ich_* regs from vgic_v3_cpu_if. */
 
