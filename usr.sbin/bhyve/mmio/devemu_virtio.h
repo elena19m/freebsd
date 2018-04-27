@@ -216,11 +216,6 @@ struct vring_used {
 #define	VIRTIO_MMIO_VERSION_NUM	0x2
 
 /*
- * MMIO config space constants.
- */
-#define VTCFG_R_CFG		0x100
-
-/*
  * Bits in VTCFG_R_STATUS.  Guests need not actually set any of these,
  * but a guest writing 0 to this register means "please reset".
  */
