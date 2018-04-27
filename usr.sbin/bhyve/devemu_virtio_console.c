@@ -672,7 +672,6 @@ devemu_vtcon_init(struct vmctx *ctx, struct devemu_inst *di, char *opts)
 struct devemu_dev devemu_de_vcon = {
 	.de_emu =	"virtio-console",
 	.de_init =	devemu_vtcon_init,
-	.de_irq =	22,
 	.de_write =	vi_devemu_write,
 	.de_read =	vi_devemu_read
 };

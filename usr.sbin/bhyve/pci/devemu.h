@@ -78,7 +78,7 @@ struct devemu_dev {
 	int	(*pe_pause)(struct vmctx *ctx, struct pci_devinst *pi);
 	int	(*pe_resume)(struct vmctx *ctx, struct pci_devinst *pi);
 };
-#define devemu_SET(x)   DATA_SET(devemu_set, x);
+#define DEVEMU_SET(x)   DATA_SET(devemu_set, x);
 
 enum pcibar_type {
 	PCIBAR_NONE,

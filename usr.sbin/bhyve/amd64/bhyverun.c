@@ -98,7 +98,7 @@ __FBSDID("$FreeBSD$");
 #include "mevent.h"
 #include "mptbl.h"
 #include "devemu.h"
-#include "pci_irq.h"
+#include "devemu_irq.h"
 #include "pci_lpc.h"
 #include "smbiostbl.h"
 #ifdef BHYVE_SNAPSHOT
@@ -1163,11 +1163,8 @@ main(int argc, char *argv[])
 			break;
 #endif
 		case 's':
-			if (strncmp(optarg, "help", strlen(optarg)) == 0) {
-				pci_print_supported_devices();
-				exit(0);
-			} else if (pci_parse_slot(optarg) != 0)
-				exit(4);
+			if (devemu_parse_slot(optarg) != 0)
+				exit(1);
 			else
 				break;
 		case 'S':
@@ -1294,7 +1291,7 @@ main(int argc, char *argv[])
 	kernemu_dev_init();
 	init_bootrom(ctx);
 	atkbdc_init(ctx);
-	pci_irq_init(ctx);
+	devemu_irq_init(ctx);
 	ioapic_init(ctx);
 
 	rtc_init(ctx, rtc_localtime);
@@ -1303,10 +1300,8 @@ main(int argc, char *argv[])
 	/*
 	 * Exit if a device emulation finds an error in its initilization
 	 */
-	if (init_pci(ctx) != 0) {
-		perror("device emulation initialization error");
-		exit(4);
-	}
+	if (init_devemu(ctx) != 0)
+		exit(1);
 
 	/*
 	 * Initialize after PCI, to allow a bootrom file to reserve the high
