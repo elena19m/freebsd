@@ -110,6 +110,13 @@ device		hdmi
 
 # Pinmux
 device		fdt_pinctrl
+#
+# Network devices
+device		if_bridge
+device		tap
+
+device		smc
+device		smcphy
 
 # Flattened Device Tree
 options 	FDT			# Configure using FDT/DTB data
