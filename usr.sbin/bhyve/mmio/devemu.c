@@ -333,6 +333,10 @@ devemu_init(struct vmctx *ctx, struct devemu_dev *de, struct devemu_info *dif)
 	pthread_mutex_init(&di->di_lintr.lock, NULL);
 	di->addr.baddr = dif->baddr;
 	di->addr.size = dif->size;
+	/* some devices (e.g., virtio-net) use these as uniquifiers; irq number
+	 * should be unique and sufficient */
+	di->di_slot = dif->irq;
+	di->di_func = dif->irq;
 
 	error = (*de->de_init)(ctx, di, dif->arg);
 
