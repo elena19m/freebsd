@@ -325,12 +325,6 @@ devemu_init(struct vmctx *ctx, struct devemu_dev *de, struct devemu_info *dif)
 	if (di == NULL)
 		return (ENOMEM);
 
-	di->di_cfgregs = calloc(max(dif->size, MMIO_REGNUM), sizeof(u_char));
-	if (di->di_cfgregs == NULL) {
-		free(di);
-		return (ENOMEM);
-	}
-
 	di->di_d = de;
 	di->di_vmctx = ctx;
 	snprintf(di->di_name, DI_NAMESZ, "%s-mmio", de->de_emu);
@@ -348,7 +342,6 @@ devemu_init(struct vmctx *ctx, struct devemu_dev *de, struct devemu_info *dif)
 		fprintf(stderr, "Device \"%s\": initialization failed\r\n",
 			di->di_name);
 		fprintf(stderr, "Device arguments were: %s\r\n", dif->arg);
-		free(di->di_cfgregs);
 		free(di);
 	}
 
