@@ -335,7 +335,6 @@ devemu_init(struct vmctx *ctx, struct devemu_dev *de, struct devemu_info *dif)
 	di->di_lintr.state = IDLE;
 	di->di_lintr.irq = de->de_irq;
 	pthread_mutex_init(&di->di_lintr.lock, NULL);
-	di->di_cfgspace = di->di_cfgregs + MMIO_REGNUM;
 	di->addr.baddr = dif->baddr;
 	di->addr.size = dif->size;
 
