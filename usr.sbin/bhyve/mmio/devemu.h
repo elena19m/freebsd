@@ -55,7 +55,7 @@ struct devemu_inst {
 
 	void			*di_arg;		/* Private data */
 
-	u_char			*di_cfgregs;		/* Config regsters */
+	u_char			di_cfgregs[MMIO_REGNUM];/* Config regsters */
 
 	struct devinst_addr	addr;			/* Address info */
 };
