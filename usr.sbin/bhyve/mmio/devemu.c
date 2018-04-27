@@ -413,13 +413,13 @@ int init_devemu(struct vmctx *ctx)
 void
 devemu_lintr_request(struct devemu_inst *di)
 {
-	/* questionable use */
+	/* do nothing */
 }
 
 static void
 devemu_lintr_route(struct devemu_inst *di)
 {
-	/* questionable use */
+	/* do nothing */
 }
 
 void
