@@ -238,6 +238,8 @@ gic_v3_attach(device_t dev)
 	u_int irq;
 	const char *name;
 
+	gprintf("\n");
+
 	sc = device_get_softc(dev);
 	sc->gic_registered = FALSE;
 	sc->dev = dev;
@@ -280,6 +282,7 @@ gic_v3_attach(device_t dev)
 		sc->gic_redists.regions[i] = sc->gic_res[rid];
 
 	/* Get the number of supported SPI interrupts */
+	gprintf("GICD_TYPER read\n");
 	typer = gic_d_read(sc, 4, GICD_TYPER);
 	sc->gic_nirqs = GICD_TYPER_I_NUM(typer);
 	if (sc->gic_nirqs > GIC_I_NUM_MAX)
@@ -318,19 +321,27 @@ gic_v3_attach(device_t dev)
 	 * defined register, but seems to be implemented in all GICv3
 	 * parts and Linux expects it to be there.
 	 */
+	gprintf("GICD_PIDR2 read\n");
 	sc->gic_pidr2 = gic_d_read(sc, 4, GICD_PIDR2);
 
 	/* Get the number of supported interrupt identifier bits */
+	gprintf("GICD_TYPER_IDBITS read\n");
 	sc->gic_idbits = GICD_TYPER_IDBITS(typer);
 
+	/* TODO: remove me */
+	bootverbose = true;
 	if (bootverbose) {
 		device_printf(dev, "SPIs: %u, IDs: %u\n",
 		    sc->gic_nirqs, (1 << sc->gic_idbits) - 1);
 	}
+	/* TODO: remove me */
+	bootverbose = false;
 
 	/* Train init sequence for boot CPU */
+	gprintf("before init_func loop\n");
 	for (init_func = gic_v3_primary_init; *init_func != NULL; init_func++) {
 		err = (*init_func)(sc);
+		gprintf("err = %d\n", err);
 		if (err != 0)
 			return (err);
 	}
@@ -672,6 +683,8 @@ gic_v3_setup_intr(device_t dev, struct intr_irqsrc *isrc,
 	u_int irq;
 	int error;
 
+	printf("[gic_v3.c:gic_v3_setup_intr] dev name = %s\n", device_get_name(dev));
+
 	if (data == NULL)
 		return (ENOTSUP);
 
@@ -978,22 +991,25 @@ gic_v3_wait_for_rwp(struct gic_v3_softc *sc, enum gic_v3_xdist xdist)
 	struct resource *res;
 	u_int cpuid;
 	size_t us_left = 1000000;
+	uint32_t rwp;
 
 	cpuid = PCPU_GET(cpuid);
 
 	switch (xdist) {
 	case DIST:
 		res = sc->gic_dist;
+		rwp = GICD_CTLR_RWP;
 		break;
 	case REDIST:
 		res = &sc->gic_redists.pcpu[cpuid]->res;
+		rwp = GICR_CTLR_RWP;
 		break;
 	default:
 		KASSERT(0, ("%s: Attempt to wait for unknown RWP", __func__));
 		return;
 	}
 
-	while ((bus_read_4(res, GICD_CTLR) & GICD_CTLR_RWP) != 0) {
+	while ((bus_read_4(res, GICD_CTLR) & rwp) != 0) {
 		DELAY(1);
 		if (us_left-- == 0)
 			panic("GICD Register write pending for too long");
@@ -1071,6 +1087,7 @@ gic_v3_dist_init(struct gic_v3_softc *sc)
 	/*
 	 * 1. Disable the Distributor
 	 */
+	gprintf("Disable distributor and verify that write is over\n");
 	gic_d_write(sc, 4, GICD_CTLR, 0);
 	gic_v3_wait_for_rwp(sc, DIST);
 
@@ -1078,14 +1095,19 @@ gic_v3_dist_init(struct gic_v3_softc *sc)
 	 * 2. Configure the Distributor
 	 */
 	/* Set all SPIs to be Group 1 Non-secure */
+	gprintf("Before setting SPIs to Group 1 Non-secure\n");
+	/* TODO: nirqs is 256, as far as I know. */
+	/* TODO: only 7 writes of 32 bits, and not 8. Why? */
 	for (i = GIC_FIRST_SPI; i < sc->gic_nirqs; i += GICD_I_PER_IGROUPRn)
 		gic_d_write(sc, 4, GICD_IGROUPR(i), 0xFFFFFFFF);
 
 	/* Set all global interrupts to be level triggered, active low. */
+	gprintf("Before setting all SPIs to be level triggered, active low\n");
 	for (i = GIC_FIRST_SPI; i < sc->gic_nirqs; i += GICD_I_PER_ICFGRn)
 		gic_d_write(sc, 4, GICD_ICFGR(i), 0x00000000);
 
 	/* Set priority to all shared interrupts */
+	gprintf("Before setting the priority for all SPIs\n");
 	for (i = GIC_FIRST_SPI;
 	    i < sc->gic_nirqs; i += GICD_I_PER_IPRIORITYn) {
 		/* Set highest priority */
@@ -1096,15 +1118,18 @@ gic_v3_dist_init(struct gic_v3_softc *sc)
 	 * Disable all interrupts. Leave PPI and SGIs as they are enabled in
 	 * Re-Distributor registers.
 	 */
+	gprintf("Before disabling all interrupts, besides PPI and SGI\n");
 	for (i = GIC_FIRST_SPI; i < sc->gic_nirqs; i += GICD_I_PER_ISENABLERn)
 		gic_d_write(sc, 4, GICD_ICENABLER(i), 0xFFFFFFFF);
 
+	gprintf("Before verifying that write is over\n");
 	gic_v3_wait_for_rwp(sc, DIST);
 
 	/*
 	 * 3. Enable Distributor
 	 */
 	/* Enable Distributor with ARE, Group 1 */
+	gprintf("Before enabling dist\n");
 	gic_d_write(sc, 4, GICD_CTLR, GICD_CTLR_ARE_NS | GICD_CTLR_G1A |
 	    GICD_CTLR_G1);
 
@@ -1112,6 +1137,7 @@ gic_v3_dist_init(struct gic_v3_softc *sc)
 	 * 4. Route all interrupts to boot CPU.
 	 */
 	aff = CPU_AFFINITY(0);
+	gprintf("Before routing all interrupts to boot CPU\n");
 	for (i = GIC_FIRST_SPI; i < sc->gic_nirqs; i++)
 		gic_d_write(sc, 4, GICD_IROUTER(i), aff);
 
@@ -1146,6 +1172,9 @@ gic_v3_redist_find(struct gic_v3_softc *sc)
 	u_int cpuid;
 	size_t i;
 
+	gprintf("\n");
+	gprintf("nregions = %u\n", sc->gic_redists.nregions);
+
 	cpuid = PCPU_GET(cpuid);
 
 	aff = CPU_AFFINITY(cpuid);
@@ -1174,6 +1203,8 @@ gic_v3_redist_find(struct gic_v3_softc *sc)
 			return (ENODEV);
 		}
 
+		gprintf("Found compatible arch\n");
+
 		do {
 			typer = bus_read_8(&r_res, GICR_TYPER);
 			if ((typer >> GICR_TYPER_AFF_SHIFT) == aff) {
@@ -1187,6 +1218,7 @@ gic_v3_redist_find(struct gic_v3_softc *sc)
 					    "CPU%u Re-Distributor has been found\n",
 					    cpuid);
 				}
+				gprintf("Found Redistributor!\n");
 				return (0);
 			}
 
@@ -1209,6 +1241,8 @@ gic_v3_redist_wake(struct gic_v3_softc *sc)
 {
 	uint32_t waker;
 	size_t us_left = 1000000;
+
+	gprintf("\n");
 
 	waker = gic_r_read(sc, 4, GICR_WAKER);
 	/* Wake up Re-Distributor for this CPU */
@@ -1240,6 +1274,7 @@ gic_v3_redist_init(struct gic_v3_softc *sc)
 	int err;
 	size_t i;
 
+	gprintf("Before gic_v3_redist_find()\n");
 	err = gic_v3_redist_find(sc);
 	if (err != 0)
 		return (err);
@@ -1249,22 +1284,27 @@ gic_v3_redist_init(struct gic_v3_softc *sc)
 		return (err);
 
 	/* Configure SGIs and PPIs to be Group1 Non-secure */
+	gprintf("Before configuring SGIs and PPIs to be Group1 Non-secure\n");
 	gic_r_write(sc, 4, GICR_SGI_BASE_SIZE + GICR_IGROUPR0,
 	    0xFFFFFFFF);
 
 	/* Disable SPIs */
+	gprintf("Before disabling SPIs\n");
 	gic_r_write(sc, 4, GICR_SGI_BASE_SIZE + GICR_ICENABLER0,
 	    GICR_I_ENABLER_PPI_MASK);
 	/* Enable SGIs */
+	gprintf("Before enabling SGIs\n");
 	gic_r_write(sc, 4, GICR_SGI_BASE_SIZE + GICR_ISENABLER0,
 	    GICR_I_ENABLER_SGI_MASK);
 
 	/* Set priority for SGIs and PPIs */
+	gprintf("Before setting the priority for SGIs and PPIs\n");
 	for (i = 0; i <= GIC_LAST_PPI; i += GICR_I_PER_IPRIORITYn) {
 		gic_r_write(sc, 4, GICR_SGI_BASE_SIZE + GICD_IPRIORITYR(i),
 		    GIC_PRIORITY_MAX);
 	}
 
+	gprintf("Before verifying that write is over\n");
 	gic_v3_wait_for_rwp(sc, REDIST);
 
 	return (0);
