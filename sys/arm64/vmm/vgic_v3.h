@@ -119,6 +119,7 @@ struct vgic_v3_redist {
 	size_t 	 	size;
 
 	uint64_t	gicr_typer;	/* Redistributor Type Register */
+	uint32_t	gicr_ctlr;	/* Redistributor Control Regiser */
 };
 
 struct vgic_v3_cpu_if {
