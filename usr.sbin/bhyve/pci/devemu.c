@@ -37,8 +37,6 @@ __FBSDID("$FreeBSD$");
 #include <vm/vm_param.h>
 #include <vm/pmap.h>
 
-#include <dev/pci/pcireg.h>
-
 #include <ctype.h>
 #include <errno.h>
 #include <pthread.h>
@@ -384,10 +382,10 @@ devemu_io_handler(struct vmctx *ctx, int vcpu, int in, int port, int bytes,
 		    port + bytes <= di->di_bar[i].addr + di->di_bar[i].size) {
 			offset = port - di->di_bar[i].addr;
 			if (in)
-				*eax = (*de->de_barread)(ctx, vcpu, di, i,
+				*eax = (*de->de_read)(ctx, vcpu, di, i,
 							 offset, bytes);
 			else
-				(*de->de_barwrite)(ctx, vcpu, di, i, offset,
+				(*de->de_write)(ctx, vcpu, di, i, offset,
 						   bytes, *eax);
 			return (0);
 		}
@@ -721,7 +719,7 @@ devemu_finddev(char *name)
 	struct devemu_dev **dpp, *dp;
 
 	SET_FOREACH(dpp, devemu_set) {
-		pdp = *dpp;
+		dp = *dpp;
 		if (!strcmp(dp->de_emu, name)) {
 			return (dp);
 		}
@@ -749,7 +747,7 @@ devemu_init(struct vmctx *ctx, struct devemu_dev *de, int bus, int slot,
 	di->di_lintr.pirq_pin = 0;
 	di->di_lintr.ioapic_irq = 0;
 	di->di_d = de;
-	snprintf(di->di_name, PI_NAMESZ, "%s-pci-%d", de->de_emu, slot);
+	snprintf(di->di_name, DI_NAMESZ, "%s-pci-%d", de->de_emu, slot);
 
 	/* Disable legacy interrupts */
 	devemu_set_cfgdata8(di, PCIR_INTLINE, 255);
@@ -782,7 +780,7 @@ pci_populate_msicap(struct msicap *msicap, int msgnum, int nextptr)
 }
 
 int
-devemu_add_msicap(struct devemu_inst *di, int msgnum)
+pci_emul_add_msicap(struct devemu_inst *di, int msgnum)
 {
 	struct msicap msicap;
 
@@ -1254,7 +1252,7 @@ pci_pirq_prt_entry(int bus, int slot, int pin, int pirq_pin, int ioapic_irq,
  * corresponding to each PCI bus.
  */
 static void
-pci_bus_write_dsdt(int bus)
+devemu_bus_write_dsdt(int bus)
 {
 	struct businfo *bi;
 	struct slotinfo *si;
@@ -2171,7 +2169,7 @@ devemu_dinit(struct vmctx *ctx, struct devemu_inst *di, char *opts)
 	devemu_set_cfgdata16(di, PCIR_VENDOR, 0x10DD);
 	devemu_set_cfgdata8(di, PCIR_CLASS, 0x02);
 
-	error = devemu_add_msicap(di, DEVEMU_MSI_MSGS);
+	error = pci_emul_add_msicap(di, DEVEMU_MSI_MSGS);
 	assert(error == 0);
 
 	error = devemu_alloc_bar(di, 0, PCIBAR_IO, DIOSZ);

@@ -64,7 +64,7 @@ __FBSDID("$FreeBSD$");
  */
 void
 vi_softc_linkup(struct virtio_softc *vs, struct virtio_consts *vc,
-		void *dev_softc, struct devemu_devinst *di,
+		void *dev_softc, struct devemu_inst *di,
 		struct vqueue_info *queues)
 {
 	int i;
@@ -555,7 +555,7 @@ vi_find_cr(int offset) {
  */
 uint64_t
 vi_devemu_read(struct vmctx *ctx, int vcpu, struct devemu_inst *di,
-	    int baridx, uint64_t offset, size_t size)
+	    int baridx, uint64_t offset, int size)
 {
 	struct virtio_softc *vs = di->di_arg;
 	struct virtio_consts *vc;
@@ -675,7 +675,7 @@ done:
  */
 void
 vi_devemu_write(struct vmctx *ctx, int vcpu, struct devemu_inst *di,
-		int baridx, uint64_t offset, size_t size, uint64_t value)
+		int baridx, uint64_t offset, int size, uint64_t value)
 {
 	struct virtio_softc *vs = di->di_arg;
 	struct vqueue_info *vq;

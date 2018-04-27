@@ -203,7 +203,7 @@ mpt_count_ioint_entries(void)
 
 	count = 0;
 	for (bus = 0; bus <= PCI_BUSMAX; bus++)
-		count += pci_count_lintr(bus);
+		count += devemu_count_lintr(bus);
 
 	/*
 	 * Always include entries for the first 16 pins along with a entry
@@ -287,7 +287,7 @@ mpt_build_ioint_entries(int_entry_ptr mpie, int id)
 
 	/* Next, generate entries for any PCI INTx interrupts. */
 	for (bus = 0; bus <= PCI_BUSMAX; bus++)
-		pci_walk_lintr(bus, mpt_generate_pci_int, &mpie); 
+		devemu_walk_lintr(bus, mpt_generate_pci_int, &mpie); 
 }
 
 void

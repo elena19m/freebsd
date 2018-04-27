@@ -435,8 +435,8 @@ void	vq_relchain(struct vqueue_info *vq, uint16_t idx, uint32_t iolen);
 void	vq_endchains(struct vqueue_info *vq, int used_all_avail);
 
 uint64_t vi_devemu_read(struct vmctx *ctx, int vcpu, struct devemu_inst *di,
-			int baridx, uint64_t offset, size_t size);
+			int baridx, uint64_t offset, int size);
 void	vi_devemu_write(struct vmctx *ctx, int vcpu, struct devemu_inst *di,
-			int baridx, uint64_t offset, size_t size, uint64_t value);
+			int baridx, uint64_t offset, int size, uint64_t value);
 void	vi_devemu_init(struct devemu_inst *di, uint32_t type);
 #endif	/* _VIRTIO_H_ */

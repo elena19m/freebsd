@@ -19,16 +19,6 @@ SRCS+=	\
 	ioapic.c		\
 	mem.c			\
 	mptbl.c			\
-	pci_ahci.c		\
-	pci_e82545.c		\
-	pci_fbuf.c		\
-	pci_hostbridge.c	\
-	pci_lpc.c		\
-	pci_passthru.c		\
-	pci_virtio_block.c	\
-	pci_virtio_rnd.c	\
-	pci_uart.c		\
-	pci_xhci.c		\
 	pm.c			\
 	post.c			\
 	ps2kbd.c		\

@@ -453,7 +453,7 @@ devemu_vtblk_init(struct vmctx *ctx, struct devemu_inst *di, char *opts)
 	/*
 	 * The supplied backing file has to exist
 	 */
-	snprintf(bident, sizeof(bident), "%*s", sizeof(bident) - 1,
+	snprintf(bident, sizeof(bident), "%*s", (int) sizeof(bident) - 1,
 		 di->di_name);
 	bctxt = blockif_open(opts, bident);
 	if (bctxt == NULL) {

@@ -19,11 +19,11 @@ struct devemu_dev {
 	/* Read / Write callbacks */
 	void     (*de_write)(struct vmctx *ctx, int vcpu,
 			     struct devemu_inst *di, int baridx,
-			     uint64_t offset, size_t size, uint64_t val);
+			     uint64_t offset, int size, uint64_t val);
 
 	uint64_t (*de_read)(struct vmctx *ctx, int vcpu,
 			    struct devemu_inst *di, int baridx,
-			    uint64_t offset, size_t size);
+			    uint64_t offset, int size);
 };
 
 #define	DEVEMU_SET(x)	DATA_SET(devemu_set, x);
