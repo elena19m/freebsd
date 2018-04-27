@@ -10,7 +10,6 @@ struct devemu_inst;
 
 struct devemu_dev {
 	char *de_emu;		/* Device emulation name */
-	uint32_t de_irq;	/* device irq number */
 
 	/* Instance creation */
 	int      (*de_init)(struct vmctx *ctx, struct devemu_inst *di,
