@@ -685,7 +685,8 @@ devemu_vtnet_init(struct vmctx *ctx, struct devemu_inst *di, char *opts)
 	pthread_mutex_init(&sc->tx_mtx, NULL);
 	pthread_cond_init(&sc->tx_cond, NULL);
 	pthread_create(&sc->tx_tid, NULL, devemu_vtnet_tx_thread, (void *)sc);
-	snprintf(tname, sizeof(tname), "vtnet-%d:%d tx", 20, 20);
+	snprintf(tname, sizeof(tname), "vtnet-%d:%d tx", di->di_slot,
+	    di->di_func);
         pthread_set_name_np(sc->tx_tid, tname);
 
 	return (0);

@@ -44,6 +44,8 @@ enum lintr_stat {
 struct devemu_inst {
 	struct devemu_dev	*di_d;			/* Back ref to device */
 	struct vmctx		*di_vmctx;		/* Owner VM context */
+	/* unused for mmio device emulation; may be used as uniquifiers */
+	int			di_slot, di_func;
 
 	char			di_name[DI_NAMESZ];	/* Instance name */
 
