@@ -108,6 +108,10 @@ struct vgic_v3_dist {
 	uint64_t	gicd_icenabler_addr_max;
 	uint32_t	*gicd_icenabler;
 	size_t		gicd_icenabler_num;
+	/* Interrupt Set-Enable Registers. */
+	uint64_t	gicd_isenabler_addr_max;
+	uint32_t	*gicd_isenabler;
+	size_t		gicd_isenabler_num;
 	/* Interrupt Routing Registers. */
 	uint64_t	gicd_irouter_addr_max;
 	uint64_t	*gicd_irouter;
@@ -121,6 +125,8 @@ struct vgic_v3_redist {
 	uint64_t	gicr_typer;	/* Redistributor Type Register */
 	uint32_t	gicr_ctlr;	/* Redistributor Control Regiser */
 	uint32_t	gicr_igroupr0;	/* Interrupt Group Register 0 */
+	uint32_t	gicr_icenabler0; /* Interrupt Clear-Enable Register 0 */
+	uint32_t	gicr_isenabler0; /* Interrupt Set-Enable Register 0 */
 };
 
 struct vgic_v3_cpu_if {
