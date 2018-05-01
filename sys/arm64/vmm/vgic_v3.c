@@ -169,6 +169,10 @@ vgic_v3_redist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 		/* Writes are never pending. */
 		*rval = redist->gicr_ctlr & ~GICR_CTLR_RWP;
 
+	} else if (off == GICR_SGI_BASE_SIZE + GICR_IGROUPR0) {
+		eprintf("read: GICR_IGROUPR0\n");
+		*rval = redist->gicr_igroupr0;
+
 	} else {
 		eprintf("Unknown register offset: 0x%04lx\n", off);
 		*rval = 0;
@@ -205,8 +209,12 @@ vgic_v3_redist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 		eprintf("write: GICR_WAKER\n");
 
 	} else if (off == GICR_CTLR) {
-		eprintf("read: GICR_CTLR\n");
+		eprintf("write: GICR_CTLR\n");
 		redist->gicr_ctlr = val;
+
+	} else if (off == GICR_SGI_BASE_SIZE + GICR_IGROUPR0) {
+		eprintf("write: GICR_IGROUPR0\n");
+		redist->gicr_igroupr0 = val;
 
 	} else {
 		eprintf("Unknown register offset: 0x%04lx\n", off);
