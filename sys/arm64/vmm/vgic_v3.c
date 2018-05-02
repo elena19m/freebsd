@@ -52,11 +52,9 @@
 #include <machine/vmm.h>
 #include <machine/vmm_instruction_emul.h>
 
-
 #include <arm/arm/gic_common.h>
 #include <arm64/arm64/gic_v3_reg.h>
 #include <arm64/arm64/gic_v3_var.h>
-
 
 #include "hyp.h"
 #include "mmu.h"
@@ -67,8 +65,7 @@
 #define VGIC_V3_DEVNAME		"vgic"
 #define VGIC_V3_DEVSTR		"ARM Virtual Generic Interrupt Controller v3"
 
-#define	valid_mm_reg32(x)	(((x) & 3) == 0)
-#define	valid_mm_reg64(x)	(((x) & 7) == 0)
+#define	RES0			(0)
 
 MALLOC_DEFINE(M_VGIC_V3, "ARM VMM VGIC V3", "ARM VMM VGIC V3");
 
@@ -174,16 +171,15 @@ vgic_v3_redist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 
 	} else if (off == GICR_SGI_BASE_SIZE + GICR_ICENABLER0) {
 		eprintf("read: GICR_ICENABLER0\n");
-		/* A write of 1 is read as 0. */
-		*rval = ~(redist->gicr_icenabler0);
+		*rval = redist->gicr_icenabler0_isenabler0;
 
 	} else if (off == GICR_SGI_BASE_SIZE + GICR_ISENABLER0) {
 		eprintf("read: GICR_ISENABLER0\n");
-		*rval = redist->gicr_isenabler0;
+		*rval = redist->gicr_icenabler0_isenabler0;
 
 	} else {
 		eprintf("Unknown register offset: 0x%04lx\n", off);
-		*rval = 0;
+		*rval = RES0;
 	}
 
 	return (0);
@@ -227,11 +223,11 @@ vgic_v3_redist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 
 	} else if (off == GICR_SGI_BASE_SIZE + GICR_ICENABLER0) {
 		eprintf("write: GICR_ICENABLER0\n");
-		redist->gicr_icenabler0 = val;
+		redist->gicr_icenabler0_isenabler0 &= ~val;
 
 	} else if (off == GICR_SGI_BASE_SIZE + GICR_ISENABLER0) {
 		eprintf("write: GICR_ISENABLER0\n");
-		redist->gicr_isenabler0 = val;
+		redist->gicr_icenabler0_isenabler0 |= val;
 
 	} else {
 		eprintf("Unknown register offset: 0x%04lx\n", off);
@@ -241,20 +237,20 @@ vgic_v3_redist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 	return (0);
 }
 
-#define	read_arr_reg(reg, off, base)						\
+#define	read_reg(arr, base, off)						\
 ({										\
-	size_t size = sizeof(*reg);						\
+	size_t size = sizeof(*arr);						\
 	size_t idx;								\
 	uint64_t val;								\
 										\
 	if (((off) & (size - 1)) != 0) {					\
 		eprintf("Warning: Reading invalid register offset 0x%016lx\n",	\
 				(off));						\
-		val = 0;							\
+		val = RES0;							\
 	} else {								\
 		idx = ((off) - (base)) / size;					\
-		eprintf("read: " #reg "<%zd>\n", idx);				\
-		val = reg[idx];							\
+		eprintf("read: " #arr "<%zd>\n", idx);				\
+		val = arr[idx];							\
 	}									\
 	val;									\
 })
@@ -283,51 +279,45 @@ vgic_v3_dist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 
 	} else if (off == GICD_IIDR) {
 		eprintf("read: GICD_IIDR\n");
-		*rval = 0;
+		*rval = RES0;
 
 	} else if (off == GICD_PIDR2) {
 		eprintf("read: GICD_PIDR2\n");
 		*rval = dist->gicd_pidr2;
 
 	} else if (off >= GICD_IGROUPR_BASE && off < dist->gicd_igroupr_addr_max) {
-		*rval = read_arr_reg(dist->gicd_igroupr, off,
-				GICD_IGROUPR_BASE);
+		*rval = read_reg(dist->gicd_igroupr, GICD_IGROUPR_BASE, off);
 
 	} else if (off >= GICD_ICFGR_BASE && off < dist->gicd_icfgr_addr_max) {
-		*rval = read_arr_reg(dist->gicd_icfgr, off, GICD_ICFGR_BASE);
+		*rval = read_reg(dist->gicd_icfgr, GICD_ICFGR_BASE, off);
 
 	} else if (off >= GICD_IPRIORITYR_BASE &&
 	    off < dist->gicd_ipriorityr_addr_max) {
-		*rval = read_arr_reg(dist->gicd_ipriorityr, off,
-				GICD_IPRIORITYR_BASE);
+		*rval = read_reg(dist->gicd_ipriorityr,
+				GICD_IPRIORITYR_BASE, off);
 
 	} else if (off >= GICD_ICENABLER_BASE &&
 	    off < dist->gicd_icenabler_addr_max) {
-		*rval = read_arr_reg(dist->gicd_icenabler, off,
-				GICD_ICENABLER_BASE);
-		/* A write of 1 is read as 0. */
-		*rval = ~(*rval);
+		*rval = read_reg(dist->gicd_icenabler_isenabler,
+				GICD_ICENABLER_BASE, off);
 
 	} else if (off >= GICD_ISENABLER_BASE &&
 	    off < dist->gicd_isenabler_addr_max) {
-		*rval = read_arr_reg(dist->gicd_isenabler, off,
-				GICD_ISENABLER_BASE);
-		/* A write of 1 is read as 0. */
-		*rval = ~(*rval);
+		*rval = read_reg(dist->gicd_icenabler_isenabler,
+				GICD_ISENABLER_BASE, off);
 
 	} else if (off >= GICD_IROUTER_BASE && off < dist->gicd_irouter_addr_max) {
-		*rval = read_arr_reg(dist->gicd_irouter, off,
-				GICD_IROUTER_BASE);
+		*rval = read_reg(dist->gicd_irouter, GICD_IROUTER_BASE, off);
 
 	} else {
 		eprintf("Unknown register offset: 0x%04lx\n", off);
-		*rval = 0;
+		*rval = RES0;
 	}
 
 	return (0);
 }
 
-#define write_arr_reg(reg, off, base, val)						\
+#define write_reg(reg, base, off, val)						\
 do {										\
 	size_t size = sizeof(*reg);						\
 	size_t idx;								\
@@ -371,34 +361,39 @@ vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 		eprintf("write: GICD_IIDR\n");
 
 	} else if (off >= GICD_IGROUPR_BASE && off < dist->gicd_igroupr_addr_max) {
-		write_arr_reg(dist->gicd_igroupr, off, GICD_IGROUPR_BASE, val);
+		write_reg(dist->gicd_igroupr, GICD_IGROUPR_BASE, off, val);
 
 	} else if (off >= GICD_ICFGR_BASE && off < dist->gicd_icfgr_addr_max) {
 		if (off == GICD_ICFGR_BASE)
 			eprintf("Warning: Trying to write to read-only register GICD_ICFGR0.\n");
 		else
-			write_arr_reg(dist->gicd_icfgr, off, GICD_ICFGR_BASE,
-					val);
+			write_reg(dist->gicd_icfgr, GICD_ICFGR_BASE, off, val);
 
 	} else if (off >= GICD_IPRIORITYR_BASE &&
 	    off < dist->gicd_ipriorityr_addr_max) {
-		/* XXX Byte access to GICD_IRPRIORITYR not implemented. */
-		write_arr_reg(dist->gicd_ipriorityr, off, GICD_IPRIORITYR_BASE,
-				val);
+		write_reg(dist->gicd_ipriorityr, GICD_IPRIORITYR_BASE, off, val);
 
 	} else if (off >= GICD_ICENABLER_BASE &&
 	    off < dist->gicd_icenabler_addr_max) {
-		write_arr_reg(dist->gicd_icenabler, off, GICD_ICENABLER_BASE,
-				val);
+		uint32_t icenabler;
+		icenabler = read_reg(dist->gicd_icenabler_isenabler,
+				GICD_ICENABLER_BASE, off);
+		icenabler &= ~val;
+		write_reg(dist->gicd_icenabler_isenabler,
+				GICD_ICENABLER_BASE, off, icenabler);
 
 	} else if (off >= GICD_ISENABLER_BASE &&
 	    off < dist->gicd_isenabler_addr_max) {
-		write_arr_reg(dist->gicd_isenabler, off, GICD_ISENABLER_BASE,
-				val);
+		uint32_t isenabler;
+	       	isenabler = read_reg(dist->gicd_icenabler_isenabler,
+				GICD_ISENABLER_BASE, off);
+		isenabler |= val;
+		write_reg(dist->gicd_icenabler_isenabler,
+				GICD_ISENABLER_BASE, off, isenabler);
 
 	} else if (off >= GICD_IROUTER_BASE &&
 	    off < dist->gicd_irouter_addr_max) {
-		write_arr_reg(dist->gicd_irouter, off, GICD_IROUTER_BASE, val);
+		write_reg(dist->gicd_irouter, GICD_IROUTER_BASE, off, val);
 
 	} else {
 		eprintf("Unknown register offset: 0x%04lx\n", off);
@@ -462,6 +457,7 @@ do {									\
 static void init_dist_regs(struct vgic_v3_dist *dist)
 {
 	size_t n;
+	size_t reg_size;
 
 	/* Distributor is disabled at start, the guest will configure it. */
 	dist->gicd_ctlr = 0;
@@ -478,9 +474,12 @@ static void init_dist_regs(struct vgic_v3_dist *dist)
 
 	/* ARM GIC Architecture Specification, page 8-471. */
 	n = (dist->gicd_typer & GICD_TYPER_ITLINESNUM_MASK) + 1;
-	INIT_DIST_REG(gicd_icenabler, n, GICD_ICENABLER_BASE, dist);
-	/* Same number of Set-Enable registers as Clear-Enable. */
-	INIT_DIST_REG(gicd_isenabler, n, GICD_ISENABLER_BASE, dist);
+	reg_size = sizeof(*dist->gicd_icenabler_isenabler);
+	dist->gicd_icenabler_isenabler = malloc(n * reg_size,
+			M_VGIC_V3, M_WAITOK | M_ZERO);
+	dist->gicd_icenabler_isenabler_num = n;
+	dist->gicd_icenabler_addr_max = GICD_ICENABLER_BASE + n * reg_size; 
+	dist->gicd_isenabler_addr_max = GICD_ISENABLER_BASE + n * reg_size; 
 
 	/* ARM GIC Architecture Specification, page 8-483. */
 	n = 8 * ((dist->gicd_typer & GICD_TYPER_ITLINESNUM_MASK) + 1);
@@ -558,8 +557,7 @@ static void vgic_v3_detach_from_vm(void *arg)
 	free(dist->gicd_igroupr, M_VGIC_V3);
 	free(dist->gicd_icfgr, M_VGIC_V3);
 	free(dist->gicd_ipriorityr, M_VGIC_V3);
-	free(dist->gicd_icenabler, M_VGIC_V3);
-	free(dist->gicd_isenabler, M_VGIC_V3);
+	free(dist->gicd_icenabler_isenabler, M_VGIC_V3);
 	free(dist->gicd_irouter, M_VGIC_V3);
 }
 
