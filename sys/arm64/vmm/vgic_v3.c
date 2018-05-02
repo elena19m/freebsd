@@ -195,6 +195,14 @@ vgic_v3_redist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 		eprintf("read: GICR_ISENABLER0\n");
 		*rval = redist->gicr_icenabler0_isenabler0;
 
+	} else if (off == GICR_SGI_BASE_SIZE + GICR_ICFGR0_BASE) {
+		eprintf("read: GICR_ICFGR0\n");
+		*rval = redist->gicr_icfgr0;
+
+	} else if (off == GICR_SGI_BASE_SIZE + GICR_ICFGR1_BASE) {
+		eprintf("read: GICR_ICFGR1\n");
+		*rval = redist->gicr_icfgr1;
+
 	} else if (off >= GICR_SGI_BASE_SIZE + GICD_IPRIORITYR_BASE &&
 	    off < redist->gicr_ipriorityr_addr_max) {
 		*rval = read_reg(redist->gicr_ipriorityr,
@@ -261,11 +269,21 @@ vgic_v3_redist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 
 	} else if (off == GICR_SGI_BASE_SIZE + GICR_ICENABLER0) {
 		eprintf("write: GICR_ICENABLER0\n");
+		/* A write of 1 to ICENABLER disables the interrupt. */
 		redist->gicr_icenabler0_isenabler0 &= ~val;
 
 	} else if (off == GICR_SGI_BASE_SIZE + GICR_ISENABLER0) {
 		eprintf("write: GICR_ISENABLER0\n");
+		/* A write of 1 to ISENABLER enables the interrupt */
 		redist->gicr_icenabler0_isenabler0 |= val;
+
+	} else if (off == GICR_SGI_BASE_SIZE + GICR_ICFGR0_BASE) {
+		eprintf("write: GICR_ICFGR0\n");
+		redist->gicr_icfgr0 = val;
+
+	} else if (off == GICR_SGI_BASE_SIZE + GICR_ICFGR1_BASE) {
+		eprintf("write: GICR_ICFGR1\n");
+		redist->gicr_icfgr1 = val;
 
 	} else if (off >= GICR_SGI_BASE_SIZE + GICD_IPRIORITYR_BASE &&
 	    off < redist->gicr_ipriorityr_addr_max) {
@@ -388,6 +406,7 @@ vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 		uint32_t icenabler;
 		icenabler = read_reg(dist->gicd_icenabler_isenabler,
 				GICD_ICENABLER_BASE, off);
+		/* A write of 1 to ICENABLER disables the interrupt. */
 		icenabler &= ~val;
 		write_reg(dist->gicd_icenabler_isenabler,
 				GICD_ICENABLER_BASE, off, icenabler);
@@ -397,6 +416,7 @@ vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 		uint32_t isenabler;
 	       	isenabler = read_reg(dist->gicd_icenabler_isenabler,
 				GICD_ISENABLER_BASE, off);
+		/* A write of 1 to ISENABLER enables the interrupt. */
 		isenabler |= val;
 		write_reg(dist->gicd_icenabler_isenabler,
 				GICD_ISENABLER_BASE, off, isenabler);
