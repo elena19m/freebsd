@@ -131,6 +131,24 @@ static uint16_t vgic_dist_conf_compress(uint32_t val)
 }
 #endif
 
+#define	read_reg(arr, base, off)						\
+({										\
+	size_t size = sizeof(*arr);						\
+	size_t idx;								\
+	uint64_t val;								\
+										\
+	if (((off) & (size - 1)) != 0) {					\
+		eprintf("Warning: Reading invalid register offset 0x%016lx\n",	\
+				(off));						\
+		val = RES0;							\
+	} else {								\
+		idx = ((off) - (base)) / size;					\
+		eprintf("read: " #arr "<%zd>\n", idx);				\
+		val = arr[idx];							\
+	}									\
+	val;									\
+})
+
 static int
 vgic_v3_redist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 		int size, void *arg)
@@ -177,6 +195,11 @@ vgic_v3_redist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 		eprintf("read: GICR_ISENABLER0\n");
 		*rval = redist->gicr_icenabler0_isenabler0;
 
+	} else if (off >= GICR_SGI_BASE_SIZE + GICD_IPRIORITYR_BASE &&
+	    off < redist->gicr_ipriorityr_addr_max) {
+		*rval = read_reg(redist->gicr_ipriorityr,
+				GICR_SGI_BASE_SIZE + GICD_IPRIORITYR_BASE, off);
+
 	} else {
 		eprintf("Unknown register offset: 0x%04lx\n", off);
 		*rval = RES0;
@@ -184,6 +207,21 @@ vgic_v3_redist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 
 	return (0);
 }
+
+#define write_reg(reg, base, off, val)						\
+do {										\
+	size_t size = sizeof(*reg);						\
+	size_t idx;								\
+										\
+	if (((off) & (size - 1)) != 0) {					\
+		eprintf("Warning: Writing invalid register offset 0x%016lx\n",	\
+				(off));						\
+	} else {								\
+		idx = ((off) - (base)) / size;					\
+		eprintf("write: " #reg "<%zd>\n", idx);				\
+		reg[idx] = val;							\
+	}									\
+} while (0)
 
 static int
 vgic_v3_redist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
@@ -229,6 +267,11 @@ vgic_v3_redist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 		eprintf("write: GICR_ISENABLER0\n");
 		redist->gicr_icenabler0_isenabler0 |= val;
 
+	} else if (off >= GICR_SGI_BASE_SIZE + GICD_IPRIORITYR_BASE &&
+	    off < redist->gicr_ipriorityr_addr_max) {
+		write_reg(redist->gicr_ipriorityr,
+				GICR_SGI_BASE_SIZE + GICD_IPRIORITYR_BASE, off,
+				val);
 	} else {
 		eprintf("Unknown register offset: 0x%04lx\n", off);
 	}
@@ -236,24 +279,6 @@ vgic_v3_redist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 
 	return (0);
 }
-
-#define	read_reg(arr, base, off)						\
-({										\
-	size_t size = sizeof(*arr);						\
-	size_t idx;								\
-	uint64_t val;								\
-										\
-	if (((off) & (size - 1)) != 0) {					\
-		eprintf("Warning: Reading invalid register offset 0x%016lx\n",	\
-				(off));						\
-		val = RES0;							\
-	} else {								\
-		idx = ((off) - (base)) / size;					\
-		eprintf("read: " #arr "<%zd>\n", idx);				\
-		val = arr[idx];							\
-	}									\
-	val;									\
-})
 
 static int
 vgic_v3_dist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
@@ -316,21 +341,6 @@ vgic_v3_dist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 
 	return (0);
 }
-
-#define write_reg(reg, base, off, val)						\
-do {										\
-	size_t size = sizeof(*reg);						\
-	size_t idx;								\
-										\
-	if (((off) & (size - 1)) != 0) {					\
-		eprintf("Warning: Writing invalid register offset 0x%016lx\n",	\
-				(off));						\
-	} else {								\
-		idx = ((off) - (base)) / size;					\
-		eprintf("write: " #reg "<%zd>\n", idx);				\
-		reg[idx] = val;							\
-	}									\
-} while (0)
 
 static int
 vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
@@ -450,6 +460,7 @@ vgic_v3_do_emulation(void *arg, int vcpuid, struct vm_exit *vme, bool *retu)
 do {									\
 	(dist)->name = malloc((n) * sizeof(*(dist)->name),		\
 			M_VGIC_V3, M_WAITOK | M_ZERO);			\
+	/* TODO: num is not necessary? */				\
 	(dist)->name##_num = (n);					\
 	(dist)->name##_addr_max = (base)+ (n) * sizeof(*(dist)->name);	\
 } while (0)
@@ -478,8 +489,8 @@ static void init_dist_regs(struct vgic_v3_dist *dist)
 	dist->gicd_icenabler_isenabler = malloc(n * reg_size,
 			M_VGIC_V3, M_WAITOK | M_ZERO);
 	dist->gicd_icenabler_isenabler_num = n;
-	dist->gicd_icenabler_addr_max = GICD_ICENABLER_BASE + n * reg_size; 
-	dist->gicd_isenabler_addr_max = GICD_ISENABLER_BASE + n * reg_size; 
+	dist->gicd_icenabler_addr_max = GICD_ICENABLER_BASE + n * reg_size;
+	dist->gicd_isenabler_addr_max = GICD_ISENABLER_BASE + n * reg_size;
 
 	/* ARM GIC Architecture Specification, page 8-483. */
 	n = 8 * ((dist->gicd_typer & GICD_TYPER_ITLINESNUM_MASK) + 1);
@@ -513,6 +524,11 @@ init_redist_regs(struct vgic_v3_redist *redist, struct vgic_v3_dist *dist,
 	redist->gicr_typer |= GICR_TYPER_LAST;
 
 	redist->gicr_ctlr = 0;
+
+	redist->gicr_ipriorityr_addr_max = \
+		GICR_SGI_BASE_SIZE + GICD_IPRIORITYR_BASE + \
+		sizeof(redist->gicr_ipriorityr);
+
 }
 
 int
@@ -564,10 +580,10 @@ static void vgic_v3_detach_from_vm(void *arg)
 static int
 vgic_bitmap_get_irq_val(uint32_t *irq_prv, uint32_t *irq_shr, int irq)
 {
-	if (irq < VGIC_PRV_INT_NUM)
+	if (irq < VGIC_PRV_I_NUM)
 		return bit_test((bitstr_t *)irq_prv, irq);
 
-	return bit_test((bitstr_t *)irq_shr, irq - VGIC_PRV_INT_NUM);
+	return bit_test((bitstr_t *)irq_shr, irq - VGIC_PRV_I_NUM);
 }
 
 static void
@@ -575,11 +591,11 @@ vgic_bitmap_set_irq_val(uint32_t *irq_prv, uint32_t *irq_shr, int irq, int val)
 {
 	uint32_t *reg;
 
-	if (irq < VGIC_PRV_INT_NUM) {
+	if (irq < VGIC_PRV_I_NUM) {
 		reg = irq_prv;
 	} else {
 		reg = irq_shr;
-		irq -= VGIC_PRV_INT_NUM;
+		irq -= VGIC_PRV_I_NUM;
 	}
 
 	if (val)
@@ -667,11 +683,11 @@ vgic_cpu_irq_set(struct hypctx *hypctx, int irq)
 {
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 
-	if (irq < VGIC_PRV_INT_NUM)
+	if (irq < VGIC_PRV_I_NUM)
 		bit_set((bitstr_t *)cpu_if->pending_prv, irq);
 	else
 		bit_set((bitstr_t *)cpu_if->pending_shr,
-				irq - VGIC_PRV_INT_NUM);
+				irq - VGIC_PRV_I_NUM);
 }
 
 static void
@@ -679,11 +695,11 @@ vgic_cpu_irq_clear(struct hypctx *hypctx, int irq)
 {
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 
-	if (irq < VGIC_PRV_INT_NUM)
+	if (irq < VGIC_PRV_I_NUM)
 		bit_clear((bitstr_t *)cpu_if->pending_prv, irq);
 	else
 		bit_clear((bitstr_t *)cpu_if->pending_shr,
-				irq - VGIC_PRV_INT_NUM);
+				irq - VGIC_PRV_I_NUM);
 }
 
 static int
@@ -701,18 +717,18 @@ compute_pending_for_cpu(struct hyp *hyp, int vcpu)
 	pending = dist->irq_state_prv[vcpu];
 	enabled = dist->irq_enabled_prv[vcpu];
 	bitstr_and((bitstr_t *)pend_percpu, (bitstr_t *)pending,
-		       (bitstr_t *)enabled, VGIC_PRV_INT_NUM);
+		       (bitstr_t *)enabled, VGIC_PRV_I_NUM);
 
 	pending = dist->irq_state_shr;
 	enabled = dist->irq_enabled_shr;
 	target = dist->irq_target_shr;
 	bitstr_and((bitstr_t *)pend_shared, (bitstr_t *)pending,
-		       (bitstr_t *)enabled, VGIC_SHR_INT_NUM);
+		       (bitstr_t *)enabled, VGIC_SHR_I_NUM);
 	bitstr_and((bitstr_t *)pend_shared, (bitstr_t *)pend_shared,
-		       (bitstr_t *)target, VGIC_SHR_INT_NUM);
+		       (bitstr_t *)target, VGIC_SHR_I_NUM);
 
-	bit_ffs((bitstr_t *)pend_percpu, VGIC_PRV_INT_NUM, &pending_private);
-	bit_ffs((bitstr_t *)pend_shared, VGIC_SHR_INT_NUM, &pending_shared);
+	bit_ffs((bitstr_t *)pend_percpu, VGIC_PRV_I_NUM, &pending_private);
+	bit_ffs((bitstr_t *)pend_shared, VGIC_SHR_I_NUM, &pending_shared);
 
 	return (pending_private > -1 || pending_shared > -1);
 }
@@ -974,7 +990,7 @@ vgic_v3_flush_hwstate(void *arg)
 	i = 0;
 	for_each_set_bit(i, cpu_if->pending_shr, VGIC_SPI_NUM) {
 		//printf("Pending SPI %d\n", i);
-		if (!vgic_queue_hwirq(hypctx, i + VGIC_PRV_INT_NUM))
+		if (!vgic_queue_hwirq(hypctx, i + VGIC_PRV_I_NUM))
 			overflow = 1;
 	}
 
@@ -1057,8 +1073,8 @@ vgic_update_irq_state(struct hypctx *hypctx, unsigned int irq, bool level)
                 goto end;
         }
 
-        if (irq >= VGIC_PRV_INT_NUM) {
-                cpu = 0;//vgic_dist->irq_spi_cpu[irq - VGIC_PRV_INT_NUM];
+        if (irq >= VGIC_PRV_I_NUM) {
+                cpu = 0;//vgic_dist->irq_spi_cpu[irq - VGIC_PRV_I_NUM];
                 hypctx = &hypctx->hyp->ctx[cpu];
         }
 

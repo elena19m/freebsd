@@ -35,17 +35,18 @@
 #include <sys/bus.h>
 
 #include <arm64/arm64/gic_v3_reg.h>
+#include <arm/arm/gic_common.h>
 
-#define VGIC_SGI_NUM		(GIC_LAST_SGI - GIC_FIRST_SGI + 1)
-#define VGIC_PPI_NUM		(GIC_LAST_PPI - GIC_FIRST_PPI + 1)
-#define VGIC_SPI_NUM		(GIC_LAST_SPI - GIC_FIRST_SPI + 1)
-#define VGIC_PRV_INT_NUM	(VGIC_SGI_NUM + VGIC_PPI_NUM)
-#define VGIC_SHR_INT_NUM	(VGIC_SPI_NUM)
+#define VGIC_SGI_NUM	(GIC_LAST_SGI - GIC_FIRST_SGI + 1)
+#define VGIC_PPI_NUM	(GIC_LAST_PPI - GIC_FIRST_PPI + 1)
+#define VGIC_SPI_NUM	(GIC_LAST_SPI - GIC_FIRST_SPI + 1)
+#define VGIC_PRV_I_NUM	(VGIC_SGI_NUM + VGIC_PPI_NUM)
+#define VGIC_SHR_I_NUM	(VGIC_SPI_NUM)
 
-#define VGIC_LR_NUM_MAX		16
-#define VGIC_LR_EMPTY		0xff
+#define VGIC_LR_NUM_MAX	16
+#define VGIC_LR_EMPTY	0xff
 
-#define VGIC_MAXCPU		VM_MAXCPU
+#define VGIC_MAXCPU	VM_MAXCPU
 
 #define VGIC_CFG_LEVEL	0
 #define VGIC_CFG_EDGE	1
@@ -57,23 +58,23 @@ struct vgic_v3_dist {
 	struct mtx dist_lock;
 
 	/* Interrupt enabled */
-	uint32_t irq_enabled_prv[VGIC_MAXCPU][VGIC_PRV_INT_NUM / (sizeof(uint32_t) * 8)];
-	uint32_t irq_enabled_shr[VGIC_SHR_INT_NUM / (sizeof(uint32_t) * 8)];
+	uint32_t irq_enabled_prv[VGIC_MAXCPU][VGIC_PRV_I_NUM / (sizeof(uint32_t) * 8)];
+	uint32_t irq_enabled_shr[VGIC_SHR_I_NUM / (sizeof(uint32_t) * 8)];
 
 	/* Interrupt level */
-	uint32_t irq_state_prv[VGIC_MAXCPU][VGIC_PRV_INT_NUM / (sizeof(uint32_t) * 8)];
-	uint32_t irq_state_shr[VGIC_SHR_INT_NUM / (sizeof(uint32_t) * 8)];
+	uint32_t irq_state_prv[VGIC_MAXCPU][VGIC_PRV_I_NUM / (sizeof(uint32_t) * 8)];
+	uint32_t irq_state_shr[VGIC_SHR_I_NUM / (sizeof(uint32_t) * 8)];
 
 	/* Level interrupts in progress */
-	uint32_t irq_active_prv[VGIC_MAXCPU][VGIC_PRV_INT_NUM / (sizeof(uint32_t) * 8)];
-	uint32_t irq_active_shr[VGIC_SHR_INT_NUM / (sizeof(uint32_t) * 8)];
+	uint32_t irq_active_prv[VGIC_MAXCPU][VGIC_PRV_I_NUM / (sizeof(uint32_t) * 8)];
+	uint32_t irq_active_shr[VGIC_SHR_I_NUM / (sizeof(uint32_t) * 8)];
 
 	/* Configure type of IRQ: level or edge triggered */
-	uint32_t irq_conf_prv[VGIC_MAXCPU][VGIC_PRV_INT_NUM / (sizeof(uint32_t) * 8)];
-	uint32_t irq_conf_shr[VGIC_SHR_INT_NUM / (sizeof(uint32_t) * 8)];
+	uint32_t irq_conf_prv[VGIC_MAXCPU][VGIC_PRV_I_NUM / (sizeof(uint32_t) * 8)];
+	uint32_t irq_conf_shr[VGIC_SHR_I_NUM / (sizeof(uint32_t) * 8)];
 
 	/* Interrupt targets */
-	uint32_t irq_target_shr[VGIC_SHR_INT_NUM / sizeof(uint32_t)];
+	uint32_t irq_target_shr[VGIC_SHR_I_NUM / sizeof(uint32_t)];
 
 	uint8_t  irq_sgi_source[VGIC_MAXCPU][VGIC_SGI_NUM];
 
@@ -123,12 +124,16 @@ struct vgic_v3_redist {
 	uint32_t	gicr_ctlr;	/* Redistributor Control Regiser */
 	uint32_t	gicr_igroupr0;	/* Interrupt Group Register 0 */
 	uint32_t	gicr_icenabler0_isenabler0;
+
+	/* Interrupt Priority Registers. */
+	uint32_t	gicr_ipriorityr[VGIC_PRV_I_NUM / GICR_I_PER_IPRIORITYn];
+	uint64_t	gicr_ipriorityr_addr_max;
 };
 
 struct vgic_v3_cpu_if {
 	/* Bitmaps for pending IRQs */
-	uint32_t	pending_prv[VGIC_PRV_INT_NUM / (sizeof(uint32_t) * 8)];
-	uint32_t	pending_shr[VGIC_SHR_INT_NUM / (sizeof(uint32_t) * 8)];
+	uint32_t	pending_prv[VGIC_PRV_I_NUM / (sizeof(uint32_t) * 8)];
+	uint32_t	pending_shr[VGIC_SHR_I_NUM / (sizeof(uint32_t) * 8)];
 
 	/* ICH_AP{0, 1}R<n>_EL2 are used for legacy VMs, not supported. */
 
