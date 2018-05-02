@@ -128,6 +128,8 @@ struct vgic_v3_redist {
 	/* Interrupt Priority Registers. */
 	uint32_t	gicr_ipriorityr[VGIC_PRV_I_NUM / GICR_I_PER_IPRIORITYn];
 	uint64_t	gicr_ipriorityr_addr_max;
+	/* Interupt Configuration Registers */
+	uint32_t	gicr_icfgr0, gicr_icfgr1;
 };
 
 struct vgic_v3_cpu_if {

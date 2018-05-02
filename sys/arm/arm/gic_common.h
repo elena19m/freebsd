@@ -86,7 +86,9 @@ uint32_t arm_gic_get_lr_num(void);
 /* Common register values */
 #define	GICD_CTLR		0x0000				/* v1 ICDDCR */
 #define	GICD_TYPER		0x0004				/* v1 ICDICTR */
-#define	 GICD_TYPER_I_NUM(n)	((((n) & 0x1F) + 1) * 32)
+#define	 GICD_TYPER_ITLINESNUM_MASK	(0x1f)
+#define	 GICD_TYPER_I_NUM(n)					\
+    ((((n) & GICD_TYPER_ITLINESNUM_MASK) + 1) * 32)
 #define	GICD_IIDR		0x0008				/* v1 ICDIIDR */
 #define	 GICD_IIDR_PROD_SHIFT	24
 #define	 GICD_IIDR_PROD_MASK	0xff000000
@@ -108,15 +110,21 @@ uint32_t arm_gic_get_lr_num(void);
 #define	GICD_IGROUPR(n)						\
     (GICD_IGROUPR_BASE + (((n) >> 5) * 4))			/* v1 ICDISER */
 #define	 GICD_I_PER_IGROUPRn	32
-#define	GICD_ISENABLER(n)	(0x0100 + (((n) >> 5) * 4))	/* v1 ICDISER */
+#define	GICD_ISENABLER_BASE	(0x0100)
+#define	GICD_ISENABLER(n)					\
+    (GICD_ISENABLER_BASE + (((n) >> 5) * 4))			/* v1 ICDISER */
 #define	 GICD_I_MASK(n)		(1ul << ((n) & 0x1f))
 #define	 GICD_I_PER_ISENABLERn	32
-#define	GICD_ICENABLER(n)	(0x0180 + (((n) >> 5) * 4))	/* v1 ICDICER */
+#define	GICD_ICENABLER_BASE	(0x0180)
+#define	GICD_ICENABLER(n)					\
+    (GICD_ICENABLER_BASE + (((n) >> 5) * 4))			/* v1 ICDICER */
 #define	GICD_ISPENDR(n)		(0x0200 + (((n) >> 5) * 4))	/* v1 ICDISPR */
 #define	GICD_ICPENDR(n)		(0x0280 + (((n) >> 5) * 4))	/* v1 ICDICPR */
 #define	GICD_ISACTIVER(n)	(0x0300 + (((n) >> 5) * 4))	/* v1 ICDABR */
 #define	GICD_ICACTIVER(n)	(0x0380 + (((n) >> 5) * 4))	/* v1 ICDABR */
-#define	GICD_IPRIORITYR(n)	(0x0400 + (((n) >> 2) * 4))	/* v1 ICDIPR */
+#define	GICD_IPRIORITYR_BASE	(0x0400)
+#define	GICD_IPRIORITYR(n)					\
+    (GICD_IPRIORITYR_BASE + (((n) >> 2) * 4))			/* v1 ICDIPR */
 #define	 GICD_I_PER_IPRIORITYn	4
 #define	GICD_ITARGETSR(n)	(0x0800 + (((n) >> 2) * 4))	/* v1 ICDIPTR */
 #define	GICD_ICFGR_BASE		(0x0C00)
