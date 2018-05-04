@@ -98,6 +98,7 @@ void vmm_cleanup(void *hyp_stub_vectors);
 uint64_t vmm_enter_guest(struct hypctx *hypctx);
 
 #define	eprintf(fmt, ...)	printf("%s:%d " fmt, __func__, __LINE__, ##__VA_ARGS__)
+//#define	eprintf(fmt, ...)	do {} while(0)
 
 #define	VMID_GENERATION_MASK 		((1UL<<8) - 1)
 #define	build_vttbr(vmid, ptaddr) 	\

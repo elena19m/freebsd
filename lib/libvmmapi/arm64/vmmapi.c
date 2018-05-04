@@ -341,3 +341,14 @@ vm_attach_vgic(struct vmctx *ctx, uint64_t dist_ipa, size_t dist_size,
 	return (ioctl(ctx->fd, VM_ATTACH_VGIC, &vav));
 }
 
+int
+vm_attach_vtimer(struct vmctx *ctx, int phys_ns_irq, int virt_irq)
+{
+	struct vm_attach_vtimer vat;
+
+	bzero(&vat, sizeof(vat));
+	vat.phys_ns_irq = phys_ns_irq;
+	vat.virt_irq = virt_irq;
+
+	return (ioctl(ctx->fd, VM_ATTACH_VTIMER, &vat));
+}

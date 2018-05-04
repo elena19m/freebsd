@@ -47,17 +47,35 @@
 
 extern struct timecounter arm_tmr_timecount;
 
-static inline uint64_t ptimer_read(void)
+static inline uint64_t
+vtimer_read_ptimer(void)
 {
 	uint64_t (*get_cntxct)(bool) = arm_tmr_timecount.tc_priv;
 
-	return get_cntxct(true);
+	return (get_cntxct(true));
+}
+
+int
+vtimer_attach_to_vm(void *arg, int phys_ns_irq, int virt_irq)
+{
+	struct hyp *hyp;
+	struct vtimer *vtimer;
+
+	hyp = (struct hyp *)arg;
+	vtimer = &hyp->vtimer;
+
+	vtimer->phys_ns_irq = phys_ns_irq;
+	vtimer->virt_irq = virt_irq;
+
+	return (0);
 }
 
 static bool
 vtimer_started(struct vtimer_cpu *vtimer_cpu)
 {
-	return vtimer_cpu->started;
+	/* TODO */
+	return (false);
+	//return (vtimer_cpu->started);
 }
 
 static void
@@ -124,7 +142,7 @@ vtimer_sync_hwstate(void *arg)
 		return;
 
 	cval = hypctx->vtimer_cpu.cntv_cval_el0;
-	diff = ptimer_read() - hypctx->hyp->vtimer.cntvoff;
+	diff = vtimer_read_ptimer() - hypctx->hyp->vtimer.cntvoff;
 
 	if (cval <= diff) {
 		vtimer_inject_irq(hypctx);
@@ -156,10 +174,10 @@ vtimer_cpu_terminate(void *arg)
 
 int
 vtimer_hyp_init(void)
-{	
+{
 	// TODO Get interrupt number
 
-	return 0;
+	return (0);
 }
 
 int
@@ -167,8 +185,8 @@ vtimer_init(void *arg)
 {
 	struct hyp *hyp = arg;
 
-	hyp->vtimer.cntvoff = ptimer_read();
-	hyp->vtimer.enabled = 1;
+	hyp->vtimer.cntvoff = vtimer_read_ptimer();
+	hyp->vtimer.enabled = true;
 
-	return 0;
+	return (0);
 }

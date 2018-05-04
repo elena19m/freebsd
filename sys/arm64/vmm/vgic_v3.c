@@ -321,7 +321,7 @@ vgic_v3_dist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 		*rval = dist->gicd_typer;
 
 	} else if (off == GICD_IIDR) {
-		eprintf("read: GICD_IIDR\n");
+		eprintf("read: GICD_IIDR not implemented\n");
 		*rval = RES0;
 
 	} else if (off == GICD_PIDR2) {
@@ -367,6 +367,7 @@ vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 	struct hyp *hyp;
 	struct vgic_v3_dist *dist;
 	uint64_t off;
+	uint32_t icenabler, isenabler;
 
 	hyp = vm_get_cookie(vm);
 	dist = &hyp->vgic_dist;
@@ -386,7 +387,7 @@ vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 		eprintf("Warning: Trying to write to read-only register GICD_PIDR2.\n");
 
 	} else if (off == GICD_IIDR) {
-		eprintf("write: GICD_IIDR\n");
+		eprintf("write: GICD_IIDR not implemented\n");
 
 	} else if (off >= GICD_IGROUPR_BASE && off < dist->gicd_igroupr_addr_max) {
 		write_reg(dist->gicd_igroupr, GICD_IGROUPR_BASE, off, val);
@@ -403,7 +404,6 @@ vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 
 	} else if (off >= GICD_ICENABLER_BASE &&
 	    off < dist->gicd_icenabler_addr_max) {
-		uint32_t icenabler;
 		icenabler = read_reg(dist->gicd_icenabler_isenabler,
 				GICD_ICENABLER_BASE, off);
 		/* A write of 1 to ICENABLER disables the interrupt. */
@@ -413,7 +413,6 @@ vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 
 	} else if (off >= GICD_ISENABLER_BASE &&
 	    off < dist->gicd_isenabler_addr_max) {
-		uint32_t isenabler;
 	       	isenabler = read_reg(dist->gicd_icenabler_isenabler,
 				GICD_ISENABLER_BASE, off);
 		/* A write of 1 to ISENABLER enables the interrupt. */
