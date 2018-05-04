@@ -40,15 +40,14 @@
 #include "arm64.h"
 #include "vtimer.h"
 
-#define USECS_PER_SEC	1000000
+#define	USECS_PER_SEC	1000000
 
-#define VTIMER_IRQ		27
-#define IRQ_LEVEL		1
+#define	VTIMER_IRQ	27
+#define	IRQ_LEVEL	1
 
 extern struct timecounter arm_tmr_timecount;
 
-static uint64_t
-ptimer_read(void)
+static inline uint64_t ptimer_read(void)
 {
 	uint64_t (*get_cntxct)(bool) = arm_tmr_timecount.tc_priv;
 
@@ -92,7 +91,7 @@ vtimer_inject_irq(struct hypctx *hypctx)
 {
 	struct vtimer_cpu *vtimer_cpu = &hypctx->vtimer_cpu;
 
-	vtimer_cpu->cntv_ctl |= 1 << 1;
+	vtimer_cpu->cntv_ctl_el0 |= 1 << 1;
 	vgic_v3_inject_irq(hypctx, VTIMER_IRQ, IRQ_LEVEL);
 }
 
@@ -100,7 +99,7 @@ static void
 vtimer_inject_irq_task(void *context, int pending)
 {
 	struct hypctx *hypctx = context;
-	
+
 	if (hypctx->vtimer_cpu.started) {
 		hypctx->vtimer_cpu.started = false;
 		vtimer_inject_irq(hypctx);
@@ -121,10 +120,10 @@ vtimer_sync_hwstate(void *arg)
 	struct hypctx *hypctx = arg;
 	uint64_t cval, diff, usecs;
 
-	if ((hypctx->vtimer_cpu.cntv_ctl & 3) != 1)
+	if ((hypctx->vtimer_cpu.cntv_ctl_el0 & 3) != 1)
 		return;
 
-	cval = hypctx->vtimer_cpu.cntv_cval;
+	cval = hypctx->vtimer_cpu.cntv_cval_el0;
 	diff = ptimer_read() - hypctx->hyp->vtimer.cntvoff;
 
 	if (cval <= diff) {

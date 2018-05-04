@@ -34,28 +34,32 @@
 struct vtimer
 {
 	bool 		enabled;
-
-	uint64_t	cntvoff; // CNTVLOFF[0:31] + CNTVUOFF[32:63]
+	uint64_t	cntvoff;
 };
 
 struct vtimer_cpu
 {
-	uint32_t	cntv_ctl; // Virtual timer control register
-	uint64_t	cntv_cval; // Virtual timer value
+	struct 		callout callout;
+	struct 		task task;
+	/*
+	 * CNTV_CTL_EL0:  Counter-timer Virtual Timer Control Register
+	 * CNTV_CVAL_EL0: Counter-timer Virtual Timer CompareValue Register
+	 * CNTV_TVAL_EL0: Counter-timer Virtual Timer TimerValue Register
+	 */
+	uint64_t	cntv_cval_el0;
+	uint32_t	cntv_ctl_el0;
+	uint32_t	cntv_tval_el0;
 
 	bool		started;
-
-	struct callout callout;
-	struct task task;
 };
 
-void vtimer_flush_hwstate(void *arg);
-void vtimer_sync_hwstate(void *arg);
+void	vtimer_flush_hwstate(void *arg);
+void 	vtimer_sync_hwstate(void *arg);
 
-void vtimer_cpu_init(void *arg);
-void vtimer_cpu_terminate(void *arg);
+void 	vtimer_cpu_init(void *arg);
+void 	vtimer_cpu_terminate(void *arg);
 
-int vtimer_hyp_init(void);
-int vtimer_init(void *arg);
+int 	vtimer_hyp_init(void);
+int 	vtimer_init(void *arg);
 
-#endif // _VMM_VTIMER_H_
+#endif
