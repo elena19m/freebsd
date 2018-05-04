@@ -260,7 +260,7 @@ arm_vminit(struct vm *vm)
 	hypmap_map(hyp_pmap, (vm_offset_t)hyp, sizeof(struct hyp),
 			VM_PROT_READ | VM_PROT_WRITE);
 
-	//vtimer_init(hyp);
+	vtimer_init(hyp);
 
 	return (hyp);
 }
@@ -492,6 +492,10 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	hypctx = &hyp->ctx[vcpu];
 	hypctx->elr_el2 = (uint64_t)pc;
 	for (;;) {
+		/*
+		 * The order counts here, because vtimer can inject an interrupt
+		 * if a timer expired.
+		 */
 		//vgic_flush_hwstate(hypctx);
 		//vtimer_flush_hwstate(hypctx);
 
@@ -510,12 +514,12 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 		vmexit->inst_length = 4;
 		handled = handle_world_switch(hyp, vcpu, vmexit);
 
-		/* TODO: sync here or when resuming and not when emulating? */
+		/* TODO: sync here or starting the loop (and not emulating)? */
 		//vtimer_sync_hwstate(hypctx);
 		//vgic_sync_hwstate(hypctx);
 
 		if (handled == UNHANDLED)
-			/* Emulate instruction. */
+			/* Exit loop to emulate instruction. */
 			break;
 		else
 			/* Resume guest execution from the next instruction. */

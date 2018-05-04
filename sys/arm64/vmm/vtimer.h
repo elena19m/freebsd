@@ -33,14 +33,16 @@
 
 struct vtimer
 {
-	bool 		enabled;
 	uint64_t	cntvoff;
+	int		phys_ns_irq;
+	int		virt_irq;
+	bool 		enabled;
 };
 
 struct vtimer_cpu
 {
-	struct 		callout callout;
-	struct 		task task;
+	struct callout	callout;
+	struct task 	task;
 	/*
 	 * CNTV_CTL_EL0:  Counter-timer Virtual Timer Control Register
 	 * CNTV_CVAL_EL0: Counter-timer Virtual Timer CompareValue Register
@@ -59,6 +61,7 @@ void 	vtimer_sync_hwstate(void *arg);
 void 	vtimer_cpu_init(void *arg);
 void 	vtimer_cpu_terminate(void *arg);
 
+int	vtimer_attach_to_vm(void *arg, int phys_ns_irq, int virt_irq);
 int 	vtimer_hyp_init(void);
 int 	vtimer_init(void *arg);
 

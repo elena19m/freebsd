@@ -736,9 +736,16 @@ int
 vm_attach_vgic(struct vm *vm, uint64_t dist_ipa, size_t dist_size,
 		uint64_t redist_ipa, size_t redist_size)
 {
-	return vgic_v3_attach_to_vm(vm->cookie, dist_ipa, dist_size,
-			redist_ipa, redist_size);
+	return (vgic_v3_attach_to_vm(vm->cookie, dist_ipa, dist_size,
+			redist_ipa, redist_size));
 }
+
+int
+vm_attach_vtimer(struct vm *vm, int phys_ns_irq, int virt_irq)
+{
+	return (vtimer_attach_to_vm(vm->cookie, phys_ns_irq, virt_irq));
+}
+
 
 static int
 vm_handle_wfi(struct vm *vm, int vcpuid, struct vm_exit *vme, bool *retu)
