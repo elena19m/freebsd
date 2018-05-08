@@ -110,6 +110,7 @@ arm_init(int ipinum)
 {
 	char *stack_top;
 	size_t hyp_code_len;
+	uint64_t ich_vtr_el2;
 
 	if (!hypmode_enabled) {
 		printf("arm_init: Processor doesn't have support for virtualization.\n");
@@ -121,12 +122,13 @@ arm_init(int ipinum)
 	/*
 	 * Install the temporary vectors which will be responsible for
 	 * initializing the VMM when we next trap into EL2.
+	 *
+	 * x0: the exception vector table responsible for hypervisor
+	 * initialization on the next call.
 	 */
 	vmm_call_hyp((void *)vtophys(hyp_init_vectors));
 
-	/*
-	 * Create the necessary mappings for the hypervisor translation table.
-	 */
+	/* Create the mappings for the hypervisor translation table. */
 	hyp_pmap = malloc(sizeof(*hyp_pmap), M_HYP, M_WAITOK | M_ZERO);
 	hypmap_init(hyp_pmap, PT_STAGE1);
 	hyp_code_len = (size_t)hyp_code_end - (size_t)hyp_code_start;
@@ -143,11 +145,15 @@ arm_init(int ipinum)
 	/*
 	 * Special init call to activate the MMU and change the exception
 	 * vector.
-	 * x0 - the new exception vector table
-	 * x1 - the physical address of the hypervisor translation table
-	 * x2 - stack top address
+	 *
+	 * x0: the new exception vector table
+	 * x1: the physical address of the hypervisor translation table
+	 * x2: stack top address
 	 */
 	vmm_call_hyp((void *)vtophys(hyp_vectors), vtophys(hyp_pmap->pm_l0), ktohyp(stack_top));
+
+	ich_vtr_el2 = vmm_call_hyp((void *)ktohyp(vmm_read_ich_vtr_el2));
+	vgic_v3_init(ich_vtr_el2);
 
 	//vtimer_hyp_init();
 

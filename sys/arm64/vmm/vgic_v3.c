@@ -1234,11 +1234,11 @@ static void vgic_v3_set_ro_regs(device_t dev)
 	ro_regs.gicd_pidr2 = gic_d_read(gic_sc, 4, GICD_PIDR2);
 }
 
-static inline void vgic_v3_set_virt_features()
+void vgic_v3_init(uint64_t ich_vtr_el2)
 {
-	virt_features.lr_num = ICH_VTR_EL2_LISTREGS(ich_vtr_el2_reg);
-	virt_features.pribits = ICH_VTR_EL2_PRIBITS(ich_vtr_el2_reg);
-	virt_features.prebits = ICH_VTR_EL2_PREBITS(ich_vtr_el2_reg);
+	virt_features.lr_num = ICH_VTR_EL2_LISTREGS(ich_vtr_el2);
+	virt_features.pribits = ICH_VTR_EL2_PRIBITS(ich_vtr_el2);
+	virt_features.prebits = ICH_VTR_EL2_PREBITS(ich_vtr_el2);
 }
 
 static int arm_vgic_attach(device_t dev)
@@ -1246,7 +1246,6 @@ static int arm_vgic_attach(device_t dev)
 	int error;
 
 	vgic_v3_set_ro_regs(dev);
-	vgic_v3_set_virt_features();
 
 	printf("GICD_TYPER = 0x%x\n", ro_regs.gicd_typer);
 
