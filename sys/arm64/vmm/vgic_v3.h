@@ -159,6 +159,7 @@ void 	vgic_v3_sync_hwstate(void *arg);
 void 	vgic_v3_flush_hwstate(void *arg);
 int 	vgic_v3_vcpu_pending_irq(void *arg);
 int 	vgic_v3_inject_irq(void *arg, unsigned int irq, bool level);
+void	vgic_v3_init(uint64_t ich_vtr_el2);
 
 struct vgic_v3_softc {
 	struct resource *maintenance_int_res;		/* Not used. */

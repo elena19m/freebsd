@@ -377,4 +377,25 @@ ENTRY(vmm_cleanup)
 	eret
 END(vmm_cleanup)
 
+.macro read_reg name
+	mrs	x0, \name
+.endm
+
+/*
+ * Return the value of the ICH_VTR_EL2 register.
+ */
+ENTRY(vmm_read_ich_vtr_el2)
+	read_reg ich_vtr_el2
+	eret
+END(vmm_read_ich_vtr_el2)
+
+/*
+ * Return the value of the CNTHCTL_EL2 register.
+ */
+ENTRY(vmm_read_cnthctl_el2)
+	read_reg cnthctl_el2
+	eret
+END(vmm_read_ich_vtr_el2)
+
+
 hyp_code_end:

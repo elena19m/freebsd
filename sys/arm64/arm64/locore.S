@@ -242,11 +242,6 @@ END(mpentry)
 _C_LABEL(hypmode_enabled):
 	.zero 8
 
-	.align 3
-	.globl _C_LABEL(ich_vtr_el2_reg)
-_C_LABEL(ich_vtr_el2_reg):
-	.zero 8
-
 /*
  * If we are started in EL2, configure the required hypervisor
  * registers and drop to EL1.
@@ -317,15 +312,6 @@ drop_to_el1:
 	mov 	x1, #1
 	adr	x2, hypmode_enabled
 	str 	x1, [x2]
-
-	/*
-	 * Save the ICH_VTR_EL2 register. The register is only accessible from
-	 * EL2 and it contains information about the virtualization features
-	 * implemented in the GIC.
-	 */
-	mrs	x1, ich_vtr_el2
-	adr	x2, ich_vtr_el2_reg
-	str	x1, [x2]
 
 	mov	x2, #(PSR_F | PSR_I | PSR_A | PSR_D | PSR_M_EL1h)
 	msr	spsr_el2, x2
