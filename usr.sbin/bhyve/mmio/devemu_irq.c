@@ -59,6 +59,9 @@ devemu_irq_assert(struct devemu_inst *di)
 	uint32_t irq_status;
 
 	assert(di->di_lintr.irq <= nitems(irqs));
+	if (di->di_lintr.irq < 0)
+		return;
+
 	irq = &irqs[di->di_lintr.irq];
 
 	pthread_mutex_lock(&irq->lock);
@@ -85,6 +88,9 @@ devemu_irq_deassert(struct devemu_inst *di)
 	uint32_t irq_status;
 
 	assert(di->di_lintr.irq <= nitems(irqs));
+	if (di->di_lintr.irq < 0)
+		return;
+
 	irq = &irqs[di->di_lintr.irq];
 
 	pthread_mutex_lock(&irq->lock);

@@ -33,7 +33,7 @@ static void devemu_lintr_update(struct devemu_inst *di);
 static struct devemu_info {
 	uint64_t size;			/* address size */
 	uint64_t baddr;			/* address */
-	uint64_t irq;			/* device interrupt number */
+	int64_t irq;			/* device interrupt number */
 	char *name;			/* device name */
 	char *arg;			/* device arguments */
 	struct devemu_info *next;		/* pointer for linked list */
@@ -43,19 +43,19 @@ static struct devemu_info {
 /*
  * MMIO options are in the form:
  *
- * <size>@<base_addr>[#<irq>]:<emul>[,<config>]
+ * <size>@<base_addr>#<irq>:<emul>[,<config>]
  *
  * - size is the number of bytes required for the device mmio
  * - base_addr is the base address for the MMIO mapped device;
- * - irq is an optional parameter that specifies the device interrupt number
- *   the value MUST be a DECIMAL integer
+ * - irq specifies the device interrupt number the value MUST be a DECIMAL
+ *   integer; if the device does not use interrupts, use -1
  * - emul is a string describing the type of device - e.g., virtio-net;
  * - config is an optional string, depending on the device, that is used
  *     for configuration
  *
  * Examples of use:
  *   0x200@0x100000#25:virtio-net,tap0
- *   0x100@0x200000@dummy
+ *   0x100@0x200000#-1:dummy
  */
 static void
 devemu_parse_opts_usage(const char *args)
@@ -89,7 +89,8 @@ int
 devemu_parse_opts(const char *args)
 {
 	char *emul, *config, *str;
-	uint64_t size, baddr, irq;
+	uint64_t size, baddr;
+	int64_t irq;
 	int error;
 	struct devemu_info *dif;
 
@@ -102,14 +103,10 @@ devemu_parse_opts(const char *args)
 		*emul++ = '\0';
 
 		/* <size>@<base-addr>#<irq> */
-		if (sscanf(str, "%llx@%llx#%llu", &size, &baddr, &irq) != 3 &&
-		    sscanf(str, "%llu@%llu#%llu", &size, &baddr, &irq) != 3) {
-			/* <size>@<base-addr> */
-			if (sscanf(str, "%llx@%llx", &size, &baddr) != 2 &&
-			    sscanf(str, "%llu@%llu", &size, &baddr) != 2) {
-				devemu_parse_opts_usage(str);
-				goto parse_error;
-			}
+		if (sscanf(str, "%llx@%llx#%lld", &size, &baddr, &irq) != 3 &&
+		    sscanf(str, "%llu@%llu#%lld", &size, &baddr, &irq) != 3) {
+			devemu_parse_opts_usage(str);
+			goto parse_error;
 		}
 	} else {
 		devemu_parse_opts_usage(str);

@@ -51,7 +51,7 @@ struct devemu_inst {
 
 	struct {
 		enum lintr_stat	state;
-		uint32_t	irq;
+		int64_t		irq;
 		pthread_mutex_t	lock;
 	} di_lintr;
 
