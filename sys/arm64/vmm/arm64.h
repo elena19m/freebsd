@@ -89,7 +89,7 @@ struct hyp {
 	struct vm	*vm;
 	struct vtimer	vtimer;
 	uint64_t	vmid_generation;
-	uint64_t	vttbr;
+	uint64_t	vttbr_el2;
 	bool		vgic_attached;
 };
 
