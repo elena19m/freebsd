@@ -331,18 +331,19 @@
 
 
 /* Load a register from struct hyp *hyp member of hypctx. */
-#define	LOAD_HYP_SYS_REG(prefix, reg)			\
-	/* Compute kernel VA of hyp member in x1 */ 	\
+#define	LOAD_HYP_REG(prefix, reg)			\
+	/* Compute VA of hyp member in x1 */ 		\
 	mov	x1, #HYPCTX_HYP;			\
 	add	x1, x1, x0;				\
-	/* Get hyp address value in x2 */		\
+	/* Get hyp address in x2 */			\
 	ldr	x2, [x1];				\
-	/* Transfrom the hyp address into an EL2 VA */	\
+	/* Transform hyp kernel VA into an EL2 VA */	\
 	KTOHYP_REG(x2);					\
-	/* Computer reg offset inside struct hyp */	\
+	/* Get register offset inside struct hyp */	\
 	mov	x1, prefix ##_ ##reg;			\
-	/* Compute reg address */			\
+	/* Compute regster address */			\
 	add	x2, x2, x1;				\
+	/* Load the register */				\
 	ldr	x1, [x2];				\
 	msr	reg, x1;				\
 
@@ -368,7 +369,6 @@
 	LOAD_SYS_REG(HYPCTX, TTBR0_EL1);		\
 	LOAD_SYS_REG(HYPCTX, TTBR1_EL1);		\
 	LOAD_SYS_REG(HYPCTX, VBAR_EL1);			\
-							\
 	LOAD_SYS_REG(HYPCTX, AFSR0_EL1);		\
 	LOAD_SYS_REG(HYPCTX, AFSR1_EL1);		\
 	LOAD_SYS_REG(HYPCTX, CONTEXTIDR_EL1);		\
@@ -384,48 +384,17 @@
 	LOAD_SYS_REG(HYPCTX, CPTR_EL2);			\
 	LOAD_SYS_REG(HYPCTX, SPSR_EL2);			\
 							\
-	/*LOAD_HYP_SYS_REG(HYP, VTTBR_EL2); */		\
-	/* 						\
-	 * Load the guest VTTBR_EL2 register from hypctx->hyp.vttbr_el2	\
-	 *						\
-	 * 1. Compute kernel VA of hyp member in x1 	\
-	 */						\
-	mov	x1, #HYPCTX_HYP;			\
-	add	x1, x1, x0;				\
-	/* 2. Get hyp value in x2 */			\
-	ldr	x2, [x1];				\
-	/*						\
-	 * 3. Hyp is a pointer to a kernel VA. Transform \
-	 * the kernel VA into an EL2 VA			\
-	 */						\
-	KTOHYP_REG(x2);					\
-	/* 4. Compute EL2 virtual address for hyp.vttbr_el2 */ \
-	mov	x1, #HYP_VTTBR_EL2;			\
-	add	x2, x2, x1;				\
-	/* 5. Load hyp.vttbr_el2 in x1 */			\
-	ldr	x1, [x2];				\
-	/* 6. Finally load VTTBR_EL2 */			\
-	msr	vttbr_el2, x1;				\
+	LOAD_SYS_REG(HYPCTX_VGIC, ICH_HCR_EL2);		\
+	LOAD_SYS_REG(HYPCTX_VGIC, ICH_VMCR_EL2);	\
+							\
+	LOAD_HYP_REG(HYP, VTTBR_EL2);			\
+	LOAD_HYP_REG(HYP_VTIMER, CNTHCTL_EL2);		\
 							\
 	/* Load the guest EL1 stack pointer */		\
 	mov	x1, #HYPCTX_REGS_SP;			\
 	add	x1, x1, x0;				\
 	ldr	x2, [x1];				\
 	msr	sp_el1, x2;				\
-							\
-	LOAD_SYS_REG(HYPCTX_VGIC, ICH_HCR_EL2);		\
-	LOAD_SYS_REG(HYPCTX_VGIC, ICH_VMCR_EL2);	\
-							\
-	/*						\
-	mov	x1, #HYPCTX_HYP;			\
-	add	x1, x1, x0;				\
-	ldr	x2, [x1];				\
-	KTOHYP_REG(x2);					\
-	mov	x1, #HYP_VTIMER_CNTHCTL_EL2;		\
-	add	x2, x2, x2;				\
-	ldr	x1, [x2];				\
-	msr	cnthctl_el2, x1;			\
-	*/\
 							\
 	LOAD_GUEST_X_REGS();				\
 
