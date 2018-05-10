@@ -47,6 +47,8 @@
 
 extern struct timecounter arm_tmr_timecount;
 
+uint64_t cnthctl_el2_reg;
+
 static inline uint64_t
 vtimer_read_ptimer(void)
 {
@@ -109,7 +111,7 @@ vtimer_inject_irq(struct hypctx *hypctx)
 {
 	struct vtimer_cpu *vtimer_cpu = &hypctx->vtimer_cpu;
 
-	vtimer_cpu->cntv_ctl_el0 |= 1 << 1;
+	vtimer_cpu->cntp_ctl_el0 |= 1 << 1;
 	vgic_v3_inject_irq(hypctx, VTIMER_IRQ, IRQ_LEVEL);
 }
 
@@ -135,13 +137,14 @@ vtimer_flush_hwstate(void *arg)
 void
 vtimer_sync_hwstate(void *arg)
 {
+#if 0
 	struct hypctx *hypctx = arg;
 	uint64_t cval, diff, usecs;
 
-	if ((hypctx->vtimer_cpu.cntv_ctl_el0 & 3) != 1)
+	if ((hypctx->vtimer_cpu.cntp_ctl_el0 & 3) != 1)
 		return;
 
-	cval = hypctx->vtimer_cpu.cntv_cval_el0;
+	cval = hypctx->vtimer_cpu.cntp_cval_el0;
 	diff = vtimer_read_ptimer() - hypctx->hyp->vtimer.cntvoff;
 
 	if (cval <= diff) {
@@ -151,6 +154,18 @@ vtimer_sync_hwstate(void *arg)
 
 	usecs = (USECS_PER_SEC * (cval - diff)) / arm_tmr_timecount.tc_frequency;
 	vtimer_start(hypctx, usecs);
+	struct hyp *hyp;
+	struct hypctx *hypctx;
+
+	hyp = (struct hyp *)arg;
+	hypctx = &hyp->ctx[0];
+
+	if (hypctx->vtimer_cpu.cntp_ctl_el0 != prev_cntp_ctl_el0) {
+		printf("new cntp_ctl_el0 = 0x%x\n", hypctx->vtimer_cpu.cntp_ctl_el0);
+		printf("previous cntp_ctl_el0 = 0x%x\n", prev_cntp_ctl_el0);
+		prev_cntp_ctl_el0 = hypctx->vtimer_cpu.cntp_ctl_el0;
+	}
+#endif
 }
 
 void
@@ -173,17 +188,40 @@ vtimer_cpu_terminate(void *arg)
 }
 
 int
-vtimer_hyp_init(void)
+vtimer_init(uint64_t cnthctl_el2)
 {
-	// TODO Get interrupt number
+	cnthctl_el2_reg = cnthctl_el2;
 
 	return (0);
 }
 
 int
-vtimer_init(void *arg)
+vtimer_vminit(void *arg)
 {
 	struct hyp *hyp = arg;
+	struct vtimer_cpu *vtimer_cpu;
+
+	hyp = (struct hyp *)arg;
+	/* XXX Only one CPU per virtual machine supported. */
+	vtimer_cpu = &hyp->ctx[0].vtimer_cpu;
+
+	/*
+	 * Configure timer interrupts for the CPU.
+	 *
+	 * CNTP_CTL_IMASK: mask interrupts
+	 * ~CNTP_CTL_ENABLE: disable the timer
+	 */
+	vtimer_cpu->cntp_ctl_el0 = CNTP_CTL_IMASK & ~CNTP_CTL_ENABLE;
+
+	/*
+	 * Configure the Counter-timer Hypervisor Control Register for the VM.
+	 *
+	 * ~CNTHCTL_EL1PCEN: trap access to CNTP_{CTL, CVAL, TVAL}_EL0 from EL1
+	 * CNTHCTL_EL1PCTEN: don't trap access to CNTPCT_EL0
+	 */
+	hyp->vtimer.cnthctl_el2 = \
+	    (cnthctl_el2_reg & ~CNTHCTL_EL1PCEN) | CNTHCTL_EL1PCTEN;
+	printf("hyp->vtimer.cnthctl_el2 = 0x%lx\n", hyp->vtimer.cnthctl_el2);
 
 	hyp->vtimer.cntvoff = vtimer_read_ptimer();
 	hyp->vtimer.enabled = true;

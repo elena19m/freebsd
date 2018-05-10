@@ -27,23 +27,17 @@
 #ifndef _VMM_HYP_MACROS_H_
 #define	_VMM_HYP_MACROS_H_
 
-#define PUSH_SYSTEM_REG_PAIR(reg0, reg1)		\
+
+#define PUSH_SYS_REG_PAIR(reg0, reg1)			\
 	mrs	x1, reg0;				\
 	mrs	x2, reg1;				\
 	stp	x2, x1, [sp, #-16]!;
 
-#define POP_SYSTEM_REG_PAIR(reg0, reg1)			\
-	ldp	x2, x1, [sp], #16;			\
-	msr	reg1, x2;				\
-	msr	reg0, x1;
 
-#define PUSH_SYSTEM_REG(reg)				\
+#define PUSH_SYS_REG(reg)				\
 	mrs 	x1, reg;				\
 	str	x1, [sp, #-16]!;
 
-#define POP_SYSTEM_REG(reg)				\
-	ldr	x1, [sp], #16;				\
-	msr	reg, x1;
 
 /*
  * Push all the host registers before entering the guest.
@@ -68,44 +62,58 @@
 	str	lr, [sp, #-16]!;			\
 							\
 	/* Push the system registers */			\
-	PUSH_SYSTEM_REG(SP_EL1);			\
-	PUSH_SYSTEM_REG_PAIR(ACTLR_EL1, AMAIR_EL1);	\
-	PUSH_SYSTEM_REG_PAIR(ELR_EL1, PAR_EL1);		\
-	PUSH_SYSTEM_REG_PAIR(MAIR_EL1, TCR_EL1);	\
-	PUSH_SYSTEM_REG_PAIR(TPIDR_EL1, TTBR0_EL1);	\
-	PUSH_SYSTEM_REG_PAIR(TTBR1_EL1, VBAR_EL1);	\
-	PUSH_SYSTEM_REG_PAIR(AFSR0_EL1, AFSR1_EL1);	\
-	PUSH_SYSTEM_REG_PAIR(CONTEXTIDR_EL1, CPACR_EL1);\
-	PUSH_SYSTEM_REG_PAIR(ESR_EL1, FAR_EL1);		\
-	PUSH_SYSTEM_REG_PAIR(SCTLR_EL1, SPSR_EL1);	\
-	PUSH_SYSTEM_REG_PAIR(ELR_EL2, HCR_EL2);		\
-	PUSH_SYSTEM_REG_PAIR(VPIDR_EL2, VMPIDR_EL2);	\
-	PUSH_SYSTEM_REG_PAIR(CPTR_EL2, SPSR_EL2);	\
-	PUSH_SYSTEM_REG_PAIR(ICH_HCR_EL2, ICH_VMCR_EL2);\
-	PUSH_SYSTEM_REG_PAIR(CNTV_CTL_EL0, CNTV_CVAL_EL0);\
-	PUSH_SYSTEM_REG(CNTV_TVAL_EL0);
+	PUSH_SYS_REG(SP_EL1);				\
+	PUSH_SYS_REG_PAIR(ACTLR_EL1, AMAIR_EL1);	\
+	PUSH_SYS_REG_PAIR(ELR_EL1, PAR_EL1);		\
+	PUSH_SYS_REG_PAIR(MAIR_EL1, TCR_EL1);		\
+	PUSH_SYS_REG_PAIR(TPIDR_EL1, TTBR0_EL1);	\
+	PUSH_SYS_REG_PAIR(TTBR1_EL1, VBAR_EL1);		\
+	PUSH_SYS_REG_PAIR(AFSR0_EL1, AFSR1_EL1);	\
+	PUSH_SYS_REG_PAIR(CONTEXTIDR_EL1, CPACR_EL1);	\
+	PUSH_SYS_REG_PAIR(ESR_EL1, FAR_EL1);		\
+	PUSH_SYS_REG_PAIR(SCTLR_EL1, SPSR_EL1);		\
+	PUSH_SYS_REG_PAIR(ELR_EL2, HCR_EL2);		\
+	PUSH_SYS_REG_PAIR(VPIDR_EL2, VMPIDR_EL2);	\
+	PUSH_SYS_REG_PAIR(CPTR_EL2, SPSR_EL2);		\
+	PUSH_SYS_REG_PAIR(ICH_HCR_EL2, ICH_VMCR_EL2);	\
+	PUSH_SYS_REG_PAIR(CNTV_CTL_EL0, CNTV_CVAL_EL0);	\
+	PUSH_SYS_REG(CNTV_TVAL_EL0);			\
+	PUSH_SYS_REG(CNTHCTL_EL2);
+
+
+#define POP_SYS_REG_PAIR(reg0, reg1)			\
+	ldp	x2, x1, [sp], #16;			\
+	msr	reg1, x2;				\
+	msr	reg0, x1;
+
+
+#define POP_SYS_REG(reg)				\
+	ldr	x1, [sp], #16;				\
+	msr	reg, x1;
+
 
 /*
  * Restore all the host registers before entering the host.
  */
 #define LOAD_HOST_REGS()				\
 	/* Pop the system registers first */		\
-	POP_SYSTEM_REG(CNTV_TVAL_EL0);			\
-	POP_SYSTEM_REG_PAIR(CNTV_CTL_EL0, CNTV_CVAL_EL0);\
-	POP_SYSTEM_REG_PAIR(ICH_HCR_EL2, ICH_VMCR_EL2);	\
-	POP_SYSTEM_REG_PAIR(CPTR_EL2, SPSR_EL2);	\
-	POP_SYSTEM_REG_PAIR(VPIDR_EL2, VMPIDR_EL2);	\
-	POP_SYSTEM_REG_PAIR(ELR_EL2, HCR_EL2);		\
-	POP_SYSTEM_REG_PAIR(SCTLR_EL1, SPSR_EL1);	\
-	POP_SYSTEM_REG_PAIR(ESR_EL1, FAR_EL1);		\
-	POP_SYSTEM_REG_PAIR(CONTEXTIDR_EL1, CPACR_EL1);	\
-	POP_SYSTEM_REG_PAIR(AFSR0_EL1, AFSR1_EL1);	\
-	POP_SYSTEM_REG_PAIR(TTBR1_EL1, VBAR_EL1);	\
-	POP_SYSTEM_REG_PAIR(TPIDR_EL1, TTBR0_EL1);	\
-	POP_SYSTEM_REG_PAIR(MAIR_EL1, TCR_EL1);		\
-	POP_SYSTEM_REG_PAIR(ELR_EL1, PAR_EL1);		\
-	POP_SYSTEM_REG_PAIR(ACTLR_EL1, AMAIR_EL1);	\
-	POP_SYSTEM_REG(SP_EL1);				\
+	POP_SYS_REG(CNTHCTL_EL2);			\
+	POP_SYS_REG(CNTV_TVAL_EL0);			\
+	POP_SYS_REG_PAIR(CNTV_CTL_EL0, CNTV_CVAL_EL0);	\
+	POP_SYS_REG_PAIR(ICH_HCR_EL2, ICH_VMCR_EL2);	\
+	POP_SYS_REG_PAIR(CPTR_EL2, SPSR_EL2);		\
+	POP_SYS_REG_PAIR(VPIDR_EL2, VMPIDR_EL2);	\
+	POP_SYS_REG_PAIR(ELR_EL2, HCR_EL2);		\
+	POP_SYS_REG_PAIR(SCTLR_EL1, SPSR_EL1);		\
+	POP_SYS_REG_PAIR(ESR_EL1, FAR_EL1);		\
+	POP_SYS_REG_PAIR(CONTEXTIDR_EL1, CPACR_EL1);	\
+	POP_SYS_REG_PAIR(AFSR0_EL1, AFSR1_EL1);		\
+	POP_SYS_REG_PAIR(TTBR1_EL1, VBAR_EL1);		\
+	POP_SYS_REG_PAIR(TPIDR_EL1, TTBR0_EL1);		\
+	POP_SYS_REG_PAIR(MAIR_EL1, TCR_EL1);		\
+	POP_SYS_REG_PAIR(ELR_EL1, PAR_EL1);		\
+	POP_SYS_REG_PAIR(ACTLR_EL1, AMAIR_EL1);		\
+	POP_SYS_REG(SP_EL1);				\
 							\
 	/* Pop the regular registers */			\
 	ldr	lr, [sp], #16;				\
@@ -125,59 +133,22 @@
 	ldp	x2, x3, [sp], #16;			\
 	ldp	x0, x1, [sp], #16;			\
 
-#define LOAD_VGIC_REG(reg)				\
-	mov	x1, #HYPCTX_VGIC_##reg;			\
-	ldr	x2, [x0, x1];				\
-	msr	reg, x2;
-
-#define SAVE_VGIC_REG(reg)				\
-	mov	x1, #HYPCTX_VGIC_##reg;			\
-	mrs	x2, reg;				\
-	str	x2, [x0, x1];
 
 /*
- * ICH_EISR_EL2, ICH_ELSR_EL2 and ICH_MISR_EL2 are read-only and are saved
- * because they are modified by the hardware when the virtual machine is
- * running and we need to inspect them in the VGIC driver.
+ * The STR and LDR instructions take an offset between [-256, 255], but the
+ * hypctx register offset can be larger than that. To get around this limitation
+ * we use a temporary register to hold the offset.
  */
-#define SAVE_GUEST_VGIC_REGS()				\
-	SAVE_VGIC_REG(ICH_EISR_EL2);			\
-	SAVE_VGIC_REG(ICH_ELSR_EL2);			\
-	SAVE_VGIC_REG(ICH_MISR_EL2);			\
-	SAVE_VGIC_REG(ICH_HCR_EL2);			\
-	SAVE_VGIC_REG(ICH_VMCR_EL2);			\
+#define	SAVE_SYS_REG(prefix, reg)			\
+	mrs	x1, reg;				\
+	mov	x2, prefix ##_ ##reg;			\
+	str	x1, [x0, x2];
 
-#define LOAD_GUEST_VGIC_REGS()				\
-	LOAD_VGIC_REG(ICH_HCR_EL2);			\
-	LOAD_VGIC_REG(ICH_VMCR_EL2);			\
-
-#define LOAD_VTIMER_CPU_REG(reg)			\
-	mov	x1, #HYPCTX_VTIMER_CPU_##reg;		\
-	ldr	x2, [x0, x1];				\
-	msr	reg, x2;
-
-#define SAVE_VTIMER_CPU_REG(reg)			\
-	mov	x1, #HYPCTX_VTIMER_CPU_##reg;		\
-	mrs	x2, reg;				\
-	str	x2, [x0, x1];
-
-#define SAVE_GUEST_VTIMER_CPU_REGS()			\
-	SAVE_VTIMER_CPU_REG(CNTV_CTL_EL0);		\
-	SAVE_VTIMER_CPU_REG(CNTV_CVAL_EL0);		\
-	SAVE_VTIMER_CPU_REG(CNTV_TVAL_EL0);
-
-#define LOAD_GUEST_VTIMER_CPU_REGS()			\
-	LOAD_VTIMER_CPU_REG(CNTV_CTL_EL0);		\
-	LOAD_VTIMER_CPU_REG(CNTV_CVAL_EL0);		\
-	LOAD_VTIMER_CPU_REG(CNTV_TVAL_EL0);
 
 #define	SAVE_REG(reg)					\
 	mov	x1, #HYPCTX_REGS_##reg;			\
 	str	reg, [x0, x1];
 
-#define	LOAD_REG(reg)					\
-	mov	x1, #HYPCTX_REGS_##reg;			\
-	ldr	reg, [x0, x1];
 
 /*
  * The STP and LDP instructions takes an immediate in the range of [-512, 504]
@@ -195,10 +166,6 @@
 	add	x1, x0, x1;				\
 	stp	reg0, reg1, [x1];
 
-#define LOAD_REG_PAIR(reg0, reg1)			\
-	mov	x1, #HYPCTX_REGS_##reg0;		\
-	add	x1, x0, x1;				\
-	ldp	reg0, reg1, [x1];
 
 /*
  * We use x0 to load the hypctx address from TPIDR_EL2 and x1 and x2 as
@@ -243,20 +210,6 @@
 	add	x2, x2, x0;				\
 	str	x1, [x2];
 
-/*
- * The STR and LDR instructions take an offset between [-256, 255], but the
- * hypctx register offset can be larger than that. To get around this limitation
- * we use a temporary register to hold the offset.
- */
-#define	SAVE_SYSTEM_REG(reg)				\
-	mrs	x1, reg;				\
-	mov	x2, #HYPCTX_##reg;			\
-	str	x1, [x0, x2];
-
-#define LOAD_SYSTEM_REG(reg)				\
-	mov	x1, #HYPCTX_##reg;			\
-	ldr	x2, [x0, x1];				\
-	msr	reg, x2;
 
 /*
  * Save all the guest registers. Start by saving the regular registers first
@@ -272,41 +225,61 @@
 #define	SAVE_GUEST_REGS()				\
 	SAVE_GUEST_X_REGS();				\
 							\
-	SAVE_GUEST_VGIC_REGS();				\
-							\
-	SAVE_GUEST_VTIMER_CPU_REGS();			\
+	/*						\
+ 	 * ICH_EISR_EL2, ICH_ELSR_EL2 and ICH_MISR_EL2 are read-only and are \
+	 * saved because they are modified by the hardware when the virtual \
+	 * machine is running and we need to inspect them in the VGIC driver. \
+ 	 */						\
+	SAVE_SYS_REG(HYPCTX_VGIC, ICH_EISR_EL2);	\
+	SAVE_SYS_REG(HYPCTX_VGIC, ICH_ELSR_EL2);	\
+	SAVE_SYS_REG(HYPCTX_VGIC, ICH_MISR_EL2);	\
+	SAVE_SYS_REG(HYPCTX_VGIC, ICH_HCR_EL2);		\
+	SAVE_SYS_REG(HYPCTX_VGIC, ICH_VMCR_EL2);	\
 							\
 	/* Save the stack pointer. */			\
 	mrs	x1, sp_el1;				\
 	mov	x2, #HYPCTX_REGS_SP;			\
 	str	x1, [x0, x2];				\
 							\
-	SAVE_SYSTEM_REG(ACTLR_EL1);			\
-	SAVE_SYSTEM_REG(AMAIR_EL1);			\
-	SAVE_SYSTEM_REG(ELR_EL1);			\
-	SAVE_SYSTEM_REG(FAR_EL1);			\
-	SAVE_SYSTEM_REG(MAIR_EL1);			\
-	SAVE_SYSTEM_REG(PAR_EL1);			\
-	SAVE_SYSTEM_REG(TCR_EL1);			\
-	SAVE_SYSTEM_REG(TPIDR_EL1);			\
-	SAVE_SYSTEM_REG(TTBR0_EL1);			\
-	SAVE_SYSTEM_REG(TTBR1_EL1);			\
-	SAVE_SYSTEM_REG(VBAR_EL1);			\
+	SAVE_SYS_REG(HYPCTX, ACTLR_EL1);		\
+	SAVE_SYS_REG(HYPCTX, AMAIR_EL1);		\
+	SAVE_SYS_REG(HYPCTX, ELR_EL1);			\
+	SAVE_SYS_REG(HYPCTX, FAR_EL1);			\
+	SAVE_SYS_REG(HYPCTX, MAIR_EL1);			\
+	SAVE_SYS_REG(HYPCTX, PAR_EL1);			\
+	SAVE_SYS_REG(HYPCTX, TCR_EL1);			\
+	SAVE_SYS_REG(HYPCTX, TPIDR_EL1);		\
+	SAVE_SYS_REG(HYPCTX, TTBR0_EL1);		\
+	SAVE_SYS_REG(HYPCTX, TTBR1_EL1);		\
+	SAVE_SYS_REG(HYPCTX, VBAR_EL1);			\
 							\
-	SAVE_SYSTEM_REG(AFSR0_EL1);			\
-	SAVE_SYSTEM_REG(AFSR1_EL1);			\
-	SAVE_SYSTEM_REG(CONTEXTIDR_EL1);		\
-	SAVE_SYSTEM_REG(CPACR_EL1);			\
-	SAVE_SYSTEM_REG(ESR_EL1);			\
-	SAVE_SYSTEM_REG(SCTLR_EL1);			\
-	SAVE_SYSTEM_REG(SPSR_EL1);			\
+	SAVE_SYS_REG(HYPCTX, AFSR0_EL1);		\
+	SAVE_SYS_REG(HYPCTX, AFSR1_EL1);		\
+	SAVE_SYS_REG(HYPCTX, CONTEXTIDR_EL1);		\
+	SAVE_SYS_REG(HYPCTX, CPACR_EL1);		\
+	SAVE_SYS_REG(HYPCTX, ESR_EL1);			\
+	SAVE_SYS_REG(HYPCTX, SCTLR_EL1);		\
+	SAVE_SYS_REG(HYPCTX, SPSR_EL1);			\
 							\
-	SAVE_SYSTEM_REG(ELR_EL2);			\
-	SAVE_SYSTEM_REG(HCR_EL2);			\
-	SAVE_SYSTEM_REG(VPIDR_EL2);			\
-	SAVE_SYSTEM_REG(VMPIDR_EL2);			\
-	SAVE_SYSTEM_REG(CPTR_EL2);			\
-	SAVE_SYSTEM_REG(SPSR_EL2);
+	SAVE_SYS_REG(HYPCTX, ELR_EL2);			\
+	SAVE_SYS_REG(HYPCTX, HCR_EL2);			\
+	SAVE_SYS_REG(HYPCTX, VPIDR_EL2);		\
+	SAVE_SYS_REG(HYPCTX, VMPIDR_EL2);		\
+	SAVE_SYS_REG(HYPCTX, CPTR_EL2);			\
+	SAVE_SYS_REG(HYPCTX, SPSR_EL2);
+
+
+#define	LOAD_REG(reg)					\
+	mov	x1, #HYPCTX_REGS_##reg;			\
+	ldr	reg, [x0, x1];
+
+
+/* See SAVE_REG_PAIR */
+#define LOAD_REG_PAIR(reg0, reg1)			\
+	mov	x1, #HYPCTX_REGS_##reg0;		\
+	add	x1, x0, x1;				\
+	ldp	reg0, reg1, [x1];
+
 
 /*
  * We use x1 as a temporary register to store the hypctx member offset and x0
@@ -349,6 +322,31 @@
 	mov	x7, HYP_KVA_OFFSET;			\
 	orr	reg, reg, x7;
 
+
+/* See SAVE_SYS_REG */
+#define	LOAD_SYS_REG(prefix, reg)			\
+	mov	x1, prefix ##_ ##reg;			\
+	ldr	x2, [x0, x1];				\
+	msr	reg, x2;
+
+
+/* Load a register from struct hyp *hyp member of hypctx. */
+#define	LOAD_HYP_SYS_REG(prefix, reg)			\
+	/* Compute kernel VA of hyp member in x1 */ 	\
+	mov	x1, #HYPCTX_HYP;			\
+	add	x1, x1, x0;				\
+	/* Get hyp address value in x2 */		\
+	ldr	x2, [x1];				\
+	/* Transfrom the hyp address into an EL2 VA */	\
+	KTOHYP_REG(x2);					\
+	/* Computer reg offset inside struct hyp */	\
+	mov	x1, prefix ##_ ##reg;			\
+	/* Compute reg address */			\
+	add	x2, x2, x1;				\
+	ldr	x1, [x2];				\
+	msr	reg, x1;				\
+
+
 /*
  * Restore all the guest registers to their original values.
  *
@@ -359,43 +357,54 @@
  * tpidr_el2 - struct hypctx address
  */
 #define	LOAD_GUEST_REGS()				\
-	LOAD_SYSTEM_REG(ACTLR_EL1);			\
-	LOAD_SYSTEM_REG(AMAIR_EL1);			\
-	LOAD_SYSTEM_REG(ELR_EL1);			\
-	LOAD_SYSTEM_REG(FAR_EL1);			\
-	LOAD_SYSTEM_REG(MAIR_EL1);			\
-	LOAD_SYSTEM_REG(PAR_EL1);			\
-	LOAD_SYSTEM_REG(TCR_EL1);			\
-	LOAD_SYSTEM_REG(TPIDR_EL1);			\
-	LOAD_SYSTEM_REG(TTBR0_EL1);			\
-	LOAD_SYSTEM_REG(TTBR1_EL1);			\
-	LOAD_SYSTEM_REG(VBAR_EL1);			\
+	LOAD_SYS_REG(HYPCTX, ACTLR_EL1);		\
+	LOAD_SYS_REG(HYPCTX, AMAIR_EL1);		\
+	LOAD_SYS_REG(HYPCTX, ELR_EL1);			\
+	LOAD_SYS_REG(HYPCTX, FAR_EL1);			\
+	LOAD_SYS_REG(HYPCTX, MAIR_EL1);			\
+	LOAD_SYS_REG(HYPCTX, PAR_EL1);			\
+	LOAD_SYS_REG(HYPCTX, TCR_EL1);			\
+	LOAD_SYS_REG(HYPCTX, TPIDR_EL1);		\
+	LOAD_SYS_REG(HYPCTX, TTBR0_EL1);		\
+	LOAD_SYS_REG(HYPCTX, TTBR1_EL1);		\
+	LOAD_SYS_REG(HYPCTX, VBAR_EL1);			\
 							\
-	LOAD_SYSTEM_REG(AFSR0_EL1);			\
-	LOAD_SYSTEM_REG(AFSR1_EL1);			\
-	LOAD_SYSTEM_REG(CONTEXTIDR_EL1);		\
-	LOAD_SYSTEM_REG(CPACR_EL1);			\
-	LOAD_SYSTEM_REG(ESR_EL1);			\
-	LOAD_SYSTEM_REG(SCTLR_EL1);			\
-	LOAD_SYSTEM_REG(SPSR_EL1);			\
+	LOAD_SYS_REG(HYPCTX, AFSR0_EL1);		\
+	LOAD_SYS_REG(HYPCTX, AFSR1_EL1);		\
+	LOAD_SYS_REG(HYPCTX, CONTEXTIDR_EL1);		\
+	LOAD_SYS_REG(HYPCTX, CPACR_EL1);		\
+	LOAD_SYS_REG(HYPCTX, ESR_EL1);			\
+	LOAD_SYS_REG(HYPCTX, SCTLR_EL1);		\
+	LOAD_SYS_REG(HYPCTX, SPSR_EL1);			\
 							\
-	LOAD_SYSTEM_REG(ELR_EL2);			\
-	LOAD_SYSTEM_REG(HCR_EL2);			\
-	LOAD_SYSTEM_REG(VPIDR_EL2);			\
-	LOAD_SYSTEM_REG(VMPIDR_EL2);			\
-	LOAD_SYSTEM_REG(CPTR_EL2);			\
-	LOAD_SYSTEM_REG(SPSR_EL2);			\
+	LOAD_SYS_REG(HYPCTX, ELR_EL2);			\
+	LOAD_SYS_REG(HYPCTX, HCR_EL2);			\
+	LOAD_SYS_REG(HYPCTX, VPIDR_EL2);		\
+	LOAD_SYS_REG(HYPCTX, VMPIDR_EL2);		\
+	LOAD_SYS_REG(HYPCTX, CPTR_EL2);			\
+	LOAD_SYS_REG(HYPCTX, SPSR_EL2);			\
 							\
-	/* Load the guest VTTBR */			\
+	/*LOAD_HYP_SYS_REG(HYP, VTTBR_EL2); */		\
+	/* 						\
+	 * Load the guest VTTBR from hypctx->hyp.vttbrr	\
+	 *						\
+	 * 1. Compute kernel VA of hyp member in x1 	\
+	 */						\
 	mov	x1, #HYPCTX_HYP;			\
 	add	x1, x1, x0;				\
-	/* Hyp kernel VA is in x2 */			\
+	/* 2. Get hyp value in x2 */			\
 	ldr	x2, [x1];				\
-	/* Transform the kernel VA into a hyp VA */	\
+	/*						\
+	 * 3. Hyp is a pointer to a kernel VA. Transform \
+	 * the kernel VA into an EL2 VA			\
+	 */						\
 	KTOHYP_REG(x2);					\
+	/* 4. Compute EL2 virtual address for hyp.vttbr */ \
 	mov	x1, #HYP_VTTBR;				\
 	add	x2, x2, x1;				\
+	/* 5. Load hyp.vttbr in x1 */			\
 	ldr	x1, [x2];				\
+	/* 6. Finally load VTTBR_EL2 */			\
 	msr	vttbr_el2, x1;				\
 							\
 	/* Load the guest EL1 stack pointer */		\
@@ -404,11 +413,22 @@
 	ldr	x2, [x1];				\
 	msr	sp_el1, x2;				\
 							\
-	LOAD_GUEST_VGIC_REGS();				\
+	LOAD_SYS_REG(HYPCTX_VGIC, ICH_HCR_EL2);		\
+	LOAD_SYS_REG(HYPCTX_VGIC, ICH_VMCR_EL2);	\
 							\
-	SAVE_GUEST_VTIMER_CPU_REGS();			\
+	/*						\
+	mov	x1, #HYPCTX_HYP;			\
+	add	x1, x1, x0;				\
+	ldr	x2, [x1];				\
+	KTOHYP_REG(x2);					\
+	mov	x1, #HYP_VTIMER_CNTHCTL_EL2;		\
+	add	x2, x2, x2;				\
+	ldr	x1, [x2];				\
+	msr	cnthctl_el2, x1;			\
+	*/\
 							\
 	LOAD_GUEST_X_REGS();				\
+
 
 /*
  * Save exit information
