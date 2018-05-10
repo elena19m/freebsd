@@ -33,10 +33,12 @@
 
 struct vtimer
 {
-	uint64_t	cntvoff;
+	uint64_t	cnthctl_el2;
 	int		phys_ns_irq;
-	int		virt_irq;
 	bool 		enabled;
+
+	int		virt_irq;
+	uint64_t	cntvoff;
 };
 
 struct vtimer_cpu
@@ -44,13 +46,13 @@ struct vtimer_cpu
 	struct callout	callout;
 	struct task 	task;
 	/*
-	 * CNTV_CTL_EL0:  Counter-timer Virtual Timer Control Register
-	 * CNTV_CVAL_EL0: Counter-timer Virtual Timer CompareValue Register
-	 * CNTV_TVAL_EL0: Counter-timer Virtual Timer TimerValue Register
+	 * CNTP_CTL_EL0:  Counter-timer Physical Timer Control Register
+	 * CNTP_CVAL_EL0: Counter-timer Physical Timer CompareValue Register
+	 * CNTP_TVAL_EL0: Counter-timer Physical Timer TimerValue Register
 	 */
-	uint64_t	cntv_cval_el0;
-	uint32_t	cntv_ctl_el0;
-	uint32_t	cntv_tval_el0;
+	uint64_t	cntp_cval_el0;
+	uint32_t	cntp_ctl_el0;
+	uint32_t	cntp_tval_el0;
 
 	bool		started;
 };
@@ -62,7 +64,7 @@ void 	vtimer_cpu_init(void *arg);
 void 	vtimer_cpu_terminate(void *arg);
 
 int	vtimer_attach_to_vm(void *arg, int phys_ns_irq, int virt_irq);
-int 	vtimer_hyp_init(void);
-int 	vtimer_init(void *arg);
+int 	vtimer_init(uint64_t cnthctl_el2);
+int 	vtimer_vminit(void *arg);
 
 #endif

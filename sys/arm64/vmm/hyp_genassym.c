@@ -101,6 +101,7 @@ ASSYM(HYPCTX_HYP, offsetof(struct hypctx, hyp));
 ASSYM(HYP_VTTBR, offsetof(struct hyp, vttbr));
 ASSYM(HYP_VTIMER_ENABLED, offsetof(struct hyp, vtimer.enabled));
 ASSYM(HYP_VTIMER_CNTVOFF, offsetof(struct hyp, vtimer.cntvoff));
+ASSYM(HYP_VTIMER_CNTHCTL_EL2, offsetof(struct hyp, vtimer.cnthctl_el2));
 
 ASSYM(HYPCTX_EXIT_INFO_ESR_EL2, offsetof(struct hypctx, exit_info.esr_el2));
 ASSYM(HYPCTX_EXIT_INFO_FAR_EL2, offsetof(struct hypctx, exit_info.far_el2));
@@ -114,9 +115,9 @@ ASSYM(HYPCTX_VGIC_ICH_MISR_EL2, offsetof(struct hypctx, vgic_cpu_if.ich_misr_el2
 ASSYM(HYPCTX_VGIC_ICH_VMCR_EL2, offsetof(struct hypctx, vgic_cpu_if.ich_vmcr_el2));
 ASSYM(HYPCTX_VGIC_ICH_LR_EL2, offsetof(struct hypctx, vgic_cpu_if.ich_lr_el2));
 
-ASSYM(HYPCTX_VTIMER_CPU_CNTV_CTL_EL0, offsetof(struct hypctx, vtimer_cpu.cntv_ctl_el0));
-ASSYM(HYPCTX_VTIMER_CPU_CNTV_CVAL_EL0, offsetof(struct hypctx, vtimer_cpu.cntv_cval_el0));
-ASSYM(HYPCTX_VTIMER_CPU_CNTV_TVAL_EL0, offsetof(struct hypctx, vtimer_cpu.cntv_tval_el0));
+ASSYM(HYPCTX_VTIMER_CPU_CNTP_CTL_EL0, offsetof(struct hypctx, vtimer_cpu.cntp_ctl_el0));
+ASSYM(HYPCTX_VTIMER_CPU_CNTP_CVAL_EL0, offsetof(struct hypctx, vtimer_cpu.cntp_cval_el0));
+ASSYM(HYPCTX_VTIMER_CPU_CNTP_TVAL_EL0, offsetof(struct hypctx, vtimer_cpu.cntp_tval_el0));
 
 #ifdef VFP
 ASSYM(HYPCTX_HOST_VFP_STATE, offsetof(struct hypctx, host_vfp_state));
