@@ -98,7 +98,7 @@ ASSYM(HYPCTX_SPSR_EL2, offsetof(struct hypctx, spsr_el2));
 
 ASSYM(HYPCTX_HYP, offsetof(struct hypctx, hyp));
 
-ASSYM(HYP_VTTBR, offsetof(struct hyp, vttbr));
+ASSYM(HYP_VTTBR_EL2, offsetof(struct hyp, vttbr_el2));
 ASSYM(HYP_VTIMER_ENABLED, offsetof(struct hyp, vtimer.enabled));
 ASSYM(HYP_VTIMER_CNTVOFF, offsetof(struct hyp, vtimer.cntvoff));
 ASSYM(HYP_VTIMER_CNTHCTL_EL2, offsetof(struct hyp, vtimer.cnthctl_el2));

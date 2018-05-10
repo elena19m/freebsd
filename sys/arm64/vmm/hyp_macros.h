@@ -386,7 +386,7 @@
 							\
 	/*LOAD_HYP_SYS_REG(HYP, VTTBR_EL2); */		\
 	/* 						\
-	 * Load the guest VTTBR from hypctx->hyp.vttbrr	\
+	 * Load the guest VTTBR_EL2 register from hypctx->hyp.vttbr_el2	\
 	 *						\
 	 * 1. Compute kernel VA of hyp member in x1 	\
 	 */						\
@@ -399,10 +399,10 @@
 	 * the kernel VA into an EL2 VA			\
 	 */						\
 	KTOHYP_REG(x2);					\
-	/* 4. Compute EL2 virtual address for hyp.vttbr */ \
-	mov	x1, #HYP_VTTBR;				\
+	/* 4. Compute EL2 virtual address for hyp.vttbr_el2 */ \
+	mov	x1, #HYP_VTTBR_EL2;			\
 	add	x2, x2, x1;				\
-	/* 5. Load hyp.vttbr in x1 */			\
+	/* 5. Load hyp.vttbr_el2 in x1 */			\
 	ldr	x1, [x2];				\
 	/* 6. Finally load VTTBR_EL2 */			\
 	msr	vttbr_el2, x1;				\

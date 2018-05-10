@@ -77,7 +77,7 @@ pmap_t hyp_pmap;
 static uint64_t vmid_generation = 0;
 static struct mtx vmid_generation_mtx;
 
-static void set_vttbr(struct hyp *hyp)
+static void arm64_set_vttbr(struct hyp *hyp)
 {
 	if (hyp->vmid_generation != 0 &&
 			((hyp->vmid_generation & ~VMID_GENERATION_MASK) !=
@@ -101,7 +101,7 @@ static void set_vttbr(struct hyp *hyp)
 	hyp->vmid_generation = vmid_generation;
 	mtx_unlock(&vmid_generation_mtx);
 out:
-	hyp->vttbr = build_vttbr(hyp->vmid_generation,
+	hyp->vttbr_el2 = build_vttbr(hyp->vmid_generation,
 			vtophys(hyp->stage2_map->pm_l0));
 }
 
@@ -110,7 +110,7 @@ arm_init(int ipinum)
 {
 	char *stack_top;
 	size_t hyp_code_len;
-	uint64_t ich_vtr_el2;
+	uint64_t ich_vtr_el2, cnthctl_el2;
 
 	if (!hypmode_enabled) {
 		printf("arm_init: Processor doesn't have support for virtualization.\n");
@@ -155,7 +155,9 @@ arm_init(int ipinum)
 	ich_vtr_el2 = vmm_call_hyp((void *)ktohyp(vmm_read_ich_vtr_el2));
 	vgic_v3_init(ich_vtr_el2);
 
-	//vtimer_hyp_init();
+	cnthctl_el2 = vmm_call_hyp((void *)ktohyp(vmm_read_cnthctl_el2));
+	printf("cnthctl_el2 = 0x%lx\n", cnthctl_el2);
+	vtimer_init(cnthctl_el2);
 
 	return 0;
 }
@@ -201,7 +203,7 @@ arm_vminit(struct vm *vm)
 
 	hyp->stage2_map = malloc(sizeof(*hyp->stage2_map), M_HYP, M_WAITOK | M_ZERO);
 	hypmap_init(hyp->stage2_map, PT_STAGE2);
-	set_vttbr(hyp);
+	arm64_set_vttbr(hyp);
 
 	mtx_init(&hyp->vgic_dist.dist_lock, "Distributor Lock", "", MTX_SPIN);
 
@@ -266,7 +268,7 @@ arm_vminit(struct vm *vm)
 	hypmap_map(hyp_pmap, (vm_offset_t)hyp, sizeof(struct hyp),
 			VM_PROT_READ | VM_PROT_WRITE);
 
-	vtimer_init(hyp);
+	vtimer_vminit(hyp);
 
 	return (hyp);
 }
@@ -390,6 +392,9 @@ handle_el1_sync_excp(struct hyp *hyp, int vcpu, struct vm_exit *vme_ret)
 	esr_ec = ESR_ELx_EXCEPTION(vme_ret->u.hyp.esr_el2);
 	esr_iss = vme_ret->u.hyp.esr_el2 & ESR_ELx_ISS_MASK;
 
+	if (esr_ec != EXCP_DATA_ABORT_L)
+		printf("\nesr_ec = 0x%x\n", esr_ec);
+
 	switch(esr_ec) {
 	case EXCP_UNKNOWN:
 		eprintf("Unknown exception from guest\n");
@@ -406,7 +411,7 @@ handle_el1_sync_excp(struct hyp *hyp, int vcpu, struct vm_exit *vme_ret)
 	case EXCP_DATA_ABORT_L:
 		/* Check if instruction syndrome is valid */
 		if (!(esr_iss & ISS_DATA_ISV)) {
-			eprintf("Data abort from guest with invalid instruction syndrome\n");
+			eprintf("Data abort with invalid instruction syndrome\n");
 			print_hyp_regs(vme_ret);
 			vme_ret->exitcode = VM_EXITCODE_HYP;
 			break;
@@ -417,7 +422,7 @@ handle_el1_sync_excp(struct hyp *hyp, int vcpu, struct vm_exit *vme_ret)
 		 * Any other type of data fault will be treated as an error.
 		 */
 		if (!(ISS_DATA_DFSC_TF(esr_iss))) {
-			eprintf("Data abort from guest NOT on a stage 2 translation\n");
+			eprintf("Data abort not on a stage 2 translation\n");
 			print_hyp_regs(vme_ret);
 			vme_ret->exitcode = VM_EXITCODE_HYP;
 			break;
@@ -479,6 +484,9 @@ handle_world_switch(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 	return (handled);
 }
 
+static uint32_t prev_cntp_ctl_el0 = 0;
+static uint32_t prev_host_ctl = 0;
+
 static int
 arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	void *rendezvous_cookie, void *suspend_cookie)
@@ -490,6 +498,7 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	struct hypctx *hypctx;
 	struct vm *vm;
 	struct vm_exit *vmexit;
+	uint32_t host_ctl;
 
 	hyp = arg;
 	vm = hyp->vm;
@@ -505,10 +514,30 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 		//vgic_flush_hwstate(hypctx);
 		//vtimer_flush_hwstate(hypctx);
 
+	
 		daif = intr_disable();
 		excp_type = vmm_call_hyp((void *)ktohyp(vmm_enter_guest),
 				ktohyp(hypctx));
 		intr_restore(daif);
+
+		uint32_t esr_ec;
+		esr_ec = ESR_ELx_EXCEPTION(hypctx->exit_info.esr_el2);
+		host_ctl = READ_SPECIALREG(cntp_ctl_el0);
+		if (host_ctl != prev_host_ctl) {
+			printf("new HOST cntp_ctl_el0 = 0x%x\n", host_ctl);
+			printf("previous HOST cntp_ctl_el0 = 0x%x\n", prev_host_ctl);
+			printf("excp_type = %s\n", excp_type_str(excp_type));
+			printf("esr_ec = 0x%x\n", esr_ec);
+			prev_host_ctl = host_ctl;
+		}
+
+		if (hypctx->vtimer_cpu.cntp_ctl_el0 != prev_cntp_ctl_el0) {
+			printf("new GUEST cntp_ctl_el0 = 0x%x\n", hypctx->vtimer_cpu.cntp_ctl_el0);
+			printf("previous GUEST cntp_ctl_el0 = 0x%x\n", prev_cntp_ctl_el0);
+			printf("excp_type = %s\n", excp_type_str(excp_type));
+			printf("esr_ec = 0x%x\n", esr_ec);
+			prev_cntp_ctl_el0 = hypctx->vtimer_cpu.cntp_ctl_el0;
+		}
 
 		vmexit->pc = hypctx->elr_el2;
 		vmexit->u.hyp.exception_nr = excp_type;
@@ -516,12 +545,11 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 		vmexit->u.hyp.far_el2 = hypctx->exit_info.far_el2;
 		vmexit->u.hyp.hpfar_el2 = hypctx->exit_info.hpfar_el2;
 
-		/* TODO: ARMv8 has fixed instruction length (4 bytes) */
-		vmexit->inst_length = 4;
+		vmexit->inst_length = INSN_SIZE;
 		handled = handle_world_switch(hyp, vcpu, vmexit);
 
 		/* TODO: sync here or starting the loop (and not emulating)? */
-		//vtimer_sync_hwstate(hypctx);
+		//vtimer_sync_hwstate(hyp);
 		//vgic_sync_hwstate(hypctx);
 
 		if (handled == UNHANDLED)
