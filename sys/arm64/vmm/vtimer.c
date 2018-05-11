@@ -39,6 +39,7 @@
 #include "vgic_v3.h"
 #include "arm64.h"
 #include "vtimer.h"
+#include "reg_emul.h"
 
 #define	USECS_PER_SEC	1000000
 
@@ -206,7 +207,7 @@ vtimer_vminit(void *arg)
 	vtimer_cpu = &hyp->ctx[0].vtimer_cpu;
 
 	/*
-	 * Configure timer interrupts for the CPU.
+	 * Configure timer interrupts for the VCPU.
 	 *
 	 * CNTP_CTL_IMASK: mask interrupts
 	 * ~CNTP_CTL_ENABLE: disable the timer
@@ -226,5 +227,74 @@ vtimer_vminit(void *arg)
 	hyp->vtimer.cntvoff = vtimer_read_ptimer();
 	hyp->vtimer.enabled = true;
 
+	return (0);
+}
+
+int
+vtimer_read_reg(void *vm, int vcpuid, uint64_t *rval, uint32_t inst_syndrome,
+    void *arg)
+{
+	struct hyp *hyp;
+	struct vtimer_cpu *vtimer_cpu;
+	bool *retu;
+
+	retu = (bool *)arg;
+	hyp = vm_get_cookie(vm);
+	vtimer_cpu = &hyp->ctx[vcpuid].vtimer_cpu;
+
+	if (INST_IS_REG(CNTP_CTL_EL0, inst_syndrome)) {
+		eprintf("CNTP_CTL_EL0\n");
+		*rval = vtimer_cpu->cntp_ctl_el0;
+	} else if (INST_IS_REG(CNTP_CVAL_EL0, inst_syndrome)) {
+		eprintf("CNTP_CVAL_EL0\n");
+		*rval = vtimer_cpu->cntp_ctl_el0;
+	} else if (INST_IS_REG(CNTP_TVAL_EL0, inst_syndrome)) {
+		eprintf("CNTP_TVAL_EL0\n");
+		*rval = vtimer_cpu->cntp_ctl_el0;
+	} else {
+		eprintf("Uknown register\n");
+		*rval = 0;
+		goto out_no_emulation;
+	}
+
+	*retu = false;
+	return (0);
+
+out_no_emulation:
+	*retu = true;
+	return (0);
+}
+
+int
+vtimer_write_reg(void *vm, int vcpuid, uint64_t wval, uint32_t inst_syndrome,
+    void *arg)
+{
+	struct hyp *hyp;
+	struct vtimer_cpu *vtimer_cpu;
+	bool *retu;
+
+	retu = (bool *)arg;
+	hyp = vm_get_cookie(vm);
+	vtimer_cpu = &hyp->ctx[vcpuid].vtimer_cpu;
+
+	if (INST_IS_REG(CNTP_CTL_EL0, inst_syndrome)) {
+		eprintf("CNTP_CTL_EL0\n");
+		vtimer_cpu->cntp_ctl_el0 = wval;
+	} else if (INST_IS_REG(CNTP_CVAL_EL0, inst_syndrome)) {
+		eprintf("CNTP_CVAL_EL0\n");
+		vtimer_cpu->cntp_cval_el0 = wval;
+	} else if (INST_IS_REG(CNTP_TVAL_EL0, inst_syndrome)) {
+		eprintf("CNTP_TVAL_EL0\n");
+		vtimer_cpu->cntp_tval_el0 = wval;
+	} else {
+		eprintf("Uknown register\n");
+		goto out_no_emulation;
+	}
+
+	*retu = false;
+	return (0);
+
+out_no_emulation:
+	*retu = true;
 	return (0);
 }

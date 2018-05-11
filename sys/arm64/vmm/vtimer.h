@@ -31,6 +31,8 @@
 
 #include <sys/taskqueue.h>
 
+#include <machine/vmm_instruction_emul.h>
+
 struct vtimer
 {
 	uint64_t	cnthctl_el2;
@@ -66,5 +68,10 @@ void 	vtimer_cpu_terminate(void *arg);
 int	vtimer_attach_to_vm(void *arg, int phys_ns_irq, int virt_irq);
 int 	vtimer_init(uint64_t cnthctl_el2);
 int 	vtimer_vminit(void *arg);
+
+int 	vtimer_read_reg(void *vm, int vcpuid, uint64_t *rval,
+			uint32_t inst_syndrome, void *arg);
+int 	vtimer_write_reg(void *vm, int vcpuid, uint64_t wval,
+			 uint32_t inst_syndrome, void *arg);
 
 #endif

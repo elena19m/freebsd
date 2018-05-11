@@ -344,9 +344,18 @@ search_by_type(const char *type, caddr_t preload_metadata)
 static int
 vm_handle_reg_emul(struct vm *vm, int vcpuid, bool *retu)
 {
-	eprintf("Entering\n");
-	*retu = true;
-	return (0);
+	struct hyp *hyp;
+	struct vm_exit *vme;
+	struct vre *vre;
+	int error;
+
+	hyp = (struct hyp *)vm->cookie;
+	vme = vm_exitinfo(vm, vcpuid);
+	vre = &vme->u.reg_emul.vre;
+
+	error = vmm_emulate_register(vm, vcpuid, vre, vtimer_read_reg,
+				     vtimer_write_reg, retu);
+	return (error);
 }
 
 static int

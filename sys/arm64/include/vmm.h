@@ -286,11 +286,17 @@ int vcpu_trace_exceptions(struct vm *vm, int vcpuid);
 
 #define	VM_MAXCPU	1
 
-#define	VM_VIE_DIR_READ		0
-#define	VM_VIE_DIR_WRITE	1
+#define	VM_DIR_READ	0
+#define	VM_DIR_WRITE	1
 
 struct vie {
 	uint8_t access_size:4, sign_extend:1, dir:1, unused:2;
+	enum vm_reg_name reg;
+};
+
+struct vre {
+	uint32_t inst_syndrome;
+	uint8_t dir:1, unused:7;
 	enum vm_reg_name reg;
 };
 
@@ -343,11 +349,8 @@ struct vm_exit {
 			uint64_t	hpfar_el2;	/* Hypervisor IPA Fault Address Register */
 		} hyp;
 		struct {
-			uint32_t 	inst_syndrome;
-			uint8_t		dir:1, unused:7;
-			enum vm_reg_name reg;
+			struct vre 	vre;
 		} reg_emul;
-
 		struct {
 			uint64_t	gpa;
 			int		fault_type;
