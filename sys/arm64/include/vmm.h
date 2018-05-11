@@ -95,7 +95,7 @@ enum vm_reg_name {
 #define	VM_INTINFO_HWEXCEPTION	(3 << 8)
 #define	VM_INTINFO_SWINTR	(4 << 8)
 
-#define VM_GUEST_BASE_IPA	(0x80000000UL)	/* Guest kernel start ipa */
+#define VM_GUEST_BASE_IPA	0x80000000UL	/* Guest kernel start ipa */
 
 #ifdef _KERNEL
 
@@ -307,6 +307,7 @@ enum vm_cap_type {
 enum vm_exitcode {
 	VM_EXITCODE_BOGUS,
 	VM_EXITCODE_INST_EMUL,
+	VM_EXITCODE_REG_EMUL,
 	VM_EXITCODE_HYP,
 	VM_EXITCODE_WFI,
 	VM_EXITCODE_MAX
@@ -341,6 +342,11 @@ struct vm_exit {
 			uint64_t	far_el2;	/* Fault Address Register */
 			uint64_t	hpfar_el2;	/* Hypervisor IPA Fault Address Register */
 		} hyp;
+		struct {
+			uint32_t 	inst_syndrome;
+			uint8_t		dir:1, unused:7;
+			enum vm_reg_name reg;
+		} reg_emul;
 
 		struct {
 			uint64_t	gpa;
@@ -382,8 +388,11 @@ struct vm_exit {
 			uint64_t	exitinfo2;
 		} svm;
 		struct {
+#ifdef __aarch64__
+#else
 			uint32_t	code;		/* ecx value */
 			uint64_t	wval;
+#endif
 		} msr;
 		struct {
 			int		vcpu;

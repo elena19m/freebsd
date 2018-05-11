@@ -27,19 +27,28 @@
 #ifndef	_VMM_INSTRUCTION_EMUL_H_
 #define	_VMM_INSTRUCTION_EMUL_H_
 
-#include <sys/mman.h>
+enum vm_inst_emul_result {
+	VM_INST_EMUL_SUCCESS,
+	VM_INST_EMUL_UNKNOWN,
+	VM_INST_EMUL_ERROR
+};
 
 /*
  * Callback functions to read and write memory regions.
  */
 typedef int (*mem_region_read_t)(void *vm, int cpuid, uint64_t gpa,
 				 uint64_t *rval, int rsize, void *arg);
-
 typedef int (*mem_region_write_t)(void *vm, int cpuid, uint64_t gpa,
 				  uint64_t wval, int wsize, void *arg);
 
 /*
- * Emulate the decoded 'vie' instruction.
+ * Callback functions to read and write registers.
+ */
+typedef int (*reg_read_t)(void *vm, int cpuid, uint64_t *rval, void *arg);
+typedef int (*reg_write_t)(void *vm, int cpuid, uint64_t wval, void *arg);
+
+/*
+ * Emulate the decoded 'vie' instruction when it contains a memory operation.
  *
  * The callbacks 'mrr' and 'mrw' emulate reads and writes to the memory region
  * containing 'gpa'. 'mrarg' is an opaque argument that is passed into the
@@ -47,9 +56,23 @@ typedef int (*mem_region_write_t)(void *vm, int cpuid, uint64_t gpa,
  *
  * 'void *vm' should be 'struct vm *' when called from kernel context and
  * 'struct vmctx *' when called from user context.
- * s
+ *
  */
 int vmm_emulate_instruction(void *vm, int cpuid, uint64_t gpa, struct vie *vie,
     mem_region_read_t mrr, mem_region_write_t mrw, void *mrarg);
+
+/*
+ * Emulate the decoded 'vie' instruction when it contains a register access.
+ *
+ * The callbacks 'regread' and 'regwrite' emulate reads and writes to the
+ * register from 'vie'. 'regarg' is an opaque argument that is passed into the
+ * callback functions.
+ *
+ * 'void *vm' should be 'struct vm *' when called from kernel context and
+ * 'struct vmctx *' when called from user context.
+ *
+ */
+int vmm_emulate_register(void *vm, int vcpuid, struct vie *vie, reg_read_t regread,
+    reg_write_t regwrite, void *regarg);
 
 #endif	/* _VMM_INSTRUCTION_EMUL_H_ */

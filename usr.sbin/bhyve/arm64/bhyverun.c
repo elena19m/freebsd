@@ -44,13 +44,13 @@
 #include "mem.h"
 #include "mevent.h"
 
-#define GUEST_NIO_PORT		0x488	/* guest upcalls via i/o port */
+#define GUEST_NIO_PORT	0x488	/* guest upcalls via i/o port */
 
-#define	VMEXIT_SWITCH		0	/* force vcpu switch in mux mode */
-#define	VMEXIT_CONTINUE		1	/* continue from next instruction */
-#define	VMEXIT_RESTART		2	/* restart current instruction */
-#define	VMEXIT_ABORT		3	/* abort the vm run loop */
-#define	VMEXIT_RESET		4	/* guest machine has reset */
+#define	VMEXIT_SWITCH	0	/* force vcpu switch in mux mode */
+#define	VMEXIT_CONTINUE	1	/* continue from next instruction */
+#define	VMEXIT_RESTART	2	/* restart current instruction */
+#define	VMEXIT_ABORT	3	/* abort the vm run loop */
+#define	VMEXIT_RESET	4	/* guest machine has reset */
 
 #define MB		(1024UL * 1024)
 #define GB		(1024UL * MB)
@@ -218,6 +218,7 @@ static vmexit_handler_t handler[VM_EXITCODE_MAX] = {
 	[VM_EXITCODE_HYP]    = vmexit_hyp,
 	[VM_EXITCODE_BOGUS]  = vmexit_bogus,
 	[VM_EXITCODE_INST_EMUL] = vmexit_inst_emul,
+	[VM_EXITCODE_REG_EMUL] = vmexit_hyp,
 };
 
 static void
