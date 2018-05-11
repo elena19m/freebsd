@@ -362,10 +362,7 @@ arm64_print_hyp_regs(struct vm_exit *vme)
 	printf("hpfar_el2: 0x%016lx\n", vme->u.hyp.hpfar_el2);
 }
 
-/*
- * 'u' is an union, 'u.hyp' member will be replaced by 'u.inst_emul' after
- * this call.
- */
+/* 'u.hyp' member will be replaced by 'u.inst_emul' */
 static void
 arm64_gen_inst_emul_data(uint32_t esr_iss, struct vm_exit *vme_ret)
 {
@@ -387,20 +384,24 @@ arm64_gen_inst_emul_data(uint32_t esr_iss, struct vm_exit *vme_ret)
 	vie = &vme_ret->u.inst_emul.vie;
 	vie->access_size = 1 << esr_sas;
 	vie->sign_extend = (esr_iss & ISS_DATA_SSE) ? 1 : 0;
-	vie->dir = (esr_iss & ISS_DATA_WnR) ? VM_VIE_DIR_WRITE : VM_VIE_DIR_READ;
+	vie->dir = (esr_iss & ISS_DATA_WnR) ? VM_DIR_WRITE : VM_DIR_READ;
 	vie->reg = get_vm_reg_name(reg_num, UNUSED);
 }
 
+/* 'u.hyp' member will be replaced by 'u.reg_emul' */
 static void
 arm64_gen_reg_emul_data(uint32_t esr_iss, struct vm_exit *vme_ret)
 {
 	uint32_t reg_num;
+	struct vre *vre;
 
-	/* Direction 1 means read, ARMv8 Architecture Manual, p. D7-2273. */
-	vme_ret->u.reg_emul.dir = (esr_iss & ISS_MSR_DIR) ? VM_VIE_DIR_READ : VM_VIE_DIR_WRITE;
+	vre = &vme_ret->u.reg_emul.vre;
+
+	vre->inst_syndrome = esr_iss;
+	/* ARMv8 Architecture Manual, p. D7-2273: 1 means read */
+	vre->dir = (esr_iss & ISS_MSR_DIR) ? VM_DIR_READ : VM_DIR_WRITE;
 	reg_num = ISS_MSR_Rt(esr_iss);
-	vme_ret->u.reg_emul.reg = get_vm_reg_name(reg_num, UNUSED);
-	vme_ret->u.reg_emul.inst_syndrome = esr_iss;
+	vre->reg = get_vm_reg_name(reg_num, UNUSED);
 }
 
 static int

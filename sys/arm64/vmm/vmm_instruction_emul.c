@@ -53,31 +53,44 @@ int
 vmm_emulate_instruction(void *vm, int vcpuid, uint64_t gpa, struct vie *vie,
     mem_region_read_t memread, mem_region_write_t memwrite, void *memarg)
 {
-	int error;
 	uint64_t val;
+	int error;
 
-	if(vie->dir == VM_VIE_DIR_WRITE) {
-		error = vm_get_register(vm, vcpuid, vie->reg, &val);
-		if (error)
-			goto out;
-		error = memwrite(vm, vcpuid, gpa, val, vie->access_size, memarg);
-	} else {
+	if (vie->dir == VM_DIR_READ) {
 		error = memread(vm, vcpuid, gpa, &val, vie->access_size, memarg);
 		if (error)
 			goto out;
 		error = vm_set_register(vm, vcpuid, vie->reg, val);
+	} else {
+		error = vm_get_register(vm, vcpuid, vie->reg, &val);
+		if (error)
+			goto out;
+		error = memwrite(vm, vcpuid, gpa, val, vie->access_size, memarg);
 	}
+
 out:
 	return (error);
 }
 
 int
-vmm_emulate_register(void *vm, int vcpuid, struct vie *vie, reg_read_t regread,
-		reg_write_t regwrite, void *regarg)
+vmm_emulate_register(void *vm, int vcpuid, struct vre *vre, reg_read_t regread,
+    reg_write_t regwrite, void *regarg)
 {
+	uint64_t val;
 	int error;
 
-	error = 0;
+	if (vre->dir == VM_DIR_READ) {
+		error = regread(vm, vcpuid, &val, vre->inst_syndrome, regarg);
+		if (error)
+			goto out;
+		error = vm_set_register(vm, vcpuid, vre->reg, val);
+	} else {
+		error = vm_get_register(vm, vcpuid, vre->reg, &val);
+		if (error)
+			goto out;
+		error = regwrite(vm, vcpuid, val, vre->inst_syndrome, regarg);
+	}
 
+out:
 	return (error);
 }
