@@ -149,7 +149,7 @@ static uint16_t vgic_dist_conf_compress(uint32_t val)
 	val;									\
 })
 
-static int
+int
 vgic_v3_redist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 		int size, void *arg)
 {
@@ -157,7 +157,9 @@ vgic_v3_redist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 	struct vgic_v3_redist *redist;
 	struct vgic_v3_dist *dist;
 	uint64_t off;
+	bool *retu;
 
+	retu = (bool *)arg;
 	hyp = vm_get_cookie(vm);
 	redist = &hyp->ctx[vcpuid].vgic_redist;
 	dist = &hyp->vgic_dist;
@@ -213,6 +215,7 @@ vgic_v3_redist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 		*rval = RES0;
 	}
 
+	*retu = false;
 	return (0);
 }
 
@@ -231,14 +234,16 @@ do {										\
 	}									\
 } while (0)
 
-static int
+int
 vgic_v3_redist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 		int size, void *arg)
 {
 	struct hyp *hyp;
 	struct vgic_v3_redist *redist;
 	uint64_t off;
+	bool *retu;
 
+	retu = (bool *)arg;
 	hyp = vm_get_cookie(vm);
 	redist = &hyp->ctx[vcpuid].vgic_redist;
 
@@ -295,17 +300,20 @@ vgic_v3_redist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 	}
 
 
+	*retu = false;
 	return (0);
 }
 
-static int
+int
 vgic_v3_dist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
-		int size, void *arg)
+		  int size, void *arg)
 {
 	struct hyp *hyp;
 	struct vgic_v3_dist *dist;
 	uint64_t off;
+	bool *retu;
 
+	retu = (bool *)arg;
 	hyp = vm_get_cookie(vm);
 	dist = &hyp->vgic_dist;
 
@@ -357,10 +365,11 @@ vgic_v3_dist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 		*rval = RES0;
 	}
 
+	*retu = false;
 	return (0);
 }
 
-static int
+int
 vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 		int size, void *arg)
 {
@@ -368,7 +377,9 @@ vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 	struct vgic_v3_dist *dist;
 	uint64_t off;
 	uint32_t icenabler, isenabler;
+	bool *retu;
 
+	retu = (bool *)arg;
 	hyp = vm_get_cookie(vm);
 	dist = &hyp->vgic_dist;
 
@@ -428,59 +439,8 @@ vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 		eprintf("Unknown register offset: 0x%04lx\n", off);
 	}
 
+	*retu = false;
 	return (0);
-}
-
-int
-vgic_v3_do_emulation(void *arg, int vcpuid, struct vm_exit *vme, bool *retu)
-{
-	struct hyp *hyp;
-	struct vgic_v3_dist *dist;
-	struct vgic_v3_redist *redist;
-	uint64_t fault_ipa;
-	uint32_t esr_ec;
-	int error;
-
-	hyp = (struct hyp *)arg;
-
-	if (!hyp->vgic_attached) {
-		*retu = true;
-		return (0);
-	}
-
-	esr_ec = ESR_ELx_EXCEPTION(hyp->ctx[vcpuid].exit_info.esr_el2);
-	if (esr_ec != EXCP_DATA_ABORT_L) {
-		/* The VGIC only emulates memory accesses */
-		*retu = true;
-		return (0);
-	}
-
-	fault_ipa = vme->u.inst_emul.gpa;
-	dist = &hyp->vgic_dist;
-	redist = &hyp->ctx[vcpuid].vgic_redist;
-
-	if (fault_ipa >= dist->ipa && fault_ipa < dist->ipa + dist->size) {
-		/* Emulate distributor. */
-		*retu = false;
-		error = vmm_emulate_instruction(hyp->vm, vcpuid, fault_ipa,
-				&vme->u.inst_emul.vie, vgic_v3_dist_read,
-				vgic_v3_dist_write, retu);
-	} else if (fault_ipa >= redist->ipa && fault_ipa < redist->ipa + redist->size) {
-		/* Emulate redistributor. */
-		*retu = false;
-		error = vmm_emulate_instruction(hyp->vm, vcpuid, fault_ipa,
-				&vme->u.inst_emul.vie, vgic_v3_redist_read,
-				vgic_v3_redist_write, retu);
-	} else {
-		/*
-		 * We cannot emulate the instruction in kernel space, return to
-		 * user space for emulation.
-		 */
-		*retu = true;
-		error = 0;
-	}
-
-	return (error);
 }
 
 #define	INIT_DIST_REG(name, n, base, dist)				\

@@ -70,3 +70,14 @@ vmm_emulate_instruction(void *vm, int vcpuid, uint64_t gpa, struct vie *vie,
 out:
 	return (error);
 }
+
+int
+vmm_emulate_register(void *vm, int vcpuid, struct vie *vie, reg_read_t regread,
+		reg_write_t regwrite, void *regarg)
+{
+	int error;
+
+	error = 0;
+
+	return (error);
+}

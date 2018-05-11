@@ -56,12 +56,14 @@
 #include <machine/vmparam.h>
 #include <machine/vmm.h>
 #include <machine/vmm_dev.h>
+#include <machine/armreg.h>
 
 #include "vmm_stat.h"
 #include "vmm_mem.h"
 #include "mmu.h"
 #include "arm64.h"
 #include "vgic_v3.h"
+#include "vtimer.h"
 
 #define	BSP	0			/* the boostrap processor */
 
@@ -339,12 +341,63 @@ search_by_type(const char *type, caddr_t preload_metadata)
     return(NULL);
 }
 
+static int
+vm_handle_reg_emul(struct vm *vm, int vcpuid, bool *retu)
+{
+	eprintf("Entering\n");
+	*retu = true;
+	return (0);
+}
+
+static int
+vm_handle_inst_emul(struct vm *vm, int vcpuid, bool *retu)
+{
+	struct vm_exit *vme;
+	struct vie *vie;
+	struct hyp *hyp;
+	struct vgic_v3_dist *dist;
+	struct vgic_v3_redist *redist;
+	uint64_t fault_ipa;
+	mem_region_read_t mread;
+	mem_region_write_t mwrite;
+	int error;
+
+	hyp = (struct hyp *)vm->cookie;
+	vme = vm_exitinfo(vm, vcpuid);
+	vie = &vme->u.inst_emul.vie;
+
+	if (!hyp->vgic_attached) {
+		/* Skip the VGIC and emulate in userland */
+		*retu = true;
+		return (0);
+	}
+
+	fault_ipa = vme->u.inst_emul.gpa;
+	dist = &hyp->vgic_dist;
+	redist = &hyp->ctx[vcpuid].vgic_redist;
+
+	if (fault_ipa >= dist->ipa && fault_ipa < dist->ipa + dist->size) {
+		mread = vgic_v3_dist_read;
+		mwrite = vgic_v3_dist_write;
+	} else if (fault_ipa >= redist->ipa && fault_ipa < redist->ipa + redist->size) {
+		mread = vgic_v3_redist_read;
+		mwrite = vgic_v3_redist_write;
+	} else {
+		/* Skip the VGIC and emulate in userland */
+		*retu = true;
+		return (0);
+	}
+
+	error = vmm_emulate_instruction(vm, vcpuid, fault_ipa, vie,
+					mread, mwrite, retu);
+	return (error);
+}
+
 int
 vm_run(struct vm *vm, struct vm_run *vmrun)
 {
 	int error, vcpuid;
 	register_t pc;
-	struct vcpu *vcpu;
 	struct vm_exit *vme;
 	bool retu;
 	void *rvc, *sc;
@@ -358,58 +411,28 @@ vm_run(struct vm *vm, struct vm_run *vmrun)
 	if (!CPU_ISSET(vcpuid, &vm->active_cpus))
 		return (EINVAL);
 
-	vcpu = &vm->vcpu[vcpuid];
-	vme = &vcpu->exitinfo;
-
-	/*
-	vm_paddr_t pa = hypmap_get(vm->cookie, VM_GUEST_BASE_IPA + 0x1000);
-	uint32_t *instr = (uint32_t *)PHYS_TO_DMAP(pa);
-	printf("first instruction:\n");
-       	printf("0x%08x\n", *instr);
-	printf("\n");
-
-	pa = hypmap_get(vm->cookie, VM_GUEST_BASE_IPA + 0xe89000 + 0x3fd000);
-	char  *envp = (char *)PHYS_TO_DMAP(pa);
-	printf("env:\n");
-	while (true) {
-		printf("%d ", *envp);
-		if (*envp == 0 && *(envp + 1) == 0) {
-			printf("%d ", *envp);
-			break;
-		}
-		envp++;
-	}
-	printf("\n\n");
-
-	pa = hypmap_get(vm->cookie, VM_GUEST_BASE_IPA + 0xe8a000 + 0x3fd000);
-	char  *preload_metadata = (char *)PHYS_TO_DMAP(pa);
-	printf("preload_search_by_type(\"elf kernel\") = 0x%016lx\n",
-			(uint64_t)search_by_type("elf kernel", preload_metadata));
-	printf("\n");
-	*/
-
-
 	rvc = sc = NULL;
 restart:
 	critical_enter();
 	error = VMRUN(vm->cookie, vcpuid, pc, NULL, rvc, sc);
 	critical_exit();
 
-	//VMCLEANUP(vm->cookie);
-	//panic("\n\n\ncleanup successful!\n\n");
-
+	vme = vm_exitinfo(vm, vcpuid);
 	if (error == 0) {
+		retu = false;
 		switch (vme->exitcode) {
 		case VM_EXITCODE_INST_EMUL:
-			/* Check if we need to do in-kernel emulation */
 			pc = vme->pc + vme->inst_length;
-			error = vgic_v3_do_emulation(vm->cookie, vcpuid, vme, &retu);
+			error = vm_handle_inst_emul(vm, vcpuid, &retu);
+			break;
+
+		case VM_EXITCODE_REG_EMUL:
+			pc = vme->pc + vme->inst_length;
+			error = vm_handle_reg_emul(vm, vcpuid, &retu);
 			break;
 
 		case VM_EXITCODE_WFI:
 			pc = vme->pc + vme->inst_length;
-			retu = true;
-			/* vm_handle_wfi always sets retu to false... */
 			error = vm_handle_wfi(vm, vcpuid, vme, &retu);
 			break;
 

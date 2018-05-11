@@ -354,34 +354,53 @@ get_vm_reg_name(uint32_t reg_nr, uint32_t mode __attribute__((unused)))
 	return (VM_REG_LAST);
 }
 
-static inline void print_hyp_regs(struct vm_exit *vme)
+static inline void
+arm64_print_hyp_regs(struct vm_exit *vme)
 {
 	printf("esr_el2:   0x%08x\n", vme->u.hyp.esr_el2);
 	printf("far_el2:   0x%016lx\n", vme->u.hyp.far_el2);
 	printf("hpfar_el2: 0x%016lx\n", vme->u.hyp.hpfar_el2);
 }
 
+/*
+ * 'u' is an union, 'u.hyp' member will be replaced by 'u.inst_emul' after
+ * this call.
+ */
 static void
-gen_inst_emul_data(uint32_t esr_iss, struct vm_exit *vme_ret)
+arm64_gen_inst_emul_data(uint32_t esr_iss, struct vm_exit *vme_ret)
 {
 	struct vie *vie;
-	uint32_t esr_sas, reg_nr;
+	uint32_t esr_sas, reg_num;
+	uint64_t page_off;
 
 	/* Get bits [47:12] of the IPA from HPFAR_EL2. */
-	vme_ret->u.inst_emul.gpa = vme_ret->u.hyp.hpfar_el2 >> HPFAR_EL2_FIPA_SHIFT;
+	vme_ret->u.inst_emul.gpa = (vme_ret->u.hyp.hpfar_el2) >> HPFAR_EL2_FIPA_SHIFT;
 	/* The IPA is the base address of a 4KB page, make bits [11:0] zero. */
-	vme_ret->u.inst_emul.gpa <<= PAGE_SHIFT;
+	vme_ret->u.inst_emul.gpa = (vme_ret->u.inst_emul.gpa) << PAGE_SHIFT;
 	/* Bits [11:0] are the same as bits [11:0] from the virtual address. */
-	vme_ret->u.inst_emul.gpa += FAR_EL2_PAGE_OFFSET(vme_ret->u.hyp.far_el2);
+	page_off = FAR_EL2_PAGE_OFFSET(vme_ret->u.hyp.far_el2);
+	vme_ret->u.inst_emul.gpa = vme_ret->u.inst_emul.gpa + page_off;
 
 	esr_sas = (esr_iss & ISS_DATA_SAS_MASK) >> ISS_DATA_SAS_SHIFT;
-	reg_nr = (esr_iss & ISS_DATA_SRT_MASK) >> ISS_DATA_SRT_SHIFT;
+	reg_num = (esr_iss & ISS_DATA_SRT_MASK) >> ISS_DATA_SRT_SHIFT;
 
 	vie = &vme_ret->u.inst_emul.vie;
 	vie->access_size = 1 << esr_sas;
 	vie->sign_extend = (esr_iss & ISS_DATA_SSE) ? 1 : 0;
 	vie->dir = (esr_iss & ISS_DATA_WnR) ? VM_VIE_DIR_WRITE : VM_VIE_DIR_READ;
-	vie->reg = get_vm_reg_name(reg_nr, UNUSED);
+	vie->reg = get_vm_reg_name(reg_num, UNUSED);
+}
+
+static void
+arm64_gen_reg_emul_data(uint32_t esr_iss, struct vm_exit *vme_ret)
+{
+	uint32_t reg_num;
+
+	/* Direction 1 means read, ARMv8 Architecture Manual, p. D7-2273. */
+	vme_ret->u.reg_emul.dir = (esr_iss & ISS_MSR_DIR) ? VM_VIE_DIR_READ : VM_VIE_DIR_WRITE;
+	reg_num = ISS_MSR_Rt(esr_iss);
+	vme_ret->u.reg_emul.reg = get_vm_reg_name(reg_num, UNUSED);
+	vme_ret->u.reg_emul.inst_syndrome = esr_iss;
 }
 
 static int
@@ -392,27 +411,29 @@ handle_el1_sync_excp(struct hyp *hyp, int vcpu, struct vm_exit *vme_ret)
 	esr_ec = ESR_ELx_EXCEPTION(vme_ret->u.hyp.esr_el2);
 	esr_iss = vme_ret->u.hyp.esr_el2 & ESR_ELx_ISS_MASK;
 
-	if (esr_ec != EXCP_DATA_ABORT_L)
-		printf("\nesr_ec = 0x%x\n", esr_ec);
-
 	switch(esr_ec) {
 	case EXCP_UNKNOWN:
 		eprintf("Unknown exception from guest\n");
-		print_hyp_regs(vme_ret);
+		arm64_print_hyp_regs(vme_ret);
 		vme_ret->exitcode = VM_EXITCODE_HYP;
 		break;
 
 	case EXCP_HVC:
 		eprintf("Unsupported HVC call from guest\n");
-		print_hyp_regs(vme_ret);
+		arm64_print_hyp_regs(vme_ret);
 		vme_ret->exitcode = VM_EXITCODE_HYP;
+		break;
+
+	case EXCP_MSR:
+		arm64_gen_reg_emul_data(esr_iss, vme_ret);
+		vme_ret->exitcode = VM_EXITCODE_REG_EMUL;
 		break;
 
 	case EXCP_DATA_ABORT_L:
 		/* Check if instruction syndrome is valid */
 		if (!(esr_iss & ISS_DATA_ISV)) {
 			eprintf("Data abort with invalid instruction syndrome\n");
-			print_hyp_regs(vme_ret);
+			arm64_print_hyp_regs(vme_ret);
 			vme_ret->exitcode = VM_EXITCODE_HYP;
 			break;
 		}
@@ -423,44 +444,44 @@ handle_el1_sync_excp(struct hyp *hyp, int vcpu, struct vm_exit *vme_ret)
 		 */
 		if (!(ISS_DATA_DFSC_TF(esr_iss))) {
 			eprintf("Data abort not on a stage 2 translation\n");
-			print_hyp_regs(vme_ret);
+			arm64_print_hyp_regs(vme_ret);
 			vme_ret->exitcode = VM_EXITCODE_HYP;
 			break;
 		}
 
-		gen_inst_emul_data(esr_iss, vme_ret);
-
+		arm64_gen_inst_emul_data(esr_iss, vme_ret);
 		vme_ret->exitcode = VM_EXITCODE_INST_EMUL;
 		break;
 
 	default:
 		eprintf("Unsupported synchronous exception from guest: 0x%x\n",
 		    esr_ec);
-		print_hyp_regs(vme_ret);
+		arm64_print_hyp_regs(vme_ret);
 		vme_ret->exitcode = VM_EXITCODE_HYP;
 		break;
 	}
 
+	/* We don't don't do any instruction emulation here */
 	return (UNHANDLED);
 }
 
 static int
-handle_world_switch(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
+handle_world_switch(struct hyp *hyp, int vcpu, struct vm_exit *vme)
 {
 	int excp_type;
 	int handled;
 
-	excp_type = vmexit->u.hyp.exception_nr;
+	excp_type = vme->u.hyp.exception_nr;
 	switch (excp_type) {
 	case EXCP_TYPE_EL1_SYNC:
 		/* The exit code will be set by handle_el1_sync_excp(). */
-		handled = handle_el1_sync_excp(hyp, vcpu, vmexit);
+		handled = handle_el1_sync_excp(hyp, vcpu, vme);
 		break;
 
 	case EXCP_TYPE_EL1_IRQ:
 	case EXCP_TYPE_EL1_FIQ:
 		/* The host kernel will handle IRQs and FIQs. */
-		vmexit->exitcode = VM_EXITCODE_BOGUS;
+		vme->exitcode = VM_EXITCODE_BOGUS;
 		handled = UNHANDLED;
 		break;
 
@@ -470,13 +491,13 @@ handle_world_switch(struct hyp *hyp, int vcpu, struct vm_exit *vmexit)
 	case EXCP_TYPE_EL2_FIQ:
 	case EXCP_TYPE_EL2_ERROR:
 		eprintf("Unhandled exception type: %s\n", excp_type_str(excp_type));
-		vmexit->exitcode = VM_EXITCODE_BOGUS;
+		vme->exitcode = VM_EXITCODE_BOGUS;
 		handled = UNHANDLED;
 		break;
 
 	default:
 		eprintf("Unknown exception type: %d\n", excp_type);
-		vmexit->exitcode = VM_EXITCODE_BOGUS;
+		vme->exitcode = VM_EXITCODE_BOGUS;
 		handled = UNHANDLED;
 		break;
 	}
@@ -497,24 +518,23 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	struct hyp *hyp;
 	struct hypctx *hypctx;
 	struct vm *vm;
-	struct vm_exit *vmexit;
+	struct vm_exit *vme;
 	uint32_t host_ctl;
 
-	hyp = arg;
+	hyp = (struct hyp *)arg;
 	vm = hyp->vm;
-	vmexit = vm_exitinfo(vm, vcpu);
+	vme = vm_exitinfo(vm, vcpu);
 
 	hypctx = &hyp->ctx[vcpu];
 	hypctx->elr_el2 = (uint64_t)pc;
 	for (;;) {
 		/*
-		 * The order counts here, because vtimer can inject an interrupt
-		 * if a timer expired.
+		 * The order counts because vtimer can inject an interrupt if a
+		 * timer expired.
 		 */
 		//vgic_flush_hwstate(hypctx);
 		//vtimer_flush_hwstate(hypctx);
 
-	
 		daif = intr_disable();
 		excp_type = vmm_call_hyp((void *)ktohyp(vmm_enter_guest),
 				ktohyp(hypctx));
@@ -539,14 +559,15 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 			prev_cntp_ctl_el0 = hypctx->vtimer_cpu.cntp_ctl_el0;
 		}
 
-		vmexit->pc = hypctx->elr_el2;
-		vmexit->u.hyp.exception_nr = excp_type;
-		vmexit->u.hyp.esr_el2 = hypctx->exit_info.esr_el2;
-		vmexit->u.hyp.far_el2 = hypctx->exit_info.far_el2;
-		vmexit->u.hyp.hpfar_el2 = hypctx->exit_info.hpfar_el2;
+		vme->pc = hypctx->elr_el2;
+		vme->u.hyp.exception_nr = excp_type;
+		vme->u.hyp.esr_el2 = hypctx->exit_info.esr_el2;
 
-		vmexit->inst_length = INSN_SIZE;
-		handled = handle_world_switch(hyp, vcpu, vmexit);
+		vme->u.hyp.far_el2 = hypctx->exit_info.far_el2;
+		vme->u.hyp.hpfar_el2 = hypctx->exit_info.hpfar_el2;
+		vme->inst_length = INSN_SIZE;
+
+		handled = handle_world_switch(hyp, vcpu, vme);
 
 		/* TODO: sync here or starting the loop (and not emulating)? */
 		//vtimer_sync_hwstate(hyp);
@@ -557,7 +578,7 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 			break;
 		else
 			/* Resume guest execution from the next instruction. */
-			hypctx->elr_el2 += vmexit->inst_length;
+			hypctx->elr_el2 += vme->inst_length;
 	}
 
 	return (0);
