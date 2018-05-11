@@ -438,11 +438,19 @@ vgic_v3_do_emulation(void *arg, int vcpuid, struct vm_exit *vme, bool *retu)
 	struct vgic_v3_dist *dist;
 	struct vgic_v3_redist *redist;
 	uint64_t fault_ipa;
+	uint32_t esr_ec;
 	int error;
 
 	hyp = (struct hyp *)arg;
 
 	if (!hyp->vgic_attached) {
+		*retu = true;
+		return (0);
+	}
+
+	esr_ec = ESR_ELx_EXCEPTION(hyp->ctx[vcpuid].exit_info.esr_el2);
+	if (esr_ec != EXCP_DATA_ABORT_L) {
+		/* The VGIC only emulates memory accesses */
 		*retu = true;
 		return (0);
 	}
@@ -479,7 +487,7 @@ vgic_v3_do_emulation(void *arg, int vcpuid, struct vm_exit *vme, bool *retu)
 do {									\
 	(dist)->name = malloc((n) * sizeof(*(dist)->name),		\
 			M_VGIC_V3, M_WAITOK | M_ZERO);			\
-	/* TODO: num is not necessary? */				\
+	/* TODO num is not necessary? */				\
 	(dist)->name##_num = (n);					\
 	(dist)->name##_addr_max = (base)+ (n) * sizeof(*(dist)->name);	\
 } while (0)
