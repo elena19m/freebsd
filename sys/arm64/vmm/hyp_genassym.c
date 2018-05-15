@@ -117,7 +117,6 @@ ASSYM(HYPCTX_VGIC_ICH_LR_EL2, offsetof(struct hypctx, vgic_cpu_if.ich_lr_el2));
 
 ASSYM(HYPCTX_VTIMER_CPU_CNTP_CTL_EL0, offsetof(struct hypctx, vtimer_cpu.cntp_ctl_el0));
 ASSYM(HYPCTX_VTIMER_CPU_CNTP_CVAL_EL0, offsetof(struct hypctx, vtimer_cpu.cntp_cval_el0));
-ASSYM(HYPCTX_VTIMER_CPU_CNTP_TVAL_EL0, offsetof(struct hypctx, vtimer_cpu.cntp_tval_el0));
 
 #ifdef VFP
 ASSYM(HYPCTX_HOST_VFP_STATE, offsetof(struct hypctx, host_vfp_state));

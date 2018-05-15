@@ -50,11 +50,9 @@ struct vtimer_cpu
 	/*
 	 * CNTP_CTL_EL0:  Counter-timer Physical Timer Control Register
 	 * CNTP_CVAL_EL0: Counter-timer Physical Timer CompareValue Register
-	 * CNTP_TVAL_EL0: Counter-timer Physical Timer TimerValue Register
 	 */
 	uint64_t	cntp_cval_el0;
 	uint32_t	cntp_ctl_el0;
-	uint32_t	cntp_tval_el0;
 
 	bool		started;
 };
