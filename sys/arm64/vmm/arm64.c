@@ -156,7 +156,6 @@ arm_init(int ipinum)
 	vgic_v3_init(ich_vtr_el2);
 
 	cnthctl_el2 = vmm_call_hyp((void *)ktohyp(vmm_read_cnthctl_el2));
-	printf("cnthctl_el2 = 0x%lx\n", cnthctl_el2);
 	vtimer_init(cnthctl_el2);
 
 	return 0;
@@ -388,13 +387,13 @@ arm64_gen_inst_emul_data(uint32_t esr_iss, struct vm_exit *vme_ret)
 	vie->reg = get_vm_reg_name(reg_num, UNUSED);
 }
 
-/* 'u.hyp' member will be replaced by 'u.reg_emul' */
 static void
 arm64_gen_reg_emul_data(uint32_t esr_iss, struct vm_exit *vme_ret)
 {
 	uint32_t reg_num;
 	struct vre *vre;
 
+	/* u.hyp member will be replaced by u.reg_emul */
 	vre = &vme_ret->u.reg_emul.vre;
 
 	vre->inst_syndrome = esr_iss;

@@ -375,11 +375,8 @@ vm_handle_inst_emul(struct vm *vm, int vcpuid, bool *retu)
 	vme = vm_exitinfo(vm, vcpuid);
 	vie = &vme->u.inst_emul.vie;
 
-	if (!hyp->vgic_attached) {
-		/* Skip the VGIC and emulate in userland */
-		*retu = true;
-		return (0);
-	}
+	if (!hyp->vgic_attached)
+		goto out_user;
 
 	fault_ipa = vme->u.inst_emul.gpa;
 	dist = &hyp->vgic_dist;
@@ -388,18 +385,21 @@ vm_handle_inst_emul(struct vm *vm, int vcpuid, bool *retu)
 	if (fault_ipa >= dist->ipa && fault_ipa < dist->ipa + dist->size) {
 		mread = vgic_v3_dist_read;
 		mwrite = vgic_v3_dist_write;
-	} else if (fault_ipa >= redist->ipa && fault_ipa < redist->ipa + redist->size) {
+	} else if (fault_ipa >= redist->ipa &&
+	    fault_ipa < redist->ipa + redist->size) {
 		mread = vgic_v3_redist_read;
 		mwrite = vgic_v3_redist_write;
 	} else {
-		/* Skip the VGIC and emulate in userland */
-		*retu = true;
-		return (0);
+		goto out_user;
 	}
 
 	error = vmm_emulate_instruction(vm, vcpuid, fault_ipa, vie,
 					mread, mwrite, retu);
 	return (error);
+
+out_user:
+	*retu = true;
+	return (0);
 }
 
 int

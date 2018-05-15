@@ -43,15 +43,15 @@
 
 #define	USECS_PER_SEC	1000000
 
-#define	VTIMER_IRQ	27
 #define	IRQ_LEVEL	1
+#define	RES1		0xffffffffffffffffUL
 
 extern struct timecounter arm_tmr_timecount;
 
 uint64_t cnthctl_el2_reg;
 
 static inline uint64_t
-vtimer_read_ptimer(void)
+vtimer_read_pct(void)
 {
 	uint64_t (*get_cntxct)(bool) = arm_tmr_timecount.tc_priv;
 
@@ -110,10 +110,15 @@ vtimer_stop(struct hypctx *hypctx)
 static void
 vtimer_inject_irq(struct hypctx *hypctx)
 {
+	struct hyp *hyp;
+	int irq;
 	struct vtimer_cpu *vtimer_cpu = &hypctx->vtimer_cpu;
 
+	hyp = hypctx->hyp;
+	irq = hyp->vtimer.phys_ns_irq;
+
 	vtimer_cpu->cntp_ctl_el0 |= 1 << 1;
-	vgic_v3_inject_irq(hypctx, VTIMER_IRQ, IRQ_LEVEL);
+	vgic_v3_inject_irq(hypctx, irq, IRQ_LEVEL);
 }
 
 static void
@@ -146,7 +151,7 @@ vtimer_sync_hwstate(void *arg)
 		return;
 
 	cval = hypctx->vtimer_cpu.cntp_cval_el0;
-	diff = vtimer_read_ptimer() - hypctx->hyp->vtimer.cntvoff;
+	diff = vtimer_read_pct() - hypctx->hyp->vtimer.cntvoff;
 
 	if (cval <= diff) {
 		vtimer_inject_irq(hypctx);
@@ -224,7 +229,7 @@ vtimer_vminit(void *arg)
 	    (cnthctl_el2_reg & ~CNTHCTL_EL1PCEN) | CNTHCTL_EL1PCTEN;
 	printf("hyp->vtimer.cnthctl_el2 = 0x%lx\n", hyp->vtimer.cnthctl_el2);
 
-	hyp->vtimer.cntvoff = vtimer_read_ptimer();
+	hyp->vtimer.cntvoff = vtimer_read_pct();
 	hyp->vtimer.enabled = true;
 
 	return (0);
@@ -236,6 +241,7 @@ vtimer_read_reg(void *vm, int vcpuid, uint64_t *rval, uint32_t inst_syndrome,
 {
 	struct hyp *hyp;
 	struct vtimer_cpu *vtimer_cpu;
+	uint64_t cntpct_el0;
 	bool *retu;
 
 	retu = (bool *)arg;
@@ -243,24 +249,43 @@ vtimer_read_reg(void *vm, int vcpuid, uint64_t *rval, uint32_t inst_syndrome,
 	vtimer_cpu = &hyp->ctx[vcpuid].vtimer_cpu;
 
 	if (INST_IS_REG(CNTP_CTL_EL0, inst_syndrome)) {
-		eprintf("CNTP_CTL_EL0\n");
+		cntpct_el0 = vtimer_read_pct();
+		if (vtimer_cpu->cntp_cval_el0 < cntpct_el0)
+			/* Timer condition met */
+			vtimer_cpu->cntp_ctl_el0 |= CNTP_CTL_ISTATUS;
 		*rval = vtimer_cpu->cntp_ctl_el0;
+		eprintf("CNTP_CTL_EL0 = 0x%x\n", vtimer_cpu->cntp_ctl_el0);
+
 	} else if (INST_IS_REG(CNTP_CVAL_EL0, inst_syndrome)) {
-		eprintf("CNTP_CVAL_EL0\n");
-		*rval = vtimer_cpu->cntp_ctl_el0;
+		eprintf("CNTP_CVAL_EL0 = 0x%lx\n", vtimer_cpu->cntp_cval_el0);
+		*rval = vtimer_cpu->cntp_cval_el0;
+
 	} else if (INST_IS_REG(CNTP_TVAL_EL0, inst_syndrome)) {
-		eprintf("CNTP_TVAL_EL0\n");
-		*rval = vtimer_cpu->cntp_ctl_el0;
+		if (!(vtimer_cpu->cntp_ctl_el0 & CNTP_CTL_ENABLE)) {
+			/*
+			 * ARMv8 Architecture Manual, p. D7-2702: the result of
+			 * reading TVAL when the timer is disabled is UNKNOWN. I
+			 * have chosen to return the maximum value possible on
+			 * 32 bits which means the timer will fire very far into
+			 * the future.
+			 */
+			*rval = (uint32_t)RES1;
+		} else {
+			cntpct_el0 = vtimer_read_pct();
+			*rval = vtimer_cpu->cntp_cval_el0 - cntpct_el0;
+		}
+		eprintf("CNTP_TVAL_EL0 = 0x%lx\n", *rval);
+
 	} else {
 		eprintf("Uknown register\n");
 		*rval = 0;
-		goto out_no_emulation;
+		goto out_user;
 	}
 
 	*retu = false;
 	return (0);
 
-out_no_emulation:
+out_user:
 	*retu = true;
 	return (0);
 }
@@ -271,6 +296,7 @@ vtimer_write_reg(void *vm, int vcpuid, uint64_t wval, uint32_t inst_syndrome,
 {
 	struct hyp *hyp;
 	struct vtimer_cpu *vtimer_cpu;
+	uint64_t cntpct_el0;
 	bool *retu;
 
 	retu = (bool *)arg;
@@ -278,23 +304,31 @@ vtimer_write_reg(void *vm, int vcpuid, uint64_t wval, uint32_t inst_syndrome,
 	vtimer_cpu = &hyp->ctx[vcpuid].vtimer_cpu;
 
 	if (INST_IS_REG(CNTP_CTL_EL0, inst_syndrome)) {
-		eprintf("CNTP_CTL_EL0\n");
+		/* ISTATUS is set when timer condition is met */
+		wval &= ~CNTP_CTL_ISTATUS;
+		wval &= CNTP_CTL_RES0;
 		vtimer_cpu->cntp_ctl_el0 = wval;
+		eprintf("CNTP_CTL_EL0 = 0x%lx\n", wval);
+
 	} else if (INST_IS_REG(CNTP_CVAL_EL0, inst_syndrome)) {
-		eprintf("CNTP_CVAL_EL0\n");
+		eprintf("CNTP_CVAL_EL0 = 0x%lx\n", wval);
 		vtimer_cpu->cntp_cval_el0 = wval;
+
 	} else if (INST_IS_REG(CNTP_TVAL_EL0, inst_syndrome)) {
-		eprintf("CNTP_TVAL_EL0\n");
-		vtimer_cpu->cntp_tval_el0 = wval;
+		cntpct_el0 = vtimer_read_pct();
+		vtimer_cpu->cntp_cval_el0 = (int32_t)wval + cntpct_el0;
+		eprintf("CNTP_TVAL_EL0, wval = 0x%lx, cval = 0x%lx\n",
+				wval, vtimer_cpu->cntp_cval_el0);
+
 	} else {
 		eprintf("Uknown register\n");
-		goto out_no_emulation;
+		goto out_user;
 	}
 
 	*retu = false;
 	return (0);
 
-out_no_emulation:
+out_user:
 	*retu = true;
 	return (0);
 }
