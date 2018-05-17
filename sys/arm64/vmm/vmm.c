@@ -271,11 +271,6 @@ vm_create(const char *name, struct vm **retvm)
 	strcpy(vm->name, name);
 	vm->cookie = VMINIT(vm);
 
-#if 0
-	/* TEMP - PL804 timer mapping */
-	VMMMAP_SET(vm->cookie, 0x1c110000, 0x1c110000, PAGE_SIZE, VM_PROT_ALL);
-#endif
-
 	for (i = 0; i < VM_MAXCPU; i++)
 		vcpu_init(vm, i);
 
@@ -350,12 +345,19 @@ vm_handle_reg_emul(struct vm *vm, int vcpuid, bool *retu)
 	int error;
 
 	hyp = (struct hyp *)vm->cookie;
+	if (!hyp->vtimer.attached)
+		goto out_user;
+
 	vme = vm_exitinfo(vm, vcpuid);
 	vre = &vme->u.reg_emul.vre;
 
 	error = vmm_emulate_register(vm, vcpuid, vre, vtimer_read_reg,
-				     vtimer_write_reg, retu);
+	    vtimer_write_reg, retu);
 	return (error);
+
+out_user:
+	*retu = true;
+	return (0);
 }
 
 static int
@@ -372,11 +374,12 @@ vm_handle_inst_emul(struct vm *vm, int vcpuid, bool *retu)
 	int error;
 
 	hyp = (struct hyp *)vm->cookie;
+	if (!hyp->vgic_attached)
+		goto out_user;
+
 	vme = vm_exitinfo(vm, vcpuid);
 	vie = &vme->u.inst_emul.vie;
 
-	if (!hyp->vgic_attached)
-		goto out_user;
 
 	fault_ipa = vme->u.inst_emul.gpa;
 	dist = &hyp->vgic_dist;
@@ -394,7 +397,8 @@ vm_handle_inst_emul(struct vm *vm, int vcpuid, bool *retu)
 	}
 
 	error = vmm_emulate_instruction(vm, vcpuid, fault_ipa, vie,
-					mread, mwrite, retu);
+	    mread, mwrite, retu);
+
 	return (error);
 
 out_user:
@@ -446,7 +450,8 @@ restart:
 			break;
 
 		default:
-			retu = true;	/* handled in userland */
+			/* Handle in userland */
+			retu = true;
 			break;
 		}
 	}
@@ -454,7 +459,7 @@ restart:
 	if (error == 0 && retu == false)
 		goto restart;
 
-	/* copy the exit information */
+	/* Copy the exit information */
 	bcopy(vme, &vmrun->vm_exit, sizeof(struct vm_exit));
 
 	return (error);
@@ -768,16 +773,23 @@ int
 vm_attach_vgic(struct vm *vm, uint64_t dist_ipa, size_t dist_size,
 		uint64_t redist_ipa, size_t redist_size)
 {
-	return (vgic_v3_attach_to_vm(vm->cookie, dist_ipa, dist_size,
-			redist_ipa, redist_size));
+	int error;
+
+	error = vgic_v3_attach_to_vm(vm->cookie, dist_ipa, dist_size,
+	    redist_ipa, redist_size);
+
+	return (error);
 }
 
 int
 vm_attach_vtimer(struct vm *vm, int phys_ns_irq, int virt_irq)
 {
-	return (vtimer_attach_to_vm(vm->cookie, phys_ns_irq, virt_irq));
-}
+	int error;
 
+	error = vtimer_attach_to_vm(vm->cookie, phys_ns_irq, virt_irq);
+
+	return (error);
+}
 
 static int
 vm_handle_wfi(struct vm *vm, int vcpuid, struct vm_exit *vme, bool *retu)

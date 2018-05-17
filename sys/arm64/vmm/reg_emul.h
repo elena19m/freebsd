@@ -48,7 +48,7 @@
 #define	CNTP_TVAL_EL0_CRn	0b1110
 #define	CNTP_TVAL_EL0_CRm	0b0010
 
-#define	INST_IS_REG(reg, iss)			\
+#define	ISS_MATCH_REG(reg, iss)			\
     (ISS_MSR_CRm(iss) == reg ##_CRm &&		\
     ISS_MSR_CRn(iss) == reg ##_CRn &&		\
     ISS_MSR_OP1(iss) == reg ##_OP1 &&		\

@@ -105,6 +105,8 @@ out:
 			vtophys(hyp->stage2_map->pm_l0));
 }
 
+extern volatile int ticks;
+
 static int
 arm_init(int ipinum)
 {
@@ -200,11 +202,14 @@ arm_vminit(struct vm *vm)
 	hyp->vm = vm;
 	hyp->vgic_attached = false;
 
-	hyp->stage2_map = malloc(sizeof(*hyp->stage2_map), M_HYP, M_WAITOK | M_ZERO);
+	hyp->stage2_map = malloc(sizeof(*hyp->stage2_map),
+	    M_HYP, M_WAITOK | M_ZERO);
 	hypmap_init(hyp->stage2_map, PT_STAGE2);
 	arm64_set_vttbr(hyp);
 
 	mtx_init(&hyp->vgic_dist.dist_lock, "Distributor Lock", "", MTX_SPIN);
+
+	vtimer_vminit(hyp);
 
 	for (i = 0; i < VM_MAXCPU; i++) {
 		hypctx = &hyp->ctx[i];
@@ -227,7 +232,7 @@ arm_vminit(struct vm *vm)
 		 * HCR_VM: use stage 2 translation
 		 */
 		hypctx->hcr_el2 = HCR_RW | HCR_BSU_IS | HCR_SWIO | HCR_FB | \
-				  HCR_VM | HCR_AMO | HCR_IMO | HCR_FMO;
+		    HCR_VM | HCR_AMO | HCR_IMO | HCR_FMO;
 
 		/* The guest will detect a single-core, single-threaded CPU */
 		hypctx->vmpidr_el2 = get_mpidr();
@@ -261,13 +266,11 @@ arm_vminit(struct vm *vm)
 		/* Don't trap accesses to SVE, Advanced SIMD and FP to EL1 */
 		hypctx->cpacr_el1 = CPACR_FPEN_TRAP_NONE;
 
-		//vtimer_cpu_init(hypctx);
+		vtimer_cpu_init(hypctx);
 	}
 
 	hypmap_map(hyp_pmap, (vm_offset_t)hyp, sizeof(struct hyp),
-			VM_PROT_READ | VM_PROT_WRITE);
-
-	vtimer_vminit(hyp);
+	    VM_PROT_READ | VM_PROT_WRITE);
 
 	return (hyp);
 }
@@ -370,7 +373,8 @@ arm64_gen_inst_emul_data(uint32_t esr_iss, struct vm_exit *vme_ret)
 	uint64_t page_off;
 
 	/* Get bits [47:12] of the IPA from HPFAR_EL2. */
-	vme_ret->u.inst_emul.gpa = (vme_ret->u.hyp.hpfar_el2) >> HPFAR_EL2_FIPA_SHIFT;
+	vme_ret->u.inst_emul.gpa = \
+	    (vme_ret->u.hyp.hpfar_el2) >> HPFAR_EL2_FIPA_SHIFT;
 	/* The IPA is the base address of a 4KB page, make bits [11:0] zero. */
 	vme_ret->u.inst_emul.gpa = (vme_ret->u.inst_emul.gpa) << PAGE_SHIFT;
 	/* Bits [11:0] are the same as bits [11:0] from the virtual address. */
@@ -466,7 +470,7 @@ handle_el1_sync_excp(struct hyp *hyp, int vcpu, struct vm_exit *vme_ret)
 }
 
 static int
-handle_world_switch(struct hyp *hyp, int vcpu, struct vm_exit *vme)
+arm64_handle_world_switch(struct hyp *hyp, int vcpu, struct vm_exit *vme)
 {
 	int excp_type;
 	int handled;
@@ -490,7 +494,8 @@ handle_world_switch(struct hyp *hyp, int vcpu, struct vm_exit *vme)
 	case EXCP_TYPE_EL2_IRQ:
 	case EXCP_TYPE_EL2_FIQ:
 	case EXCP_TYPE_EL2_ERROR:
-		eprintf("Unhandled exception type: %s\n", excp_type_str(excp_type));
+		eprintf("Unhandled exception type: %s\n",
+		    excp_type_str(excp_type));
 		vme->exitcode = VM_EXITCODE_BOGUS;
 		handled = UNHANDLED;
 		break;
@@ -505,9 +510,6 @@ handle_world_switch(struct hyp *hyp, int vcpu, struct vm_exit *vme)
 	return (handled);
 }
 
-static uint32_t prev_cntp_ctl_el0 = 0;
-static uint32_t prev_host_ctl = 0;
-
 static int
 arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	void *rendezvous_cookie, void *suspend_cookie)
@@ -519,7 +521,6 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	struct hypctx *hypctx;
 	struct vm *vm;
 	struct vm_exit *vme;
-	uint32_t host_ctl;
 
 	hyp = (struct hyp *)arg;
 	vm = hyp->vm;
@@ -527,6 +528,7 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 
 	hypctx = &hyp->ctx[vcpu];
 	hypctx->elr_el2 = (uint64_t)pc;
+
 	for (;;) {
 		/*
 		 * The order counts because vtimer can inject an interrupt if a
@@ -537,37 +539,18 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 
 		daif = intr_disable();
 		excp_type = vmm_call_hyp((void *)ktohyp(vmm_enter_guest),
-				ktohyp(hypctx));
+		    ktohyp(hypctx));
 		intr_restore(daif);
 
-		uint32_t esr_ec;
-		esr_ec = ESR_ELx_EXCEPTION(hypctx->exit_info.esr_el2);
-		host_ctl = READ_SPECIALREG(cntp_ctl_el0);
-		if (host_ctl != prev_host_ctl) {
-			printf("new HOST cntp_ctl_el0 = 0x%x\n", host_ctl);
-			printf("previous HOST cntp_ctl_el0 = 0x%x\n", prev_host_ctl);
-			printf("excp_type = %s\n", excp_type_str(excp_type));
-			printf("esr_ec = 0x%x\n", esr_ec);
-			prev_host_ctl = host_ctl;
-		}
-
-		if (hypctx->vtimer_cpu.cntp_ctl_el0 != prev_cntp_ctl_el0) {
-			printf("new GUEST cntp_ctl_el0 = 0x%x\n", hypctx->vtimer_cpu.cntp_ctl_el0);
-			printf("previous GUEST cntp_ctl_el0 = 0x%x\n", prev_cntp_ctl_el0);
-			printf("excp_type = %s\n", excp_type_str(excp_type));
-			printf("esr_ec = 0x%x\n", esr_ec);
-			prev_cntp_ctl_el0 = hypctx->vtimer_cpu.cntp_ctl_el0;
-		}
-
 		vme->pc = hypctx->elr_el2;
-		vme->u.hyp.exception_nr = excp_type;
-		vme->u.hyp.esr_el2 = hypctx->exit_info.esr_el2;
-
-		vme->u.hyp.far_el2 = hypctx->exit_info.far_el2;
-		vme->u.hyp.hpfar_el2 = hypctx->exit_info.hpfar_el2;
 		vme->inst_length = INSN_SIZE;
 
-		handled = handle_world_switch(hyp, vcpu, vme);
+		vme->u.hyp.exception_nr = excp_type;
+		vme->u.hyp.esr_el2 = hypctx->exit_info.esr_el2;
+		vme->u.hyp.far_el2 = hypctx->exit_info.far_el2;
+		vme->u.hyp.hpfar_el2 = hypctx->exit_info.hpfar_el2;
+
+		handled = arm64_handle_world_switch(hyp, vcpu, vme);
 
 		/* TODO: sync here or starting the loop (and not emulating)? */
 		//vtimer_sync_hwstate(hyp);
@@ -590,7 +573,8 @@ arm_vmcleanup(void *arg)
 	struct hyp *hyp = arg;
 
 	/* Unmap the VM hyp struct from the hyp mode translation table */
-	hypmap_map(hyp_pmap, (vm_offset_t)hyp, sizeof(struct hyp), VM_PROT_NONE);
+	hypmap_map(hyp_pmap, (vm_offset_t)hyp, sizeof(struct hyp),
+	    VM_PROT_NONE);
 	hypmap_cleanup(hyp->stage2_map);
 	free(hyp->stage2_map, M_HYP);
 	free(hyp, M_HYP);
@@ -697,8 +681,9 @@ arm_getreg(void *arg, int vcpu, int reg, uint64_t *retval)
 		else
 			*retval = *(uint64_t *)regp;
 		return (0);
-	} else
+	} else {
 		return (EINVAL);
+	}
 }
 
 static int
@@ -718,8 +703,9 @@ arm_setreg(void *arg, int vcpu, int reg, uint64_t val)
 		else
 			*(uint64_t *)regp = val;
 		return (0);
-	} else
+	} else {
 		return (EINVAL);
+	}
 }
 
 static
