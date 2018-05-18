@@ -75,6 +75,7 @@ struct vgic_v3_virt_features {
 	size_t lr_num;
 	uint32_t prebits;
 	uint32_t pribits;
+	uint8_t min_prio;
 };
 static struct vgic_v3_virt_features virt_features;
 
@@ -479,14 +480,38 @@ void
 vgic_v3_cpuinit(void *arg, bool last_vcpu)
 {
 	struct hypctx *hypctx;
-	//struct vgic_v3_cpu_if *cpu_if;
+	struct vgic_v3_cpu_if *cpu_if;
 	struct vgic_v3_redist *redist;
 
 	hypctx = (struct hypctx *)arg;
 	redist = &hypctx->vgic_redist;
 	vgic_v3_init_redist_regs(redist, hypctx, last_vcpu);
 
-	/* TODO: set up ich_* regs from vgic_v3_cpu_if. */
+	cpu_if = &hypctx->vgic_cpu_if;
+	/*
+	 * Configure the Interrupt Controller Hyp Control Register.
+	 *
+	 * ICH_HCR_EL2_En: enable virtual CPU interface.
+	 *
+	 * Maintenance interrupts are disabled.
+	 */
+	cpu_if->ich_hcr_el2 = ICH_HCR_EL2_En;
+
+	/*
+	 * Configure the Interrupt Controller Virtual Machine Control Register.
+	 *
+	 * ICH_VMCR_EL2_VPMR: lowest priority mask for the VCPU interface
+	 * ICH_VMCR_EL2_VBPR1_NO_PREEMPTION: disable interrupt preemption for
+	 * Group 1 interrupts
+	 * ~ICH_VMCR_EL2_VEOIM: writes to EOI registers perform priority drop
+	 * and interrupt deactivation.
+	 * ICH_VMCR_EL2_VENG1: virtual Group 1 interrupts enabled.
+	 */
+	cpu_if->ich_vmcr_el2 = \
+	    (virt_features.min_prio << ICH_VMCR_EL2_VPMR_SHIFT) | \
+	    ICH_VMCR_EL2_VBPR1_NO_PREEMPTION;
+	cpu_if->ich_vmcr_el2 &= ~ICH_VMCR_EL2_VEOIM;
+	cpu_if->ich_vmcr_el2 |= ICH_VMCR_EL2_VENG1;
 }
 
 #define	INIT_DIST_REG(name, n, base, dist)				\
@@ -567,7 +592,7 @@ vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
 
 	for (i = 0; i < VM_MAXCPU; i++) {
 		redist = &hyp->ctx[i].vgic_redist;
-		/* Set the redistributor address and size for trapping guest access. */
+		/* Set the redistributor address and size. */
 		redist->ipa = redist_ipa;
 		redist->size = redist_size;
 	}
@@ -1234,9 +1259,20 @@ static void vgic_v3_set_ro_regs(device_t dev)
 void
 vgic_v3_init(uint64_t ich_vtr_el2)
 {
-	virt_features.lr_num = ICH_VTR_EL2_LISTREGS(ich_vtr_el2);
 	virt_features.pribits = ICH_VTR_EL2_PRIBITS(ich_vtr_el2);
+	switch (virt_features.pribits) {
+	case 5:
+		virt_features.min_prio = 0xf8;
+	case 6:
+		virt_features.min_prio = 0xfc;
+	case 7:
+		virt_features.min_prio = 0xfe;
+	case 8:
+		virt_features.min_prio = 0xff;
+	}
+
 	virt_features.prebits = ICH_VTR_EL2_PREBITS(ich_vtr_el2);
+	virt_features.lr_num = ICH_VTR_EL2_LISTREGS(ich_vtr_el2);
 }
 
 static int

@@ -24,7 +24,7 @@
 #define ICH_HCR_EL2_NPIE		(1 << 3)	/* No Pending Interrupt Enable */
 #define ICH_HCR_EL2_LRENPIE		(1 << 2)	/* List Register Entry Not Present Interrupt Enable */
 #define ICH_HCR_EL2_UIE			(1 << 1)	/* Underflow Interrupt Enable */
-#define ICH_HCR_EL2_EN			(1 << 0)	/* Global enable for the virtual CPU interface */
+#define ICH_HCR_EL2_En			(1 << 0)	/* Global enable for the virtual CPU interface */
 
 /* Interrupt Controller List Registers */
 #define ICH_LR_EL2_VINTID_MASK		0xffffffff
@@ -59,8 +59,12 @@
 #define  ICH_VMCR_EL2_VPMR_PRIO_HIGHEST	(0x00 << ICH_VMCR_EL2_VPMR_SHIFT)
 #define ICH_VMCR_EL2_VBPR0_SHIFT	21
 #define ICH_VMCR_EL2_VBPR0_MASK		(0x7 << ICH_VMCR_EL2_VBPR0_SHIFT)
+#define  ICH_VMCR_EL2_VBPR0_NO_PREEMPTION \
+    (0x7 << ICH_VMCR_EL2_VBPR0_SHIFT)
 #define ICH_VMCR_EL2_VBPR1_SHIFT	18
 #define ICH_VMCR_EL2_VBPR1_MASK		(0x7 << ICH_VMCR_EL2_VBPR1_SHIFT)
+#define  ICH_VMCR_EL2_VBPR1_NO_PREEMPTION \
+    (0x7 << ICH_VMCR_EL2_VBPR1_SHIFT)
 #define ICH_VMCR_EL2_VEOIM		(1 << 9)	/* Virtual EOI mode */
 #define ICH_VMCR_EL2_VCBPR		(1 << 4)	/* Virtual Common binary Point Register */
 #define ICH_VMCR_EL2_VFIQEN		(1 << 3)	/* Virtual FIQ enable */
@@ -72,7 +76,7 @@
 #define ICH_VTR_EL2_PRIBITS_SHIFT	29
 #define ICH_VTR_EL2_PRIBITS_MASK	(0x7 << ICH_VTR_EL2_PRIBITS_SHIFT)
 #define	ICH_VTR_EL2_PRIBITS(x)		\
-		(((x) & ICH_VTR_EL2_PRIBITS_MASK) >> ICH_VTR_EL2_PRIBITS_SHIFT)
+    ((((x) & ICH_VTR_EL2_PRIBITS_MASK) >> ICH_VTR_EL2_PRIBITS_SHIFT) + 1)
 #define ICH_VTR_EL2_PREBITS_SHIFT	26
 #define ICH_VTR_EL2_PREBITS_MASK	(0x7 << ICH_VTR_EL2_PREBITS_SHIFT)
 #define	ICH_VTR_EL2_PREBITS(x)		\
