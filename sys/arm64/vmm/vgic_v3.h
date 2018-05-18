@@ -139,7 +139,7 @@ struct vgic_v3_cpu_if {
 	uint32_t	pending_prv[VGIC_PRV_I_NUM / (sizeof(uint32_t) * 8)];
 	uint32_t	pending_shr[VGIC_SHR_I_NUM / (sizeof(uint32_t) * 8)];
 
-	/* ICH_AP{0, 1}R<n>_EL2 are used for legacy VMs, not supported. */
+	/* ICH_AP{0, 1}R<n>_EL2 are used for OSes that run in EL2 */
 
 	uint32_t	ich_eisr_el2;	/* End of Interrupt Status Register. */
 	uint32_t	ich_elsr_el2;	/* Empty List register Status Register. */
@@ -160,6 +160,8 @@ void 	vgic_v3_flush_hwstate(void *arg);
 int 	vgic_v3_vcpu_pending_irq(void *arg);
 int 	vgic_v3_inject_irq(void *arg, unsigned int irq, bool level);
 void	vgic_v3_init(uint64_t ich_vtr_el2);
+void	vgic_v3_vminit(void *arg);
+void	vgic_v3_cpuinit(void *arg, bool last_vcpu);
 
 int 	vgic_v3_dist_read(void *vm, int vcpuid, uint64_t fault_ipa,
 			  uint64_t *rval, int size, void *arg);

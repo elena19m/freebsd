@@ -441,6 +441,54 @@ vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 	return (0);
 }
 
+static void
+vgic_v3_init_redist_regs(struct vgic_v3_redist *redist,struct hypctx *hypctx,
+    bool last_vcpu)
+{
+	uint64_t aff, vmpidr_el2;
+
+	redist->gicr_typer = 0;
+	vmpidr_el2 = hypctx->vmpidr_el2;
+	/*
+	 * Get affinity for the current CPU. The affinity from MPIDR_EL1
+	 * matches the affinity from GICR_TYPER and this is how the CPU finds
+	 * its corresponding Redistributor.
+	 */
+	aff = (CPU_AFF3(vmpidr_el2) << 24) | (CPU_AFF2(vmpidr_el2) << 16) |
+	    (CPU_AFF1(vmpidr_el2) << 8) | CPU_AFF0(vmpidr_el2);
+
+	/* Set up GICR_TYPER. */
+	redist->gicr_typer = aff << GICR_TYPER_AFF_SHIFT;
+	/* Redistributor doesn't support virtual or physical LPIS. */
+	redist->gicr_typer &= ~GICR_TYPER_VLPIS;
+	redist->gicr_typer &= ~GICR_TYPER_PLPIS;
+
+	if (last_vcpu)
+		/* Mark the last Redistributor */
+		redist->gicr_typer |= GICR_TYPER_LAST;
+
+	/* TODO: set this up correctly? */
+	redist->gicr_ctlr = 0;
+
+	redist->gicr_ipriorityr_addr_max = \
+	    GICR_SGI_BASE_SIZE + GICD_IPRIORITYR_BASE + \
+	    sizeof(redist->gicr_ipriorityr);
+}
+
+void
+vgic_v3_cpuinit(void *arg, bool last_vcpu)
+{
+	struct hypctx *hypctx;
+	//struct vgic_v3_cpu_if *cpu_if;
+	struct vgic_v3_redist *redist;
+
+	hypctx = (struct hypctx *)arg;
+	redist = &hypctx->vgic_redist;
+	vgic_v3_init_redist_regs(redist, hypctx, last_vcpu);
+
+	/* TODO: set up ich_* regs from vgic_v3_cpu_if. */
+}
+
 #define	INIT_DIST_REG(name, n, base, dist)				\
 do {									\
 	(dist)->name = malloc((n) * sizeof(*(dist)->name),		\
@@ -490,31 +538,15 @@ init_dist_regs(struct vgic_v3_dist *dist)
 	INIT_DIST_REG(gicd_irouter, n, GICD_IROUTER_BASE, dist);
 }
 
-static void
-vgic_v3_init_redist_regs(struct vgic_v3_redist *redist,
-    struct vgic_v3_dist *dist, struct hyp *hyp)
+void
+vgic_v3_vminit(void *arg)
 {
-	uint64_t aff, vmpidr_el2;
+	struct hyp *hyp;
+	struct vgic_v3_dist *dist;
 
-	/* XXX GICR_TYPER is per-cpu specific. */
-
-	/* Set up GICR_TYPER. */
-	redist->gicr_typer = 0;
-	vmpidr_el2 = hyp->ctx[0].vmpidr_el2;
-	aff = (CPU_AFF3(vmpidr_el2) << 24) | (CPU_AFF2(vmpidr_el2) << 16) |
-	    (CPU_AFF1(vmpidr_el2) << 8) | CPU_AFF0(vmpidr_el2);
-	redist->gicr_typer = aff << GICR_TYPER_AFF_SHIFT;
-	/* Redistributor doesn't support virtual or physical LPIS. */
-	redist->gicr_typer &= ~GICR_TYPER_VLPIS;
-	redist->gicr_typer &= ~GICR_TYPER_PLPIS;
-	/* Only one CPU supported, this is the last Redistributor. */
-	redist->gicr_typer |= GICR_TYPER_LAST;
-
-	redist->gicr_ctlr = 0;
-
-	redist->gicr_ipriorityr_addr_max = \
-	    GICR_SGI_BASE_SIZE + GICD_IPRIORITYR_BASE + \
-	    sizeof(redist->gicr_ipriorityr);
+	hyp = (struct hyp *)arg;
+	dist = &hyp->vgic_dist;
+	init_dist_regs(dist);
 }
 
 int
@@ -524,23 +556,21 @@ vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
 	struct hyp *hyp;
 	struct vgic_v3_dist *dist;
 	struct vgic_v3_redist *redist;
+	int i;
 
 	hyp = (struct hyp *)arg;
 	dist = &hyp->vgic_dist;
-	/* XXX Only one CPU per virtual machine supported. */
-	redist = &hyp->ctx[0].vgic_redist;
 
 	/* Set the distributor address and size for trapping guest access. */
 	dist->ipa = dist_ipa;
 	dist->size = dist_size;
-	init_dist_regs(dist);
 
-	/* Set the redistributor address and size for trapping guest access. */
-	redist->ipa = redist_ipa;
-	redist->size = redist_size;
-	vgic_v3_init_redist_regs(redist, dist, hyp);
-
-	/* TODO: set up ich_* regs from vgic_v3_cpu_if. */
+	for (i = 0; i < VM_MAXCPU; i++) {
+		redist = &hyp->ctx[i].vgic_redist;
+		/* Set the redistributor address and size for trapping guest access. */
+		redist->ipa = redist_ipa;
+		redist->size = redist_size;
+	}
 
 	hyp->vgic_attached = true;
 

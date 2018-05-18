@@ -37,7 +37,7 @@
 struct hypctx {
 	struct reg	regs;
 
-	/* EL0 and EL1 control registers */
+	/* EL1 control registers */
 	uint64_t	actlr_el1;	/* Auxiliary Control Register */
 	uint64_t	amair_el1;	/* Auxiliary Memory Attribute Indirection Register */
 	uint64_t	elr_el1;	/* Exception Link Register */
@@ -57,7 +57,7 @@ struct hypctx {
 	uint32_t	sctlr_el1;	/* System Control Register */
 	uint32_t	spsr_el1;	/* Saved Program Status Register */
 
-	/* EL2 constrol registers */
+	/* EL2 control registers */
 	uint64_t	elr_el2;	/* Exception Link Register */
 	uint64_t	hcr_el2;	/* Hypervisor Configuration Register */
 	uint64_t	vpidr_el2;	/* Virtualization Processor ID Register */
