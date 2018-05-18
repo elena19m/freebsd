@@ -145,7 +145,7 @@ vtimer_vminit(void *arg)
 }
 
 void
-vtimer_cpu_init(void *arg)
+vtimer_cpuinit(void *arg)
 {
 	struct hypctx *hypctx;
 	struct vtimer_cpu *vtimer_cpu;

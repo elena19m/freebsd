@@ -196,6 +196,7 @@ arm_vminit(struct vm *vm)
 {
 	struct hyp *hyp;
 	struct hypctx *hypctx;
+	bool last_vcpu;
 	int i;
 
 	hyp = malloc(sizeof(struct hyp), M_HYP, M_WAITOK | M_ZERO);
@@ -210,6 +211,7 @@ arm_vminit(struct vm *vm)
 	mtx_init(&hyp->vgic_dist.dist_lock, "Distributor Lock", "", MTX_SPIN);
 
 	vtimer_vminit(hyp);
+	vgic_v3_vminit(hyp);
 
 	for (i = 0; i < VM_MAXCPU; i++) {
 		hypctx = &hyp->ctx[i];
@@ -266,7 +268,9 @@ arm_vminit(struct vm *vm)
 		/* Don't trap accesses to SVE, Advanced SIMD and FP to EL1 */
 		hypctx->cpacr_el1 = CPACR_FPEN_TRAP_NONE;
 
-		vtimer_cpu_init(hypctx);
+		vtimer_cpuinit(hypctx);
+		last_vcpu = (i == VM_MAXCPU - 1);
+		vgic_v3_cpuinit(hypctx, last_vcpu);
 	}
 
 	hypmap_map(hyp_pmap, (vm_offset_t)hyp, sizeof(struct hyp),
@@ -535,7 +539,6 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 		 * timer expired.
 		 */
 		//vgic_flush_hwstate(hypctx);
-		//vtimer_flush_hwstate(hypctx);
 
 		daif = intr_disable();
 		excp_type = vmm_call_hyp((void *)ktohyp(vmm_enter_guest),
@@ -553,7 +556,6 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 		handled = arm64_handle_world_switch(hyp, vcpu, vme);
 
 		/* TODO: sync here or starting the loop (and not emulating)? */
-		//vtimer_sync_hwstate(hyp);
 		//vgic_sync_hwstate(hypctx);
 
 		if (handled == UNHANDLED)

@@ -55,14 +55,13 @@ struct vtimer_cpu
 void	vtimer_flush_hwstate(void *arg);
 void 	vtimer_sync_hwstate(void *arg);
 
-void 	vtimer_cpu_init(void *arg);
 void 	vtimer_cpu_terminate(void *arg);
 
 int	vtimer_attach_to_vm(void *arg, int phys_ns_irq, int virt_irq);
 void	vtimer_detach_from_vm(void *arg);
 int 	vtimer_init(uint64_t cnthctl_el2);
 void 	vtimer_vminit(void *arg);
-void	vtimer_cpu_init(void *arg);
+void 	vtimer_cpuinit(void *arg);
 
 int 	vtimer_read_reg(void *vm, int vcpuid, uint64_t *rval,
 			uint32_t inst_syndrome, void *arg);
