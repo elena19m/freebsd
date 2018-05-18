@@ -56,9 +56,9 @@
 #define	 GICD_CTLR_G1		(1 << 0)
 #define	 GICD_CTLR_G1A		(1 << 1)
 #define	 GICD_CTLR_ARE_NS	(1 << 4)
+#define	 GICD_CTLR_DS		(1 << 6)
+#define	 GICD_CTLR_E1NWF	(1 << 7)
 #define	 GICD_CTLR_RWP		(1 << 31)
-/* Only one security state supported */
-#define	 GICD_CTLR_RES0		(0x000000D3)
 /* GICD_TYPER */
 #define	 GICD_TYPER_IDBITS(n)	((((n) >> 19) & 0x1F) + 1)
 #define	 GICD_TYPER_SECURITYEXTN	\

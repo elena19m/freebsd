@@ -469,8 +469,12 @@ vgic_v3_init_redist_regs(struct vgic_v3_redist *redist,struct hypctx *hypctx,
 		/* Mark the last Redistributor */
 		redist->gicr_typer |= GICR_TYPER_LAST;
 
-	/* TODO: set this up correctly? */
-	redist->gicr_ctlr = 0;
+	/*
+	 * Configure the Redistributor Control Register.
+	 *
+	 * ~GICR_CTLR_LPI_ENABLE: LPIs are disabled
+	 */
+	redist->gicr_ctlr = 0 & ~GICR_CTLR_LPI_ENABLE;
 
 	redist->gicr_ipriorityr_addr_max = \
 	    GICR_SGI_BASE_SIZE + GICD_IPRIORITYR_BASE + \
@@ -504,13 +508,15 @@ vgic_v3_cpuinit(void *arg, bool last_vcpu)
 	 * ICH_VMCR_EL2_VPMR: lowest priority mask for the VCPU interface
 	 * ICH_VMCR_EL2_VBPR1_NO_PREEMPTION: disable interrupt preemption for
 	 * Group 1 interrupts
+	 * ICH_VMCR_EL2_VBPR0_NO_PREEMPTION: disable interrupt preemption for
+	 * Group 0 interrupts
 	 * ~ICH_VMCR_EL2_VEOIM: writes to EOI registers perform priority drop
 	 * and interrupt deactivation.
 	 * ICH_VMCR_EL2_VENG1: virtual Group 1 interrupts enabled.
 	 */
 	cpu_if->ich_vmcr_el2 = \
 	    (virt_features.min_prio << ICH_VMCR_EL2_VPMR_SHIFT) | \
-	    ICH_VMCR_EL2_VBPR1_NO_PREEMPTION;
+	    ICH_VMCR_EL2_VBPR1_NO_PREEMPTION | ICH_VMCR_EL2_VBPR0_NO_PREEMPTION;
 	cpu_if->ich_vmcr_el2 &= ~ICH_VMCR_EL2_VEOIM;
 	cpu_if->ich_vmcr_el2 |= ICH_VMCR_EL2_VENG1;
 }
@@ -530,12 +536,22 @@ init_dist_regs(struct vgic_v3_dist *dist)
 	size_t n;
 	size_t reg_size;
 
-	/* Distributor is disabled at start, the guest will configure it. */
-	dist->gicd_ctlr = GICD_CTLR_RES0;
-	dist->gicd_typer = ro_regs.gicd_typer;
-	dist->gicd_pidr2 = ro_regs.gicd_pidr2;
+	/*
+	 * Configure the Distributor control register.
+	 *
+	 * GICD_CTLR_G1: enable Group 0 interrupts
+	 * GICD_CTLR_G1A: enable Group 1 interrupts
+	 * GICD_CTLR_ARE_NS: enable affinity routing
+	 * GICD_CTLR_DS: ARM GIC Architecture Specification for GICv3 and
+	 * GICv4, p. 4-464: when the distributor supports a single security
+	 * state, this bit is RAO/WI
+	 */
+	dist->gicd_ctlr = GICD_CTLR_G1 | GICD_CTLR_G1A | GICD_CTLR_ARE_NS | \
+	    GICD_CTLR_DS;
 
+	dist->gicd_typer = ro_regs.gicd_typer;
 	dist->nirqs = GICD_TYPER_I_NUM(dist->gicd_typer);
+	dist->gicd_pidr2 = ro_regs.gicd_pidr2;
 
 	/* TODO: sort them alphabeticaly. */
 
