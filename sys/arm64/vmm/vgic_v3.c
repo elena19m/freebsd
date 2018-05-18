@@ -183,7 +183,8 @@ vgic_v3_redist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 
 	} else if (off == GICR_CTLR) {
 		eprintf("read: GICR_CTLR\n");
-		*rval = redist->gicr_ctlr;
+		/* No writes pending */
+		*rval = redist->gicr_ctlr & ~GICR_CTLR_RWP & ~GICR_CTLR_UWP;
 
 	} else if (off == GICR_SGI_BASE_SIZE + GICR_IGROUPR0) {
 		eprintf("read: GICR_IGROUPR0\n");
@@ -266,7 +267,7 @@ vgic_v3_redist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 	} else if (off == GICR_CTLR) {
 		eprintf("write: GICR_CTLR\n");
 		/* Writes are never pending. */
-		redist->gicr_ctlr = val & ~GICR_CTLR_RWP;;
+		redist->gicr_ctlr = val;
 
 	} else if (off == GICR_SGI_BASE_SIZE + GICR_IGROUPR0) {
 		eprintf("write: GICR_IGROUPR0\n");

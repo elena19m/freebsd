@@ -58,7 +58,7 @@
 #define	 GICD_CTLR_ARE_NS	(1 << 4)
 #define	 GICD_CTLR_RWP		(1 << 31)
 /* Only one security state supported */
-#define	 GICD_CTLR_RES0		(0x800000D3)
+#define	 GICD_CTLR_RES0		(0x000000D3)
 /* GICD_TYPER */
 #define	 GICD_TYPER_IDBITS(n)	((((n) >> 19) & 0x1F) + 1)
 #define	 GICD_TYPER_SECURITYEXTN	\
@@ -92,6 +92,7 @@
 /* Redistributor registers */
 #define	GICR_CTLR		GICD_CTLR
 #define	 GICR_CTLR_RWP		(1 << 3)
+#define	 GICR_CTLR_UWP		(1 << 31)
 #define	 GICR_CTLR_LPI_ENABLE	(1 << 0)
 
 #define	GICR_PIDR2		GICD_PIDR2
