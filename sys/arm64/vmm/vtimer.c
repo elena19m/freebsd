@@ -101,21 +101,20 @@ vtimer_inject_irq(struct hypctx *hypctx)
 	irq = hyp->vtimer.phys_ns_irq;
 
 	vtimer_cpu->cntp_ctl_el0 |= 1 << 1;
-	vgic_v3_inject_irq(hypctx, irq, IRQ_LEVEL);
 }
 
 static void
 vtimer_inject_irq_task(void *context, int pending)
 {
-	eprintf("hello world!\n");
-	/*
-	struct hypctx *hypctx = context;
+	struct hyp *hyp;
+	struct hypctx *hypctx;
+	int irq;
 
-	if (hypctx->vtimer_cpu.started) {
-		hypctx->vtimer_cpu.started = false;
-		vtimer_inject_irq(hypctx);
-	}
-	*/
+	hypctx = (struct hypctx *)context;
+	hyp = hypctx->hyp;
+	irq = hyp->vtimer.phys_ns_irq;
+
+	vgic_v3_inject_irq(hypctx, irq, IRQ_LEVEL);
 }
 
 int

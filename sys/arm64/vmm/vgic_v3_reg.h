@@ -6,8 +6,8 @@
 #define ICH_EISR_EL2_EOI_NOT_HANDLED(lr)	((1 << lr) & ICH_EISR_EL2_STATUS_MASK)
 
 /* Interrupt Controller Empty List Register Status Register */
-#define ICH_ELRSR_EL2_STATUS_MASK	0xffff
-#define ICH_ELRSR_EL2_LR_EMPTY(lr)	((1 << lr) & ICH_ELRSR_EL2_STATUS_MASK)
+#define ICH_ELSR_EL2_STATUS_MASK	0xffff
+#define ICH_ELSR_EL2_LR_EMPTY(x)	((1 << x) & ICH_ELSR_EL2_STATUS_MASK)
 
 /* Interrupt Controller Hyp Control Register */
 #define ICH_HCR_EL2_EOICOUNT_SHIFT	27
@@ -80,7 +80,7 @@
 #define ICH_VTR_EL2_PREBITS_SHIFT	26
 #define ICH_VTR_EL2_PREBITS_MASK	(0x7 << ICH_VTR_EL2_PREBITS_SHIFT)
 #define	ICH_VTR_EL2_PREBITS(x)		\
-		(((x) & ICH_VTR_EL2_PREBITS_MASK) >> ICH_VTR_EL2_PREBITS_SHIFT)
+    (((x) & ICH_VTR_EL2_PREBITS_MASK) >> ICH_VTR_EL2_PREBITS_SHIFT)
 #define ICH_VTR_EL2_SEIS		(1 << 22)	/* System Error Interrupt (SEI) Support */
 #define ICH_VTR_EL2_A3V			(1 << 21)	/* Affinity 3 Valid */
 #define ICH_VTR_EL2_NV4			(1 << 20)	/* Direct injection of virtual interrupts. RES1 for GICv3 */
@@ -90,7 +90,6 @@
  * ICH_VTR_EL2.ListRegs holds the number of list registers, minus one. Add one
  * to get the actual number of list registers.
  */
-#define	ICH_VTR_EL2_LISTREGS(x)		\
-		(((x) & ICH_VTR_EL2_LISTREGS_MASK) + 1)
+#define	ICH_VTR_EL2_LISTREGS(x)		(((x) & ICH_VTR_EL2_LISTREGS_MASK) + 1)
 
 #endif /* !_VGIC_V3_REG_H_ */

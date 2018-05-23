@@ -912,14 +912,9 @@ vgic_queue_irq(struct hypctx *hypctx, uint8_t sgi_source_cpu, int irq)
 		goto end;
 	}
 
-	bit_ffc((bitstr_t *)cpu_if->lr_used, cpu_if->lr_num, &lr_idx);
-	if (lr_idx == -1)
-		return false;
-
 	//printf("LR%d allocated for IRQ%d %x\n", lr, irq, sgi_source_id);
 	cpu_if->ich_lr_el2[lr_idx] = MK_LR_PEND(sgi_source_cpu, irq);
 	cpu_if->irq_to_lr[irq] = lr_idx;
-	bit_set((bitstr_t *)cpu_if->lr_used, lr_idx);
 
 end:
 	if (!vgic_irq_is_edge(hypctx, irq))
@@ -1080,10 +1075,6 @@ vgic_v3_sync_hwstate(void *arg)
 	level_pending = vgic_process_maintenance(hypctx);
 
 	for_each_set_bit(lr_idx, &cpu_if->ich_elsr_el2, cpu_if->lr_num) {
-
-		if (!bit_test_and_clear((bitstr_t *)cpu_if->lr_used, lr_idx))
-			continue;
-
 		irq = cpu_if->ich_lr_el2[lr_idx] & GICH_LR_VIRTID;
 		cpu_if->irq_to_lr[irq] = VGIC_LR_EMPTY;
 	}
@@ -1177,14 +1168,42 @@ vgic_kick_vcpus(struct hyp *hyp)
         }
 }
 
+static inline ssize_t
+vgic_v3_get_free_lr(uint32_t ich_elsr_el2)
+{
+	uint32_t lr;
+
+	for (lr = 0; lr <= virt_features.lr_num; lr++)
+		if (ich_elsr_el2 & (1 << lr))
+			return lr;
+
+	return -1;
+}
+
 int
 vgic_v3_inject_irq(void *arg, unsigned int irq, bool level)
 {
-        struct hypctx *hypctx = arg;
+        struct hypctx *hypctx;
+	struct vgic_v3_cpu_if *cpu_if;
+	uint32_t ich_elsr_el2;
+	ssize_t lr_idx;
 
-        //printf("Injecting %d\n", irq);
-        if (vgic_update_irq_state(hypctx, irq, level))
-                vgic_kick_vcpus(hypctx->hyp);
+        eprintf("Injecting %d\n", irq);
+
+	hypctx = (struct hypctx *)arg;
+	cpu_if = &hypctx->vgic_cpu_if;
+
+	ich_elsr_el2 = cpu_if->ich_elsr_el2;
+	lr_idx = vgic_v3_get_free_lr(ich_elsr_el2);
+	if (lr_idx == -1)
+		eprintf("All ICH_LR<n>_EL2 registers are used\n");
+
+	eprintf("ich_elsr_el2 = 0x%x\n", ich_elsr_el2);
+
+	cpu_if->ich_lr_el2[0] = (1UL << 62) | (1UL << 60) | irq;
+
+        //if (vgic_update_irq_state(hypctx, irq, level))
+        //        vgic_kick_vcpus(hypctx->hyp);
 
         return 0;
 }

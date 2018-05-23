@@ -132,6 +132,16 @@
 	ldp	x0, x1, [sp], #16;			\
 
 
+#define	SAVE_LR_REGS()					\
+	/* Load the number of ICH_LR_EL2 regs from memory */ \
+	mov	x2, #HYPCTX_VGIC_LR_NUM;		\
+	ldr	x3, [x0, x2];				\
+	/* Loop and save all ICH_LR<n>_EL2 registers */	\
+	mrs	x2, ich_lr0_el2;			\
+	mov	x1, #HYPCTX_VGIC_ICH_LR_EL2;		\
+	str	x2, [x0, x1];				\
+
+
 /*
  * The STR and LDR instructions take an offset between [-256, 255], but the
  * hypctx register offset can be larger than that. To get around this limitation
@@ -225,14 +235,17 @@
 							\
 	/*						\
  	 * ICH_EISR_EL2, ICH_ELSR_EL2 and ICH_MISR_EL2 are read-only and are \
-	 * saved because they are modified by the hardware when the virtual \
-	 * machine is running and we need to inspect them in the VGIC driver. \
+	 * saved because they are modified by the hardware as part of the \
+	 * interrupt virtualization process and we need to inspect them in \
+	 * the VGIC driver. \
  	 */						\
 	SAVE_SYS_REG(HYPCTX_VGIC, ICH_EISR_EL2);	\
 	SAVE_SYS_REG(HYPCTX_VGIC, ICH_ELSR_EL2);	\
 	SAVE_SYS_REG(HYPCTX_VGIC, ICH_MISR_EL2);	\
 	SAVE_SYS_REG(HYPCTX_VGIC, ICH_HCR_EL2);		\
 	SAVE_SYS_REG(HYPCTX_VGIC, ICH_VMCR_EL2);	\
+							\
+	SAVE_LR_REGS();					\
 							\
 	/* Save the stack pointer. */			\
 	mrs	x1, sp_el1;				\
@@ -314,18 +327,28 @@
 	ldp	x0, x1, [sp], #16;			\
 
 
-#define KTOHYP_REG(reg)					\
-	mov	x7, HYP_KVA_MASK;			\
-	and	reg, reg, x7;				\
-	mov	x7, HYP_KVA_OFFSET;			\
-	orr	reg, reg, x7;
-
-
 /* See SAVE_SYS_REG */
 #define	LOAD_SYS_REG(prefix, reg)			\
 	mov	x1, prefix ##_ ##reg;			\
 	ldr	x2, [x0, x1];				\
 	msr	reg, x2;
+
+
+#define	LOAD_LR_REGS();					\
+	/* Load the number of ICH_LR_EL2 regs from memory */ \
+	mov	x2, #HYPCTX_VGIC_LR_NUM;		\
+	ldr	x3, [x0, x2];				\
+	/* Loop and load all ICH_LR<n>_EL2 registers */	\
+	mov	x1, #HYPCTX_VGIC_ICH_LR_EL2;		\
+	ldr	x2, [x0, x1];				\
+	msr	ich_lr0_el2, x2;			\
+
+
+#define KTOHYP_REG(reg)					\
+	mov	x7, HYP_KVA_MASK;			\
+	and	reg, reg, x7;				\
+	mov	x7, HYP_KVA_OFFSET;			\
+	orr	reg, reg, x7;
 
 
 /* Load a register from struct hyp *hyp member of hypctx. */
@@ -387,6 +410,8 @@
 							\
 	LOAD_HYP_REG(HYP, VTTBR_EL2);			\
 	LOAD_HYP_REG(HYP_VTIMER, CNTHCTL_EL2);		\
+							\
+	LOAD_LR_REGS();					\
 							\
 	/* Load the guest EL1 stack pointer */		\
 	mov	x1, #HYPCTX_REGS_SP;			\
