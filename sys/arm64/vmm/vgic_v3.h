@@ -93,25 +93,28 @@ struct vgic_v3_dist {
 
 	size_t		nirqs;
 
-	/* TODO: sort them alphabeticaly. */
-
-	/* Interrupt Group Register. */
-	uint64_t	gicd_igroupr_addr_max;
-	uint32_t 	*gicd_igroupr;
-	size_t		gicd_igroupr_num;
-	/* Interrupt Configuration Registers. */
-	uint64_t	gicd_icfgr_addr_max;
-	uint32_t	*gicd_icfgr;
-	size_t		gicd_icfgr_num;
-	/* Interrupt Priority Registers. */
-	uint64_t	gicd_ipriorityr_addr_max;
-	uint32_t	*gicd_ipriorityr;
-	size_t		gicd_ipriorityr_num;
 	/* Interrupt Clear-Enable and Set-Enable Registers. */
 	uint32_t	*gicd_icenabler_isenabler;
 	size_t		gicd_icenabler_isenabler_num;
 	uint64_t	gicd_icenabler_addr_max;
 	uint64_t	gicd_isenabler_addr_max;
+
+	/* Interrupt Configuration Registers. */
+	uint64_t	gicd_icfgr_addr_max;
+	uint32_t	*gicd_icfgr;
+	size_t		gicd_icfgr_num;
+
+	/* Interrupt Group Register. */
+	uint64_t	gicd_igroupr_addr_max;
+	uint32_t 	*gicd_igroupr;
+	size_t		gicd_igroupr_num;
+	
+	/* Interrupt Priority Registers. */
+	uint64_t	gicd_ipriorityr_addr_max;
+	uint32_t	*gicd_ipriorityr;
+	size_t		gicd_ipriorityr_num;
+
+
 	/* Interrupt Routing Registers. */
 	uint64_t	gicd_irouter_addr_max;
 	uint64_t	*gicd_irouter;
@@ -130,6 +133,7 @@ struct vgic_v3_redist {
 	/* Interrupt Priority Registers. */
 	uint32_t	gicr_ipriorityr[VGIC_PRV_I_NUM / GICR_I_PER_IPRIORITYn];
 	uint64_t	gicr_ipriorityr_addr_max;
+
 	/* Interupt Configuration Registers */
 	uint32_t	gicr_icfgr0, gicr_icfgr1;
 };
@@ -139,7 +143,12 @@ struct vgic_v3_cpu_if {
 	uint32_t	pending_prv[VGIC_PRV_I_NUM / (sizeof(uint32_t) * 8)];
 	uint32_t	pending_shr[VGIC_SHR_I_NUM / (sizeof(uint32_t) * 8)];
 
-	/* ICH_AP{0, 1}R<n>_EL2 are used for OSes that run in EL2 */
+	/*
+	 * ICH_AP{0, 1}R<n>_EL2 are used for virtualization and are part of the
+	 * VM context
+	 *
+	 * TODO save/restore them
+	 */
 
 	uint32_t	ich_eisr_el2;	/* End of Interrupt Status Register. */
 	uint32_t	ich_elsr_el2;	/* Empty List register Status Register. */
@@ -149,7 +158,6 @@ struct vgic_v3_cpu_if {
 
 	uint64_t	ich_lr_el2[VGIC_LR_NUM_MAX];	/* List Registers. */
 	size_t		lr_num;				/* Number of used List Registers. */
-	uint8_t		lr_used[VGIC_LR_NUM_MAX];	/* Bitmap for used List Registers. */
 	uint8_t		irq_to_lr[GIC_I_NUM_MAX];
 };
 
