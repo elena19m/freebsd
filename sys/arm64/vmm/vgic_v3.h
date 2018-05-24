@@ -146,6 +146,7 @@ struct vgic_v3_cpu_if {
 	uint32_t	pending_shr[VGIC_SHR_I_NUM / (sizeof(uint32_t) * 8)];
 
 	uint32_t	ich_eisr_el2;	/* End of Interrupt Status Register. */
+	/* ICH_ELRSR_EL2 in ARM GIC Architecture Specification */
 	uint32_t	ich_elsr_el2;	/* Empty List register Status Register. */
 	uint32_t	ich_hcr_el2;	/* Hyp Control Register. */
 	uint32_t	ich_misr_el2;	/* Maintenance Interrupt State Register. */

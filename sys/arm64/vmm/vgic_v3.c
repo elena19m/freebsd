@@ -1172,20 +1172,23 @@ vgic_v3_inject_irq(void *arg, unsigned int irq, bool level)
 	uint32_t ich_elsr_el2;
 	ssize_t lr_idx;
 
-        eprintf("-> Injecting %d\n", irq);
-
 	hypctx = (struct hypctx *)arg;
 	cpu_if = &hypctx->vgic_cpu_if;
 
 	ich_elsr_el2 = cpu_if->ich_elsr_el2;
 	lr_idx = vgic_v3_get_free_lr(ich_elsr_el2);
-	if (lr_idx == -1)
+	if (lr_idx == -1) {
 		eprintf("All ICH_LR<n>_EL2 registers are used\n");
+		eprintf("\tich_elsr_el2 = 0x%x\n", ich_elsr_el2);
+		return 0;
+	}
 
-	eprintf("\tich_elsr_el2 = 0x%x\n", ich_elsr_el2);
+	if (lr_idx != 0) {
+		eprintf("lr_idx = %ld\n", lr_idx);
+		eprintf("\tich_elsr_el2 = 0x%x\n", ich_elsr_el2);
+	}
 
-	cpu_if->ich_lr_el2[0] = (1UL << 62) | (1UL << 60) | irq;
-	eprintf("\tich_lr0_el2 = 0x%lx\n", cpu_if->ich_lr_el2[0]);
+	cpu_if->ich_lr_el2[lr_idx] = (1UL << 62) | (1UL << 60) | irq;
 
         //if (vgic_update_irq_state(hypctx, irq, level))
         //        vgic_kick_vcpus(hypctx->hyp);
