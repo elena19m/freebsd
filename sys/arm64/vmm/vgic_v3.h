@@ -39,19 +39,22 @@
 #include <arm64/arm64/gic_v3_reg.h>
 #include <arm/arm/gic_common.h>
 
-#define VGIC_SGI_NUM	(GIC_LAST_SGI - GIC_FIRST_SGI + 1)
-#define VGIC_PPI_NUM	(GIC_LAST_PPI - GIC_FIRST_PPI + 1)
-#define VGIC_SPI_NUM	(GIC_LAST_SPI - GIC_FIRST_SPI + 1)
-#define VGIC_PRV_I_NUM	(VGIC_SGI_NUM + VGIC_PPI_NUM)
-#define VGIC_SHR_I_NUM	(VGIC_SPI_NUM)
+#define VGIC_SGI_NUM		(GIC_LAST_SGI - GIC_FIRST_SGI + 1)
+#define VGIC_PPI_NUM		(GIC_LAST_PPI - GIC_FIRST_PPI + 1)
+#define VGIC_SPI_NUM		(GIC_LAST_SPI - GIC_FIRST_SPI + 1)
+#define VGIC_PRV_I_NUM		(VGIC_SGI_NUM + VGIC_PPI_NUM)
+#define VGIC_SHR_I_NUM		(VGIC_SPI_NUM)
 
-#define VGIC_LR_NUM_MAX	16
-#define VGIC_LR_EMPTY	0xff
+#define VGIC_ICH_LR_NUM_MAX	16
+#define VGIC_ICH_LR_EMPTY	0xff
 
-#define VGIC_MAXCPU	VM_MAXCPU
+#define	VGIC_ICH_AP0R_NUM_MAX	4
+#define	VGIC_ICH_AP1R_NUM_MAX	VGIC_ICH_AP0R_NUM_MAX
 
-#define VGIC_CFG_LEVEL	0
-#define VGIC_CFG_EDGE	1
+#define VGIC_MAXCPU		VM_MAXCPU
+
+#define VGIC_CFG_LEVEL		0
+#define VGIC_CFG_EDGE		1
 
 struct vm;
 struct vm_exit;
@@ -65,8 +68,7 @@ struct vgic_v3_dist {
 
 	/* Interrupt level */
 	uint32_t irq_state_prv[VGIC_MAXCPU][VGIC_PRV_I_NUM / (sizeof(uint32_t) * 8)];
-	uint32_t irq_state_shr[VGIC_SHR_I_NUM / (sizeof(uint32_t) * 8)];
-
+	uint32_t irq_state_shr[VGIC_SHR_I_NUM / (sizeof(uint32_t) * 8)]; 
 	/* Level interrupts in progress */
 	uint32_t irq_active_prv[VGIC_MAXCPU][VGIC_PRV_I_NUM / (sizeof(uint32_t) * 8)];
 	uint32_t irq_active_shr[VGIC_SHR_I_NUM / (sizeof(uint32_t) * 8)];
@@ -108,7 +110,7 @@ struct vgic_v3_dist {
 	uint64_t	gicd_igroupr_addr_max;
 	uint32_t 	*gicd_igroupr;
 	size_t		gicd_igroupr_num;
-	
+
 	/* Interrupt Priority Registers. */
 	uint64_t	gicd_ipriorityr_addr_max;
 	uint32_t	*gicd_ipriorityr;
@@ -143,22 +145,22 @@ struct vgic_v3_cpu_if {
 	uint32_t	pending_prv[VGIC_PRV_I_NUM / (sizeof(uint32_t) * 8)];
 	uint32_t	pending_shr[VGIC_SHR_I_NUM / (sizeof(uint32_t) * 8)];
 
-	/*
-	 * ICH_AP{0, 1}R<n>_EL2 are used for virtualization and are part of the
-	 * VM context
-	 *
-	 * TODO save/restore them
-	 */
-
 	uint32_t	ich_eisr_el2;	/* End of Interrupt Status Register. */
 	uint32_t	ich_elsr_el2;	/* Empty List register Status Register. */
 	uint32_t	ich_hcr_el2;	/* Hyp Control Register. */
 	uint32_t	ich_misr_el2;	/* Maintenance Interrupt State Register. */
 	uint32_t	ich_vmcr_el2;	/* Virtual Machine Control Register. */
 
-	uint64_t	ich_lr_el2[VGIC_LR_NUM_MAX];	/* List Registers. */
-	size_t		lr_num;				/* Number of used List Registers. */
+	/* List Registers */
+	uint64_t	ich_lr_el2[VGIC_ICH_LR_NUM_MAX];
+	size_t		ich_lr_num;
 	uint8_t		irq_to_lr[GIC_I_NUM_MAX];
+
+	/* Active Priorities Registers for Group 0 and 1 interrupts */
+	uint32_t	ich_ap0r_el2[VGIC_ICH_AP0R_NUM_MAX];
+	size_t		ich_ap0r_num;
+	uint32_t	ich_ap1r_el2[VGIC_ICH_AP1R_NUM_MAX];
+	size_t		ich_ap1r_num;
 };
 
 int 	vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
