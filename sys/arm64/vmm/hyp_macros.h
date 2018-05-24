@@ -132,14 +132,40 @@
 	ldp	x0, x1, [sp], #16;			\
 
 
+#define	SAVE_LR_REG(lr, to, remaining)			\
+	cmp	remaining, #0;				\
+	beq	9f;					\
+	mrs	x7, lr;					\
+	str	x7, [to];				\
+	add	to, to, #8;				\
+	sub	remaining, remaining, #1;
+
+
 #define	SAVE_LR_REGS()					\
 	/* Load the number of ICH_LR_EL2 regs from memory */ \
 	mov	x2, #HYPCTX_VGIC_LR_NUM;		\
 	ldr	x3, [x0, x2];				\
-	/* Loop and save all ICH_LR<n>_EL2 registers */	\
-	mrs	x2, ich_lr0_el2;			\
+	/* x1 holds the destination address */		\
 	mov	x1, #HYPCTX_VGIC_ICH_LR_EL2;		\
-	str	x2, [x0, x1];				\
+	add	x1, x0, x1;				\
+	SAVE_LR_REG(ich_lr0_el2, x1, x3);		\
+	SAVE_LR_REG(ich_lr1_el2, x1, x3);		\
+	SAVE_LR_REG(ich_lr2_el2, x1, x3);		\
+	SAVE_LR_REG(ich_lr3_el2, x1, x3);		\
+	SAVE_LR_REG(ich_lr4_el2, x1, x3);		\
+	SAVE_LR_REG(ich_lr5_el2, x1, x3);		\
+	SAVE_LR_REG(ich_lr6_el2, x1, x3);		\
+	SAVE_LR_REG(ich_lr7_el2, x1, x3);		\
+	SAVE_LR_REG(ich_lr8_el2, x1, x3);		\
+	SAVE_LR_REG(ich_lr9_el2, x1, x3);		\
+	SAVE_LR_REG(ich_lr10_el2, x1, x3);		\
+	SAVE_LR_REG(ich_lr11_el2, x1, x3);		\
+	SAVE_LR_REG(ich_lr12_el2, x1, x3);		\
+	SAVE_LR_REG(ich_lr13_el2, x1, x3);		\
+	SAVE_LR_REG(ich_lr14_el2, x1, x3);		\
+	SAVE_LR_REG(ich_lr15_el2, x1, x3);		\
+9:;							\
+	;
 
 
 /*
@@ -334,14 +360,40 @@
 	msr	reg, x2;
 
 
+#define	LOAD_LR_REG(lr, from, remaining)		\
+	cmp	remaining, #0;				\
+	beq	9f;					\
+	ldr	x2, [from];				\
+	msr	lr, x2;					\
+	add	from, from, #8;				\
+	sub	remaining, remaining, #1;
+
+
 #define	LOAD_LR_REGS();					\
 	/* Load the number of ICH_LR_EL2 regs from memory */ \
 	mov	x2, #HYPCTX_VGIC_LR_NUM;		\
 	ldr	x3, [x0, x2];				\
-	/* Loop and load all ICH_LR<n>_EL2 registers */	\
 	mov	x1, #HYPCTX_VGIC_ICH_LR_EL2;		\
-	ldr	x2, [x0, x1];				\
-	msr	ich_lr0_el2, x2;			\
+	/* x1 holds the load address */			\
+	add	x1, x0, x1;				\
+	LOAD_LR_REG(ich_lr0_el2, x1, x3);		\
+	LOAD_LR_REG(ich_lr1_el2, x1, x3);		\
+	LOAD_LR_REG(ich_lr2_el2, x1, x3);		\
+	LOAD_LR_REG(ich_lr3_el2, x1, x3);		\
+	LOAD_LR_REG(ich_lr4_el2, x1, x3);		\
+	LOAD_LR_REG(ich_lr5_el2, x1, x3);		\
+	LOAD_LR_REG(ich_lr6_el2, x1, x3);		\
+	LOAD_LR_REG(ich_lr7_el2, x1, x3);		\
+	LOAD_LR_REG(ich_lr8_el2, x1, x3);		\
+	LOAD_LR_REG(ich_lr9_el2, x1, x3);		\
+	LOAD_LR_REG(ich_lr10_el2, x1, x3);		\
+	LOAD_LR_REG(ich_lr11_el2, x1, x3);		\
+	LOAD_LR_REG(ich_lr12_el2, x1, x3);		\
+	LOAD_LR_REG(ich_lr13_el2, x1, x3);		\
+	LOAD_LR_REG(ich_lr14_el2, x1, x3);		\
+	LOAD_LR_REG(ich_lr15_el2, x1, x3);		\
+9:;							\
+	;
 
 
 #define KTOHYP_REG(reg)					\
