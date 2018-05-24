@@ -72,10 +72,12 @@ MALLOC_DEFINE(M_VGIC_V3, "ARM VMM VGIC V3", "ARM VMM VGIC V3");
 extern uint64_t hypmode_enabled;
 
 struct vgic_v3_virt_features {
-	size_t lr_num;
 	uint32_t prebits;
 	uint32_t pribits;
 	uint8_t min_prio;
+	size_t ich_lr_num;
+	size_t ich_ap0r_num;
+	size_t ich_ap1r_num;
 };
 static struct vgic_v3_virt_features virt_features;
 
@@ -143,7 +145,6 @@ static uint16_t vgic_dist_conf_compress(uint32_t val)
 		val = RES0;							\
 	} else {								\
 		idx = ((off) - (base)) / size;					\
-		eprintf("read: " #arr "<%zd>\n", idx);				\
 		val = arr[idx];							\
 	}									\
 	val;									\
@@ -168,42 +169,33 @@ vgic_v3_redist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 	off = fault_ipa - redist->ipa;
 
 	if (off == GICR_PIDR2) {
-		eprintf("read: GICR_PIDR2\n");
 		/* GICR_PIDR2 has the same value as GICD_PIDR2 */
 		*rval = dist->gicd_pidr2;
 
 	} else if (off == GICR_TYPER) {
-		eprintf("read: GICR_TYPER\n");
 		*rval = redist->gicr_typer;
 
 	} else if (off == GICR_WAKER) {
-		eprintf("read: GICR_WAKER\n");
 		/* Redistributor is always awake. */
 		*rval = 0 & ~GICR_WAKER_PS & ~GICR_WAKER_CA;
 
 	} else if (off == GICR_CTLR) {
-		eprintf("read: GICR_CTLR\n");
 		/* No writes pending */
 		*rval = redist->gicr_ctlr & ~GICR_CTLR_RWP & ~GICR_CTLR_UWP;
 
 	} else if (off == GICR_SGI_BASE_SIZE + GICR_IGROUPR0) {
-		eprintf("read: GICR_IGROUPR0\n");
 		*rval = redist->gicr_igroupr0;
 
 	} else if (off == GICR_SGI_BASE_SIZE + GICR_ICENABLER0) {
-		eprintf("read: GICR_ICENABLER0\n");
 		*rval = redist->gicr_icenabler0_isenabler0;
 
 	} else if (off == GICR_SGI_BASE_SIZE + GICR_ISENABLER0) {
-		eprintf("read: GICR_ISENABLER0\n");
 		*rval = redist->gicr_icenabler0_isenabler0;
 
 	} else if (off == GICR_SGI_BASE_SIZE + GICR_ICFGR0_BASE) {
-		eprintf("read: GICR_ICFGR0\n");
 		*rval = redist->gicr_icfgr0;
 
 	} else if (off == GICR_SGI_BASE_SIZE + GICR_ICFGR1_BASE) {
-		eprintf("read: GICR_ICFGR1\n");
 		*rval = redist->gicr_icfgr1;
 
 	} else if (off >= GICR_SGI_BASE_SIZE + GICD_IPRIORITYR_BASE &&
@@ -230,7 +222,6 @@ do {										\
 				(off));						\
 	} else {								\
 		idx = ((off) - (base)) / size;					\
-		eprintf("write: " #reg "<%zd>\n", idx);				\
 		reg[idx] = val;							\
 	}									\
 } while (0)
@@ -262,33 +253,27 @@ vgic_v3_redist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 		 * Ignore writes to GICRR_WAKER. The Redistributor will always
 		 * be awake.
 		 */
-		eprintf("write: GICR_WAKER\n");
+		;
 
 	} else if (off == GICR_CTLR) {
-		eprintf("write: GICR_CTLR\n");
 		/* Writes are never pending. */
 		redist->gicr_ctlr = val;
 
 	} else if (off == GICR_SGI_BASE_SIZE + GICR_IGROUPR0) {
-		eprintf("write: GICR_IGROUPR0\n");
 		redist->gicr_igroupr0 = val;
 
 	} else if (off == GICR_SGI_BASE_SIZE + GICR_ICENABLER0) {
-		eprintf("write: GICR_ICENABLER0\n");
 		/* A write of 1 to ICENABLER disables the interrupt. */
 		redist->gicr_icenabler0_isenabler0 &= ~val;
 
 	} else if (off == GICR_SGI_BASE_SIZE + GICR_ISENABLER0) {
-		eprintf("write: GICR_ISENABLER0\n");
 		/* A write of 1 to ISENABLER enables the interrupt */
 		redist->gicr_icenabler0_isenabler0 |= val;
 
 	} else if (off == GICR_SGI_BASE_SIZE + GICR_ICFGR0_BASE) {
-		eprintf("write: GICR_ICFGR0\n");
 		redist->gicr_icfgr0 = val;
 
 	} else if (off == GICR_SGI_BASE_SIZE + GICR_ICFGR1_BASE) {
-		eprintf("write: GICR_ICFGR1\n");
 		redist->gicr_icfgr1 = val;
 
 	} else if (off >= GICR_SGI_BASE_SIZE + GICD_IPRIORITYR_BASE &&
@@ -321,19 +306,15 @@ vgic_v3_dist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 	off = fault_ipa - dist->ipa;
 
 	if (off == GICD_CTLR) {
-		eprintf("read: GICD_CTLR\n");
 		*rval = dist->gicd_ctlr;
 
 	} else if (off == GICD_TYPER) {
-		eprintf("read: GICD_TYPER\n");
 		*rval = dist->gicd_typer;
 
 	} else if (off == GICD_IIDR) {
-		eprintf("read: GICD_IIDR not implemented\n");
 		*rval = RES0;
 
 	} else if (off == GICD_PIDR2) {
-		eprintf("read: GICD_PIDR2\n");
 		*rval = dist->gicd_pidr2;
 
 	} else if (off >= GICD_IGROUPR_BASE && off < dist->gicd_igroupr_addr_max) {
@@ -389,7 +370,6 @@ vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 	if (off == GICD_CTLR) {
 		/* Writes are never pending. */
 		dist->gicd_ctlr = val & ~GICD_CTLR_RWP;
-		eprintf("write: GICD_CTLR\n");
 
 	} else if (off == GICD_TYPER) {
 		eprintf("Warning: Trying to write to read-only register GICD_TYPER.\n");
@@ -519,6 +499,10 @@ vgic_v3_cpuinit(void *arg, bool last_vcpu)
 	    ICH_VMCR_EL2_VBPR1_NO_PREEMPTION | ICH_VMCR_EL2_VBPR0_NO_PREEMPTION;
 	cpu_if->ich_vmcr_el2 &= ~ICH_VMCR_EL2_VEOIM;
 	cpu_if->ich_vmcr_el2 |= ICH_VMCR_EL2_VENG1;
+
+	cpu_if->ich_lr_num = virt_features.ich_lr_num;
+	cpu_if->ich_ap0r_num = virt_features.ich_ap0r_num;
+	cpu_if->ich_ap1r_num = virt_features.ich_ap1r_num;
 }
 
 #define	INIT_DIST_REG(name, n, base, dist)				\
@@ -877,12 +861,12 @@ vgic_retire_disabled_irqs(struct hypctx *hypctx)
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	int lr_idx;
 
-	for_each_set_bit(lr_idx, cpu_if->lr_used, cpu_if->lr_num) {
+	for_each_set_bit(lr_idx, cpu_if->lr_used, cpu_if->ich_lr_num) {
 
 		int irq = cpu_if->lr[lr_idx] & GICH_LR_VIRTID;
 
 		if (!vgic_irq_is_enabled(hypctx, irq)) {
-			cpu_if->irq_to_lr[irq] = VGIC_LR_EMPTY;
+			cpu_if->irq_to_lr[irq] = VGIC_ICH_LR_EMPTY;
 			bit_clear((bitstr_t *)cpu_if->lr_used, lr_idx);
 			cpu_if->ich_lr_el2[lr_idx] &= ~GICH_LR_STATE;
 			if (vgic_irq_is_active(hypctx, irq))
@@ -902,7 +886,7 @@ vgic_queue_irq(struct hypctx *hypctx, uint8_t sgi_source_cpu, int irq)
 
 	lr_idx = cpu_if->irq_to_lr[irq];
 
-	if (lr_idx != VGIC_LR_EMPTY &&
+	if (lr_idx != VGIC_ICH_LR_EMPTY &&
 	    (LR_CPUID(cpu_if->ich_lr_el2[lr_idx]) == sgi_source_cpu)) {
 
 		//printf("LR%d piggyback for IRQ%d %x\n", lr, irq, cpu_if->vgic_lr[lr]);
@@ -979,7 +963,7 @@ vgic_process_maintenance(struct hypctx *hypctx)
 
 	if (cpu_if->ich_misr_el2 & GICH_MISR_EOI) {
 
-		for_each_set_bit(lr_idx, &cpu_if->ich_eisr_el2, cpu_if->lr_num) {
+		for_each_set_bit(lr_idx, &cpu_if->ich_eisr_el2, cpu_if->ich_lr_num) {
 
 			irq = cpu_if->ich_lr_el2[lr_idx] & GICH_LR_VIRTID;
 
@@ -1074,12 +1058,12 @@ vgic_v3_sync_hwstate(void *arg)
 
 	level_pending = vgic_process_maintenance(hypctx);
 
-	for_each_set_bit(lr_idx, &cpu_if->ich_elsr_el2, cpu_if->lr_num) {
+	for_each_set_bit(lr_idx, &cpu_if->ich_elsr_el2, cpu_if->ich_lr_num) {
 		irq = cpu_if->ich_lr_el2[lr_idx] & GICH_LR_VIRTID;
-		cpu_if->irq_to_lr[irq] = VGIC_LR_EMPTY;
+		cpu_if->irq_to_lr[irq] = VGIC_ICH_LR_EMPTY;
 	}
 
-	bit_ffc((bitstr_t *)&cpu_if->ich_elsr_el2, cpu_if->lr_num, &pending);
+	bit_ffc((bitstr_t *)&cpu_if->ich_elsr_el2, cpu_if->ich_lr_num, &pending);
 	if (level_pending || pending > -1)
 		bit_set((bitstr_t *)&dist->irq_pending_on_cpu, hypctx->vcpu);
 }
@@ -1173,7 +1157,7 @@ vgic_v3_get_free_lr(uint32_t ich_elsr_el2)
 {
 	uint32_t lr;
 
-	for (lr = 0; lr <= virt_features.lr_num; lr++)
+	for (lr = 0; lr <= virt_features.ich_lr_num; lr++)
 		if (ich_elsr_el2 & (1 << lr))
 			return lr;
 
@@ -1188,7 +1172,7 @@ vgic_v3_inject_irq(void *arg, unsigned int irq, bool level)
 	uint32_t ich_elsr_el2;
 	ssize_t lr_idx;
 
-        eprintf("Injecting %d\n", irq);
+        eprintf("-> Injecting %d\n", irq);
 
 	hypctx = (struct hypctx *)arg;
 	cpu_if = &hypctx->vgic_cpu_if;
@@ -1198,9 +1182,10 @@ vgic_v3_inject_irq(void *arg, unsigned int irq, bool level)
 	if (lr_idx == -1)
 		eprintf("All ICH_LR<n>_EL2 registers are used\n");
 
-	eprintf("ich_elsr_el2 = 0x%x\n", ich_elsr_el2);
+	eprintf("\tich_elsr_el2 = 0x%x\n", ich_elsr_el2);
 
 	cpu_if->ich_lr_el2[0] = (1UL << 62) | (1UL << 60) | irq;
+	eprintf("\tich_lr0_el2 = 0x%lx\n", cpu_if->ich_lr_el2[0]);
 
         //if (vgic_update_irq_state(hypctx, irq, level))
         //        vgic_kick_vcpus(hypctx->hyp);
@@ -1308,7 +1293,19 @@ vgic_v3_init(uint64_t ich_vtr_el2)
 	}
 
 	virt_features.prebits = ICH_VTR_EL2_PREBITS(ich_vtr_el2);
-	virt_features.lr_num = ICH_VTR_EL2_LISTREGS(ich_vtr_el2);
+	switch (virt_features.prebits) {
+	case 5:
+		virt_features.ich_ap0r_num = 1;
+		virt_features.ich_ap1r_num = 1;
+	case 6:
+		virt_features.ich_ap0r_num = 2;
+		virt_features.ich_ap1r_num = 2;
+	case 7:
+		virt_features.ich_ap0r_num = 4;
+		virt_features.ich_ap1r_num = 4;
+	}
+
+	virt_features.ich_lr_num = ICH_VTR_EL2_LISTREGS(ich_vtr_el2);
 }
 
 static int

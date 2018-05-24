@@ -539,6 +539,7 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 		 * timer expired.
 		 */
 		//vgic_flush_hwstate(hypctx);
+		//
 
 		daif = intr_disable();
 		excp_type = vmm_call_hyp((void *)ktohyp(vmm_enter_guest),

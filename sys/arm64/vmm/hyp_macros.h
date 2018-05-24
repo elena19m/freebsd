@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 Mihai Carabas <mihai.carabas@gmail.com>
+ * Copyright (C) 2017 Alexandru Elisei <alexandru.elisei@gmail.com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -132,10 +132,10 @@
 	ldp	x0, x1, [sp], #16;			\
 
 
-#define	SAVE_LR_REG(lr, to, remaining)			\
+#define	SAVE_ARRAY_REG(reg, to, remaining)		\
 	cmp	remaining, #0;				\
 	beq	9f;					\
-	mrs	x7, lr;					\
+	mrs	x7, reg;				\
 	str	x7, [to];				\
 	add	to, to, #8;				\
 	sub	remaining, remaining, #1;
@@ -143,27 +143,57 @@
 
 #define	SAVE_LR_REGS()					\
 	/* Load the number of ICH_LR_EL2 regs from memory */ \
-	mov	x2, #HYPCTX_VGIC_LR_NUM;		\
+	mov	x2, #HYPCTX_VGIC_ICH_LR_NUM;		\
 	ldr	x3, [x0, x2];				\
 	/* x1 holds the destination address */		\
 	mov	x1, #HYPCTX_VGIC_ICH_LR_EL2;		\
 	add	x1, x0, x1;				\
-	SAVE_LR_REG(ich_lr0_el2, x1, x3);		\
-	SAVE_LR_REG(ich_lr1_el2, x1, x3);		\
-	SAVE_LR_REG(ich_lr2_el2, x1, x3);		\
-	SAVE_LR_REG(ich_lr3_el2, x1, x3);		\
-	SAVE_LR_REG(ich_lr4_el2, x1, x3);		\
-	SAVE_LR_REG(ich_lr5_el2, x1, x3);		\
-	SAVE_LR_REG(ich_lr6_el2, x1, x3);		\
-	SAVE_LR_REG(ich_lr7_el2, x1, x3);		\
-	SAVE_LR_REG(ich_lr8_el2, x1, x3);		\
-	SAVE_LR_REG(ich_lr9_el2, x1, x3);		\
-	SAVE_LR_REG(ich_lr10_el2, x1, x3);		\
-	SAVE_LR_REG(ich_lr11_el2, x1, x3);		\
-	SAVE_LR_REG(ich_lr12_el2, x1, x3);		\
-	SAVE_LR_REG(ich_lr13_el2, x1, x3);		\
-	SAVE_LR_REG(ich_lr14_el2, x1, x3);		\
-	SAVE_LR_REG(ich_lr15_el2, x1, x3);		\
+	SAVE_ARRAY_REG(ich_lr0_el2, x1, x3);		\
+	SAVE_ARRAY_REG(ich_lr1_el2, x1, x3);		\
+	SAVE_ARRAY_REG(ich_lr2_el2, x1, x3);		\
+	SAVE_ARRAY_REG(ich_lr3_el2, x1, x3);		\
+	SAVE_ARRAY_REG(ich_lr4_el2, x1, x3);		\
+	SAVE_ARRAY_REG(ich_lr5_el2, x1, x3);		\
+	SAVE_ARRAY_REG(ich_lr6_el2, x1, x3);		\
+	SAVE_ARRAY_REG(ich_lr7_el2, x1, x3);		\
+	SAVE_ARRAY_REG(ich_lr8_el2, x1, x3);		\
+	SAVE_ARRAY_REG(ich_lr9_el2, x1, x3);		\
+	SAVE_ARRAY_REG(ich_lr10_el2, x1, x3);		\
+	SAVE_ARRAY_REG(ich_lr11_el2, x1, x3);		\
+	SAVE_ARRAY_REG(ich_lr12_el2, x1, x3);		\
+	SAVE_ARRAY_REG(ich_lr13_el2, x1, x3);		\
+	SAVE_ARRAY_REG(ich_lr14_el2, x1, x3);		\
+	SAVE_ARRAY_REG(ich_lr15_el2, x1, x3);		\
+9:;							\
+	;
+
+
+#define	SAVE_AP0R_REGS()				\
+	/* Load the number of ICH_AP0R_EL2 regs from memory */ \
+	mov	x2, #HYPCTX_VGIC_ICH_AP0R_NUM;		\
+	ldr	x3, [x0, x2];				\
+	/* x1 holds the destination address */		\
+	mov	x1, #HYPCTX_VGIC_ICH_AP0R_EL2;		\
+	add	x1, x0, x1;				\
+	SAVE_ARRAY_REG(ich_ap0r0_el2, x1, x3);		\
+	SAVE_ARRAY_REG(ich_ap0r1_el2, x1, x3);		\
+	SAVE_ARRAY_REG(ich_ap0r2_el2, x1, x3);		\
+	SAVE_ARRAY_REG(ich_ap0r3_el2, x1, x3);		\
+9:;							\
+	;
+
+
+#define	SAVE_AP1R_REGS()				\
+	/* Load the number of ICH_AP1R_EL2 regs from memory */ \
+	mov	x2, #HYPCTX_VGIC_ICH_AP1R_NUM;		\
+	ldr	x3, [x0, x2];				\
+	/* x1 holds the destination address */		\
+	mov	x1, #HYPCTX_VGIC_ICH_AP1R_EL2;		\
+	add	x1, x0, x1;				\
+	SAVE_ARRAY_REG(ich_ap1r0_el2, x1, x3);		\
+	SAVE_ARRAY_REG(ich_ap1r1_el2, x1, x3);		\
+	SAVE_ARRAY_REG(ich_ap1r2_el2, x1, x3);		\
+	SAVE_ARRAY_REG(ich_ap1r3_el2, x1, x3);		\
 9:;							\
 	;
 
@@ -272,6 +302,8 @@
 	SAVE_SYS_REG(HYPCTX_VGIC, ICH_VMCR_EL2);	\
 							\
 	SAVE_LR_REGS();					\
+	SAVE_AP0R_REGS();				\
+	SAVE_AP1R_REGS();				\
 							\
 	/* Save the stack pointer. */			\
 	mrs	x1, sp_el1;				\
@@ -360,40 +392,71 @@
 	msr	reg, x2;
 
 
-#define	LOAD_LR_REG(lr, from, remaining)		\
+#define	LOAD_ARRAY_REG(reg, from, remaining)		\
 	cmp	remaining, #0;				\
 	beq	9f;					\
 	ldr	x2, [from];				\
-	msr	lr, x2;					\
+	msr	reg, x2;				\
 	add	from, from, #8;				\
 	sub	remaining, remaining, #1;
 
 
 #define	LOAD_LR_REGS();					\
 	/* Load the number of ICH_LR_EL2 regs from memory */ \
-	mov	x2, #HYPCTX_VGIC_LR_NUM;		\
+	mov	x2, #HYPCTX_VGIC_ICH_LR_NUM;		\
 	ldr	x3, [x0, x2];				\
 	mov	x1, #HYPCTX_VGIC_ICH_LR_EL2;		\
 	/* x1 holds the load address */			\
 	add	x1, x0, x1;				\
-	LOAD_LR_REG(ich_lr0_el2, x1, x3);		\
-	LOAD_LR_REG(ich_lr1_el2, x1, x3);		\
-	LOAD_LR_REG(ich_lr2_el2, x1, x3);		\
-	LOAD_LR_REG(ich_lr3_el2, x1, x3);		\
-	LOAD_LR_REG(ich_lr4_el2, x1, x3);		\
-	LOAD_LR_REG(ich_lr5_el2, x1, x3);		\
-	LOAD_LR_REG(ich_lr6_el2, x1, x3);		\
-	LOAD_LR_REG(ich_lr7_el2, x1, x3);		\
-	LOAD_LR_REG(ich_lr8_el2, x1, x3);		\
-	LOAD_LR_REG(ich_lr9_el2, x1, x3);		\
-	LOAD_LR_REG(ich_lr10_el2, x1, x3);		\
-	LOAD_LR_REG(ich_lr11_el2, x1, x3);		\
-	LOAD_LR_REG(ich_lr12_el2, x1, x3);		\
-	LOAD_LR_REG(ich_lr13_el2, x1, x3);		\
-	LOAD_LR_REG(ich_lr14_el2, x1, x3);		\
-	LOAD_LR_REG(ich_lr15_el2, x1, x3);		\
+	LOAD_ARRAY_REG(ich_lr0_el2, x1, x3);		\
+	LOAD_ARRAY_REG(ich_lr1_el2, x1, x3);		\
+	LOAD_ARRAY_REG(ich_lr2_el2, x1, x3);		\
+	LOAD_ARRAY_REG(ich_lr3_el2, x1, x3);		\
+	LOAD_ARRAY_REG(ich_lr4_el2, x1, x3);		\
+	LOAD_ARRAY_REG(ich_lr5_el2, x1, x3);		\
+	LOAD_ARRAY_REG(ich_lr6_el2, x1, x3);		\
+	LOAD_ARRAY_REG(ich_lr7_el2, x1, x3);		\
+	LOAD_ARRAY_REG(ich_lr8_el2, x1, x3);		\
+	LOAD_ARRAY_REG(ich_lr9_el2, x1, x3);		\
+	LOAD_ARRAY_REG(ich_lr10_el2, x1, x3);		\
+	LOAD_ARRAY_REG(ich_lr11_el2, x1, x3);		\
+	LOAD_ARRAY_REG(ich_lr12_el2, x1, x3);		\
+	LOAD_ARRAY_REG(ich_lr13_el2, x1, x3);		\
+	LOAD_ARRAY_REG(ich_lr14_el2, x1, x3);		\
+	LOAD_ARRAY_REG(ich_lr15_el2, x1, x3);		\
 9:;							\
 	;
+
+
+#define	LOAD_AP0R_REGS();				\
+	/* Load the number of ICH_AP0R_EL2 regs from memory */ \
+	mov	x2, #HYPCTX_VGIC_ICH_AP0R_NUM;		\
+	ldr	x3, [x0, x2];				\
+	/* x1 holds the load address */			\
+	mov	x1, #HYPCTX_VGIC_ICH_AP0R_EL2;		\
+	add	x1, x0, x1;				\
+	LOAD_ARRAY_REG(ich_ap0r0_el2, x1, x3);		\
+	LOAD_ARRAY_REG(ich_ap0r1_el2, x1, x3);		\
+	LOAD_ARRAY_REG(ich_ap0r2_el2, x1, x3);		\
+	LOAD_ARRAY_REG(ich_ap0r3_el2, x1, x3);		\
+9:;							\
+	;
+
+
+#define	LOAD_AP1R_REGS();				\
+	/* Load the number of ICH_AP1R_EL2 regs from memory */ \
+	mov	x2, #HYPCTX_VGIC_ICH_AP1R_NUM;		\
+	ldr	x3, [x0, x2];				\
+	/* x1 holds the load address */			\
+	mov	x1, #HYPCTX_VGIC_ICH_AP1R_EL2;		\
+	add	x1, x0, x1;				\
+	LOAD_ARRAY_REG(ich_ap1r0_el2, x1, x3);		\
+	LOAD_ARRAY_REG(ich_ap1r1_el2, x1, x3);		\
+	LOAD_ARRAY_REG(ich_ap1r2_el2, x1, x3);		\
+	LOAD_ARRAY_REG(ich_ap1r3_el2, x1, x3);		\
+9:;							\
+	;
+
 
 
 #define KTOHYP_REG(reg)					\
@@ -464,6 +527,8 @@
 	LOAD_HYP_REG(HYP_VTIMER, CNTHCTL_EL2);		\
 							\
 	LOAD_LR_REGS();					\
+	LOAD_AP0R_REGS();				\
+	LOAD_AP1R_REGS();				\
 							\
 	/* Load the guest EL1 stack pointer */		\
 	mov	x1, #HYPCTX_REGS_SP;			\
