@@ -183,10 +183,8 @@ vtimer_read_reg(void *vm, int vcpuid, uint64_t *rval, uint32_t inst_syndrome,
 			/* Timer condition met */
 			vtimer_cpu->cntp_ctl_el0 |= CNTP_CTL_ISTATUS;
 		*rval = vtimer_cpu->cntp_ctl_el0;
-		eprintf("CNTP_CTL_EL0 = 0x%x\n", vtimer_cpu->cntp_ctl_el0);
 
 	} else if (ISS_MATCH_REG(CNTP_CVAL_EL0, inst_syndrome)) {
-		eprintf("CNTP_CVAL_EL0 = 0x%lx\n", vtimer_cpu->cntp_cval_el0);
 		*rval = vtimer_cpu->cntp_cval_el0;
 
 	} else if (ISS_MATCH_REG(CNTP_TVAL_EL0, inst_syndrome)) {
@@ -203,7 +201,6 @@ vtimer_read_reg(void *vm, int vcpuid, uint64_t *rval, uint32_t inst_syndrome,
 			cntpct_el0 = vtimer_read_pct();
 			*rval = vtimer_cpu->cntp_cval_el0 - cntpct_el0;
 		}
-		eprintf("CNTP_TVAL_EL0 = 0x%lx\n", *rval);
 
 	} else {
 		eprintf("Uknown register\n");
@@ -228,7 +225,8 @@ vtimer_enqueue_irq(uint64_t cval, uint64_t pct, struct timeout_task *task)
 		diff = 0;
 	else
 		diff = cval - pct;
-	taskqueue_enqueue_timeout(taskqueue_thread, task, diff);
+	taskqueue_enqueue_timeout(taskqueue_thread, task,
+	    diff*hz/100000000);
 }
 
 int
@@ -249,22 +247,18 @@ vtimer_write_reg(void *vm, int vcpuid, uint64_t wval, uint32_t inst_syndrome,
 		wval &= ~CNTP_CTL_ISTATUS;
 		wval &= CNTP_CTL_RES0;
 		vtimer_cpu->cntp_ctl_el0 = wval;
-		eprintf("CNTP_CTL_EL0 = 0x%lx\n", wval);
 
 	} else if (ISS_MATCH_REG(CNTP_CVAL_EL0, inst_syndrome)) {
 		vtimer_cpu->cntp_cval_el0 = wval;
 		cntpct_el0 = vtimer_read_pct();
 		vtimer_enqueue_irq(vtimer_cpu->cntp_cval_el0, cntpct_el0,
 		    &vtimer_cpu->task);
-		eprintf("CNTP_CVAL_EL0 = 0x%lx\n", wval);
 
 	} else if (ISS_MATCH_REG(CNTP_TVAL_EL0, inst_syndrome)) {
 		cntpct_el0 = vtimer_read_pct();
 		vtimer_cpu->cntp_cval_el0 = (int32_t)wval + cntpct_el0;
-		vtimer_enqueue_irq(vtimer_cpu->cntp_cval_el0, cntpct_el0,
-		    &vtimer_cpu->task);
-		eprintf("CNTP_TVAL_EL0, wval = 0x%lx, cval = 0x%lx\n",
-		    wval, vtimer_cpu->cntp_cval_el0);
+		taskqueue_enqueue_timeout(taskqueue_thread, &vtimer_cpu->task,
+		    (int32_t)wval*hz/100000000);
 
 	} else {
 		eprintf("Uknown register\n");
