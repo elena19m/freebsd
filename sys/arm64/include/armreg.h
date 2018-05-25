@@ -77,7 +77,6 @@
 #define	CNTP_CTL_ENABLE		(1 << 0)
 #define	CNTP_CTL_IMASK		(1 << 1)
 #define	CNTP_CTL_ISTATUS	(1 << 2)
-#define	CNTP_CTL_RES0		0x7
 
 /* CPACR_EL1 */
 #define	CPACR_FPEN_MASK		(0x3 << 20)
