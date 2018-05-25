@@ -1153,15 +1153,15 @@ vgic_kick_vcpus(struct hyp *hyp)
 }
 
 static inline ssize_t
-vgic_v3_get_free_lr(uint32_t ich_elsr_el2)
+vgic_v3_get_free_lr(const uint64_t *ich_lr_el2, size_t ich_lr_num)
 {
-	uint32_t lr;
+	ssize_t i;
 
-	for (lr = 0; lr <= virt_features.ich_lr_num; lr++)
-		if (ich_elsr_el2 & (1 << lr))
-			return lr;
+	for (i = 0; i < ich_lr_num; i++)
+		if (ICH_LR_EL2_STATE(ich_lr_el2[i]) == ICH_LR_EL2_STATE_INACTIVE)
+			return (i);
 
-	return -1;
+	return (-1);
 }
 
 int
@@ -1169,24 +1169,19 @@ vgic_v3_inject_irq(void *arg, unsigned int irq, bool level)
 {
         struct hypctx *hypctx;
 	struct vgic_v3_cpu_if *cpu_if;
-	uint32_t ich_elsr_el2;
 	ssize_t lr_idx;
 
 	hypctx = (struct hypctx *)arg;
 	cpu_if = &hypctx->vgic_cpu_if;
 
-	ich_elsr_el2 = cpu_if->ich_elsr_el2;
-	lr_idx = vgic_v3_get_free_lr(ich_elsr_el2);
+	lr_idx = vgic_v3_get_free_lr(cpu_if->ich_lr_el2, cpu_if->ich_lr_num);
 	if (lr_idx == -1) {
 		eprintf("All ICH_LR<n>_EL2 registers are used\n");
-		eprintf("\tich_elsr_el2 = 0x%x\n", ich_elsr_el2);
 		return 0;
 	}
 
-	if (lr_idx != 0) {
+	if (lr_idx != 0)
 		eprintf("lr_idx = %ld\n", lr_idx);
-		eprintf("\tich_elsr_el2 = 0x%x\n", ich_elsr_el2);
-	}
 
 	cpu_if->ich_lr_el2[lr_idx] = (1UL << 62) | (1UL << 60) | irq;
 
