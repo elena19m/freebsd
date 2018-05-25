@@ -1165,6 +1165,27 @@ vgic_v3_get_free_lr(const uint64_t *ich_lr_el2, size_t ich_lr_num)
 }
 
 int
+vgic_v3_remove_irq(void *arg, unsigned int irq)
+{
+        struct hypctx *hypctx;
+	struct vgic_v3_cpu_if *cpu_if;
+	size_t i;
+
+	hypctx = (struct hypctx *)arg;
+	cpu_if = &hypctx->vgic_cpu_if;
+
+	/* TODO check if the interrupt is pending, and not active or active and
+	 * pending. What about EOImode? */
+	for (i = 0; i < cpu_if->ich_lr_num; i++)
+		if (ICH_LR_EL2_VIRQ(cpu_if->ich_lr_el2[i]) == irq)
+			cpu_if->ich_lr_el2[i] &= ~ICH_LR_EL2_STATE_MASK;
+
+	/* TODO check if the interrupt is pending and disable it there too */
+
+	return (0)
+}
+
+int
 vgic_v3_inject_irq(void *arg, unsigned int irq, bool level)
 {
         struct hypctx *hypctx;

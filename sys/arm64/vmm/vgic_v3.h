@@ -170,6 +170,7 @@ void 	vgic_v3_sync_hwstate(void *arg);
 void 	vgic_v3_flush_hwstate(void *arg);
 int 	vgic_v3_vcpu_pending_irq(void *arg);
 int 	vgic_v3_inject_irq(void *arg, unsigned int irq, bool level);
+int 	vgic_v3_remove_irq(void *arg, unsigned int irq);
 void	vgic_v3_init(uint64_t ich_vtr_el2);
 void	vgic_v3_vminit(void *arg);
 void	vgic_v3_cpuinit(void *arg, bool last_vcpu);
