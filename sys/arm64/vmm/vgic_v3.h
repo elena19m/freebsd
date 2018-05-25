@@ -131,7 +131,13 @@ struct vgic_v3_cpu_if {
 	/* List Registers */
 	uint64_t	ich_lr_el2[VGIC_ICH_LR_NUM_MAX];
 	size_t		ich_lr_num;
-	uint8_t		irq_to_lr[GIC_I_NUM_MAX];
+	/*
+	 * We need a mutex for accessing the list registers because they are
+	 * modified asynchronously by the virtual timer. When the physical CPU
+	 * is multi-core or multi-threaded the virtual timer task might be
+	 * executing on a different core.
+	 */
+	struct mtx	lr_mtx;
 
 	/* Active Priorities Registers for Group 0 and 1 interrupts */
 	uint32_t	ich_ap0r_el2[VGIC_ICH_AP0R_NUM_MAX];
