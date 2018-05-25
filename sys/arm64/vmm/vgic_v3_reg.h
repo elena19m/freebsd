@@ -28,14 +28,13 @@
 
 /* Interrupt Controller List Registers */
 #define ICH_LR_EL2_VINTID_MASK		0xffffffff
-#define	ICH_LR_EL2_VIRQ(x)		((x) & ICH_LR_EL2_VINTID_MASK)
+#define	ICH_LR_EL2_VINTID(x)		((x) & ICH_LR_EL2_VINTID_MASK)
 #define ICH_LR_EL2_PINTID_SHIFT		32
 #define ICH_LR_EL2_PINTID_MASK		(0x3fUL << ICH_LR_EL2_PINTID_SHIFT)
 #define ICH_LR_EL2_PRIO_SHIFT		48
 #define ICH_LR_EL2_PRIO_MASK		(0xffUL << ICH_LR_EL2_PRIO_SHIFT)
 #define ICH_LR_EL2_GROUP_1		(1UL << 60) 	/* Virtual interrupt is Group 1 */
 #define ICH_LR_EL2_HW			(1UL << 61) 	/* Virtual interrupt has a corresponding physical interrupt */
-/* The state of the virtual interrupt */
 #define ICH_LR_EL2_STATE_SHIFT		62
 #define ICH_LR_EL2_STATE_MASK		(0x3UL << ICH_LR_EL2_STATE_SHIFT)
 #define	ICH_LR_EL2_STATE(x)		((x) & ICH_LR_EL2_STATE_MASK)

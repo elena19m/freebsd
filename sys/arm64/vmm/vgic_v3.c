@@ -67,13 +67,16 @@
 
 #define	RES0			(0)
 
+#define	int_pending(lr)		\
+    (ICH_LR_EL2_STATE(lr) == ICH_LR_EL2_STATE_PENDING)
+#define	int_inactive(lr)		\
+    (ICH_LR_EL2_STATE(lr) == ICH_LR_EL2_STATE_INACTIVE)
+
 MALLOC_DEFINE(M_VGIC_V3, "ARM VMM VGIC V3", "ARM VMM VGIC V3");
 
 extern uint64_t hypmode_enabled;
 
 struct vgic_v3_virt_features {
-	uint32_t prebits;
-	uint32_t pribits;
 	uint8_t min_prio;
 	size_t ich_lr_num;
 	size_t ich_ap0r_num;
@@ -90,48 +93,6 @@ static struct vgic_v3_ro_regs ro_regs;
 
 /* TODO: Do not manage the softc directly and use the device's softc */
 static struct vgic_v3_softc softc;
-
-static void vgic_bitmap_set_irq_val(uint32_t *irq_prv,
-    uint32_t *irq_shr, int irq, int val);
-static void vgic_update_state(struct hyp *hyp);
-static void vgic_retire_disabled_irqs(struct hypctx *hypctx);
-static void vgic_dispatch_sgi(struct hypctx *hypctx);
-
-#if 0
-/*
- * TODO
- */
-static uint32_t vgic_dist_conf_expand(uint16_t val)
-{
-	uint32_t res;
-	int i;
-
-	res = 0;
-
-	for (i = 0; i < 16; ++i) {
-		res |= (val & 1) << (2 * i + 1);
-		val = val >> 1;
-	}
-
-	return res;
-}
-
-static uint16_t vgic_dist_conf_compress(uint32_t val)
-{
-	uint32_t res;
-	int i;
-
-	res = 0;
-
-	for (i = 0; i < 16; ++i) {
-		val = val >> 1;
-		res |= (val & 1) << i;
-		val = val >> 1;
-	}
-
-	return res;
-}
-#endif
 
 #define	read_reg(arr, base, off)						\
 ({										\
@@ -619,435 +580,52 @@ static void vgic_v3_detach_from_vm(void *arg)
 	free(dist->gicd_irouter, M_VGIC_V3);
 }
 
-static int
-vgic_bitmap_get_irq_val(uint32_t *irq_prv, uint32_t *irq_shr, int irq)
-{
-	if (irq < VGIC_PRV_I_NUM)
-		return bit_test((bitstr_t *)irq_prv, irq);
-
-	return bit_test((bitstr_t *)irq_shr, irq - VGIC_PRV_I_NUM);
-}
-
-static void
-vgic_bitmap_set_irq_val(uint32_t *irq_prv, uint32_t *irq_shr, int irq, int val)
-{
-	uint32_t *reg;
-
-	if (irq < VGIC_PRV_I_NUM) {
-		reg = irq_prv;
-	} else {
-		reg = irq_shr;
-		irq -= VGIC_PRV_I_NUM;
-	}
-
-	if (val)
-		bit_set((bitstr_t *)reg, irq);
-	else
-		bit_clear((bitstr_t *)reg, irq);
-}
-
-static bool
-vgic_irq_is_edge(struct hypctx *hypctx, int irq)
-{
-	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
-	int irq_val;
-
-	irq_val = vgic_bitmap_get_irq_val(dist->irq_conf_prv[hypctx->vcpu],
-					dist->irq_conf_shr, irq);
-	return irq_val == VGIC_CFG_EDGE;
-}
-
-static int
-vgic_irq_is_enabled(struct hypctx *hypctx, int irq)
-{
-	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
-
-	return vgic_bitmap_get_irq_val(dist->irq_enabled_prv[hypctx->vcpu],
-					dist->irq_enabled_shr, irq);
-}
-
-static int
-vgic_irq_is_active(struct hypctx *hypctx, int irq)
-{
-	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
-
-	return vgic_bitmap_get_irq_val(dist->irq_active_prv[hypctx->vcpu],
-					dist->irq_active_shr, irq);
-}
-
-static void
-vgic_irq_set_active(struct hypctx *hypctx, int irq)
-{
-	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
-
-	vgic_bitmap_set_irq_val(dist->irq_active_prv[hypctx->vcpu],
-					dist->irq_active_shr, irq, 1);
-}
-
-static void
-vgic_irq_clear_active(struct hypctx *hypctx, int irq)
-{
-	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
-
-	vgic_bitmap_set_irq_val(dist->irq_active_prv[hypctx->vcpu],
-					dist->irq_active_shr, irq, 0);
-}
-
-static int
-vgic_dist_irq_is_pending(struct hypctx *hypctx, int irq)
-{
-	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
-
-	return vgic_bitmap_get_irq_val(dist->irq_state_prv[hypctx->vcpu],
-					dist->irq_state_shr, irq);
-}
-
-static void
-vgic_dist_irq_set(struct hypctx *hypctx, int irq)
-{
-	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
-
-	vgic_bitmap_set_irq_val(dist->irq_state_prv[hypctx->vcpu],
-					dist->irq_state_shr, irq, 1);
-}
-
-static void
-vgic_dist_irq_clear(struct hypctx *hypctx, int irq)
-{
-	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
-
-	vgic_bitmap_set_irq_val(dist->irq_state_prv[hypctx->vcpu],
-					dist->irq_state_shr, irq, 0);
-}
-
-static void
-vgic_cpu_irq_set(struct hypctx *hypctx, int irq)
-{
-	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
-
-	if (irq < VGIC_PRV_I_NUM)
-		bit_set((bitstr_t *)cpu_if->pending_prv, irq);
-	else
-		bit_set((bitstr_t *)cpu_if->pending_shr,
-				irq - VGIC_PRV_I_NUM);
-}
-
-static void
-vgic_cpu_irq_clear(struct hypctx *hypctx, int irq)
-{
-	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
-
-	if (irq < VGIC_PRV_I_NUM)
-		bit_clear((bitstr_t *)cpu_if->pending_prv, irq);
-	else
-		bit_clear((bitstr_t *)cpu_if->pending_shr,
-				irq - VGIC_PRV_I_NUM);
-}
-
-static int
-compute_pending_for_cpu(struct hyp *hyp, int vcpu)
-{
-	struct vgic_v3_dist *dist = &hyp->vgic_dist;
-	struct vgic_v3_cpu_if *cpu_if = &hyp->ctx[vcpu].vgic_cpu_if;
-
-	uint32_t *pending, *enabled, *pend_percpu, *pend_shared, *target;
-	int32_t pending_private, pending_shared;
-
-	pend_percpu = cpu_if->pending_prv;
-	pend_shared = cpu_if->pending_shr;
-
-	pending = dist->irq_state_prv[vcpu];
-	enabled = dist->irq_enabled_prv[vcpu];
-	bitstr_and((bitstr_t *)pend_percpu, (bitstr_t *)pending,
-		       (bitstr_t *)enabled, VGIC_PRV_I_NUM);
-
-	pending = dist->irq_state_shr;
-	enabled = dist->irq_enabled_shr;
-	target = dist->irq_target_shr;
-	bitstr_and((bitstr_t *)pend_shared, (bitstr_t *)pending,
-		       (bitstr_t *)enabled, VGIC_SHR_I_NUM);
-	bitstr_and((bitstr_t *)pend_shared, (bitstr_t *)pend_shared,
-		       (bitstr_t *)target, VGIC_SHR_I_NUM);
-
-	bit_ffs((bitstr_t *)pend_percpu, VGIC_PRV_I_NUM, &pending_private);
-	bit_ffs((bitstr_t *)pend_shared, VGIC_SHR_I_NUM, &pending_shared);
-
-	return (pending_private > -1 || pending_shared > -1);
-}
-
-/*
- * TODO
- */
-#if 0
-static void
-vgic_dispatch_sgi(struct hypctx *hypctx)
-{
-	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
-	// TODO Get actual number of cpus on current machine
-	int vcpu_num = VM_MAXCPU;
-	int sgi, mode, cpu;
-	uint8_t targets;
-
-	sgi = dist->sgir & 0xf;
-	targets = (dist->sgir >> 16) & 0xff;
-	mode = (dist->sgir >> 24) & 3;
-
-	switch (mode) {
-	case 0:
-		if (!targets)
-			return;
-
-	case 1:
-		targets = ((1 << vcpu_num) - 1) & ~(1 << hypctx->vcpu) & 0xff;
-		break;
-
-	case 2:
-		targets = 1 << hypctx->vcpu;
-		break;
-	}
-
-	for (cpu = 0; cpu < vcpu_num; ++cpu) {
-		if ((targets >> cpu) & 1) {
-			vgic_dist_irq_set(hypctx, sgi);
-			vgic_dist->irq_sgi_source[cpu][sgi] |= 1 << hypctx->vcpu;
-			//printf("SGI%d from CPU%d to CPU%d\n", sgi, vcpu_id, c);
-		}
-	}
-}
-#endif
-
-/*
- * TODO
- */
-#if 0
-static void
-vgic_update_state(struct hyp *hyp)
-{
-	struct vgic_v3_dist *dist = &hyp->vgic_dist;
-	int cpu;
-
-	//mtx_lock_spin(&vgic_dist->dist_lock);
-
-	if (!dist->enabled) {
-		bit_set((bitstr_t *)&dist->irq_pending_on_cpu, 0);
-		goto end;
-	}
-
-	// TODO Get actual number of cpus on current machine
-	for (cpu = 0; cpu < VM_MAXCPU; ++cpu) {
-		if (compute_pending_for_cpu(hyp, cpu)) {
-			printf("CPU%d has pending interrupts\n", cpu);
-			bit_set((bitstr_t *)&dist->irq_pending_on_cpu, cpu);
-		}
-	}
-
-end:
-	;//mtx_unlock_spin(&dist->dist_lock);
-}
-#endif
-
-#define LR_CPUID(lr)	\
-	(((lr) & GICH_LR_PHYSID_CPUID) >> GICH_LR_PHYSID_CPUID_SHIFT)
-#define MK_LR_PEND(src, irq)	\
-	(GICH_LR_PENDING | ((src) << GICH_LR_PHYSID_CPUID_SHIFT) | (irq))
-
-/*
- * TODO
- */
-#if 0
-static void
-vgic_retire_disabled_irqs(struct hypctx *hypctx)
-{
-	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
-	int lr_idx;
-
-	for_each_set_bit(lr_idx, cpu_if->lr_used, cpu_if->ich_lr_num) {
-
-		int irq = cpu_if->lr[lr_idx] & GICH_LR_VIRTID;
-
-		if (!vgic_irq_is_enabled(hypctx, irq)) {
-			cpu_if->irq_to_lr[irq] = VGIC_ICH_LR_EMPTY;
-			bit_clear((bitstr_t *)cpu_if->lr_used, lr_idx);
-			cpu_if->ich_lr_el2[lr_idx] &= ~GICH_LR_STATE;
-			if (vgic_irq_is_active(hypctx, irq))
-				vgic_irq_clear_active(hypctx, irq);
-		}
-	}
-}
-#endif
-
-static bool
-vgic_queue_irq(struct hypctx *hypctx, uint8_t sgi_source_cpu, int irq)
-{
-	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
-	int lr_idx;
-
-	//printf("Queue IRQ%d\n", irq);
-
-	lr_idx = cpu_if->irq_to_lr[irq];
-
-	if (lr_idx != VGIC_ICH_LR_EMPTY &&
-	    (LR_CPUID(cpu_if->ich_lr_el2[lr_idx]) == sgi_source_cpu)) {
-
-		//printf("LR%d piggyback for IRQ%d %x\n", lr, irq, cpu_if->vgic_lr[lr]);
-
-		cpu_if->ich_lr_el2[lr_idx] |= GICH_LR_PENDING;
-
-		goto end;
-	}
-
-	//printf("LR%d allocated for IRQ%d %x\n", lr, irq, sgi_source_id);
-	cpu_if->ich_lr_el2[lr_idx] = MK_LR_PEND(sgi_source_cpu, irq);
-	cpu_if->irq_to_lr[irq] = lr_idx;
-
-end:
-	if (!vgic_irq_is_edge(hypctx, irq))
-		cpu_if->ich_lr_el2[lr_idx] |= GICH_LR_EOI;
-
-	return true;
-}
-
-static bool
-vgic_queue_sgi(struct hypctx *hypctx, int irq)
-{
-	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
-	uint8_t source;
-	int cpu;
-
-	source = dist->irq_sgi_source[hypctx->vcpu][irq];
-
-	for_each_set_bit(cpu, &source, VGIC_MAXCPU) {
-		if (vgic_queue_irq(hypctx, cpu, irq))
-			bit_clear((bitstr_t *)&source, cpu);
-	}
-
-	dist->irq_sgi_source[hypctx->vcpu][irq] = source;
-
-	if (!source) {
-		vgic_dist_irq_clear(hypctx, irq);
-		vgic_cpu_irq_clear(hypctx, irq);
-		return true;
-	}
-
-	return false;
-}
-
-static bool
-vgic_queue_hwirq(struct hypctx *hypctx, int irq)
-{
-	if (vgic_irq_is_active(hypctx, irq))
-		return true; /* already queued */
-
-	if (vgic_queue_irq(hypctx, 0, irq)) {
-		if (vgic_irq_is_edge(hypctx, irq)) {
-			vgic_dist_irq_clear(hypctx, irq);
-			vgic_cpu_irq_clear(hypctx, irq);
-		} else {
-			vgic_irq_set_active(hypctx, irq);
-		}
-
-		return true;
-	}
-
-	return false;
-}
-
-static bool
-vgic_process_maintenance(struct hypctx *hypctx)
-{
-	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
-	int lr_idx, irq;
-	bool level_pending = false;
-
-	//printf("MISR = %08x\n", vgic->misr);
-
-	if (cpu_if->ich_misr_el2 & GICH_MISR_EOI) {
-
-		for_each_set_bit(lr_idx, &cpu_if->ich_eisr_el2, cpu_if->ich_lr_num) {
-
-			irq = cpu_if->ich_lr_el2[lr_idx] & GICH_LR_VIRTID;
-
-			vgic_irq_clear_active(hypctx, irq);
-			cpu_if->ich_lr_el2[lr_idx] &= ~GICH_LR_EOI;
-
-			if (vgic_dist_irq_is_pending(hypctx, irq)) {
-				vgic_cpu_irq_set(hypctx, irq);
-				level_pending = true;
-			} else {
-				vgic_cpu_irq_clear(hypctx, irq);
-			}
-		}
-	}
-
-	if (cpu_if->ich_misr_el2 & GICH_MISR_U)
-		cpu_if->ich_hcr_el2 &= ~GICH_HCR_UIE;
-
-	return level_pending;
-}
-
+/* Called before entering the VM */
 void
 vgic_v3_flush_hwstate(void *arg)
 {
 	struct hypctx *hypctx;
 	struct vgic_v3_cpu_if *cpu_if;
 	struct vgic_v3_dist *dist;
-	int i, overflow = 0;
 
 	hypctx = arg;
 	cpu_if = &hypctx->vgic_cpu_if;
 	dist = &hypctx->hyp->vgic_dist;
 
-	//printf("vgic_flush_hwstate\n");
 
 	//mtx_lock_spin(&vgic_dist->dist_lock);
+	
+	/*
+	 * TODO:
+	 *
+	 * 1. Check if there are any pending interrupts on this CPU.
+	 * 2. If there are:
+	 * 	a. Check if there are empty lr regs. A lr reg might become
+	 * 	empty when the guest disables the interrupt (like with the timer
+	 * 	interrupt).
+	 * 	b. If there are no more pending interrupts, goto 3. Else,
+	 * 	proceed forward.
+	 *	c. Enable maintenance interrupts.
+	 *	d. Set a variable stating that maintenance interrupts are
+	 *	enabled. This will be read by the code in EL2 to check the
+	 *	cause for the interrupt.
+	 * 3. Else, disable maintenance interrupts.
+	 */
 
-	if (!vgic_v3_vcpu_pending_irq(hypctx)) {
-		//printf("CPU%d has no pending interrupt\n", hypctx->vcpu);
-		goto end;
-	}
-
-	/* SGIs */
-	/* TODO - check bounds for i */
-	i = GIC_FIRST_SGI;
-	for_each_set_bit_from(i, cpu_if->pending_prv, GIC_LAST_SGI + 1) {
-		//printf("Pending SGI %d\n", i);
-		if (!vgic_queue_sgi(hypctx, i))
-			overflow = 1;
-	}
-
-	/* PPIs */
-	i = GIC_FIRST_PPI;
-	for_each_set_bit_from(i, cpu_if->pending_prv, GIC_LAST_PPI + 1) {
-		//printf("Pending PPI %d\n", i);
-		if (!vgic_queue_hwirq(hypctx, i))
-			overflow = 1;
-	}
-
-	/* SPIs */
-	i = 0;
-	for_each_set_bit(i, cpu_if->pending_shr, VGIC_SPI_NUM) {
-		//printf("Pending SPI %d\n", i);
-		if (!vgic_queue_hwirq(hypctx, i + VGIC_PRV_I_NUM))
-			overflow = 1;
-	}
-
-end:
-	if (overflow) {
-		cpu_if->ich_hcr_el2 |= GICH_HCR_UIE;
-	} else {
-		cpu_if->ich_hcr_el2 &= ~GICH_HCR_UIE;
-		bit_clear((bitstr_t *)&dist->irq_pending_on_cpu, hypctx->vcpu);
-	}
 	//mtx_unlock_spin(&vgic_dist->dist_lock);
 }
 
+/*
+ * What's the purpose? Why is it called after exiting the VM, just before
+ * calling vgic_v3_flush_hwstate?
+ */
 void
 vgic_v3_sync_hwstate(void *arg)
 {
 	struct hypctx *hypctx;
 	struct vgic_v3_cpu_if *cpu_if;
 	struct vgic_v3_dist *dist;
-	int lr_idx, pending, irq;
+	int lr_idx, irq;
 	bool level_pending;
 
 	hypctx = arg;
@@ -1056,100 +634,19 @@ vgic_v3_sync_hwstate(void *arg)
 
 	//printf("vgic_sync_hwstate\n");
 
-	level_pending = vgic_process_maintenance(hypctx);
+	//level_pending = vgic_process_maintenance(hypctx);
+	level_pending = false;
 
 	for_each_set_bit(lr_idx, &cpu_if->ich_elsr_el2, cpu_if->ich_lr_num) {
 		irq = cpu_if->ich_lr_el2[lr_idx] & GICH_LR_VIRTID;
 		cpu_if->irq_to_lr[irq] = VGIC_ICH_LR_EMPTY;
 	}
-
-	bit_ffc((bitstr_t *)&cpu_if->ich_elsr_el2, cpu_if->ich_lr_num, &pending);
-	if (level_pending || pending > -1)
-		bit_set((bitstr_t *)&dist->irq_pending_on_cpu, hypctx->vcpu);
 }
 
-int
+int 
 vgic_v3_vcpu_pending_irq(void *arg)
 {
-	struct hypctx *hypctx;
-	struct vgic_v3_dist *dist;
-
-	hypctx = arg;
-	dist = &hypctx->hyp->vgic_dist;
-
-	return bit_test((bitstr_t *)&dist->irq_pending_on_cpu, hypctx->vcpu);
-}
-
-static int
-vgic_validate_injection(struct hypctx *hypctx, int irq, int level)
-{
-        int is_edge = vgic_irq_is_edge(hypctx, irq);
-        int state = vgic_dist_irq_is_pending(hypctx, irq);
-
-        return (is_edge ? (level > state) : (level != state));
-}
-
-static bool
-vgic_update_irq_state(struct hypctx *hypctx, unsigned int irq, bool level)
-{
-        struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
-        int is_edge, cpu = hypctx->vcpu;
-        int enabled;
-        bool ret = true;
-
-        //mtx_lock_spin(&vgic_dist->dist_lock);
-
-        is_edge = vgic_irq_is_edge(hypctx, irq);
-
-        if (!vgic_validate_injection(hypctx, irq, level)) {
-                ret = false;
-                goto end;
-        }
-
-        if (irq >= VGIC_PRV_I_NUM) {
-                cpu = 0;//vgic_dist->irq_spi_cpu[irq - VGIC_PRV_I_NUM];
-                hypctx = &hypctx->hyp->ctx[cpu];
-        }
-
-        //printf("Inject IRQ%d level %d CPU%d\n", irq, level, cpu);
-
-        if (level)
-                vgic_dist_irq_set(hypctx, irq);
-        else
-                vgic_dist_irq_clear(hypctx, irq);
-
-        enabled = vgic_irq_is_enabled(hypctx, irq);
-
-        if (!enabled) {
-                ret = false;
-                goto end;
-        }
-
-        if (!is_edge && vgic_irq_is_active(hypctx, irq)) {
-                ret = false;
-                goto end;
-        }
-
-        if (level) {
-                vgic_cpu_irq_set(hypctx, irq);
-                bit_set((bitstr_t *)&dist->irq_pending_on_cpu, cpu);
-        }
-
-end:
-        //mtx_unlock_spin(&vgic_dist->dist_lock);
-
-        return ret;
-}
-
-static void
-vgic_kick_vcpus(struct hyp *hyp)
-{
-        int cpu;
-
-        for (cpu = 0; cpu < VGIC_MAXCPU; ++cpu) {
-                if (vgic_v3_vcpu_pending_irq(&hyp->ctx[cpu]))
-                        ;//TODO kick vcpu
-        }
+	return (0);
 }
 
 static inline ssize_t
@@ -1158,14 +655,14 @@ vgic_v3_get_free_lr(const uint64_t *ich_lr_el2, size_t ich_lr_num)
 	ssize_t i;
 
 	for (i = 0; i < ich_lr_num; i++)
-		if (ICH_LR_EL2_STATE(ich_lr_el2[i]) == ICH_LR_EL2_STATE_INACTIVE)
+		if (int_inactive(ich_lr_el2[i]))
 			return (i);
 
 	return (-1);
 }
 
 int
-vgic_v3_remove_irq(void *arg, unsigned int irq)
+vgic_v3_remove_irq(void *arg, unsigned int irq, bool ignore_state)
 {
         struct hypctx *hypctx;
 	struct vgic_v3_cpu_if *cpu_if;
@@ -1174,15 +671,14 @@ vgic_v3_remove_irq(void *arg, unsigned int irq)
 	hypctx = (struct hypctx *)arg;
 	cpu_if = &hypctx->vgic_cpu_if;
 
-	/* TODO check if the interrupt is pending, and not active or active and
-	 * pending. What about EOImode? */
 	for (i = 0; i < cpu_if->ich_lr_num; i++)
-		if (ICH_LR_EL2_VIRQ(cpu_if->ich_lr_el2[i]) == irq)
+		if (ICH_LR_EL2_VINTID(cpu_if->ich_lr_el2[i]) == irq &&
+		    (ignore_state || int_pending(cpu_if->ich_lr_el2[i])))
 			cpu_if->ich_lr_el2[i] &= ~ICH_LR_EL2_STATE_MASK;
 
 	/* TODO check if the interrupt is pending and disable it there too */
 
-	return (0)
+	return (0);
 }
 
 int
@@ -1197,41 +693,31 @@ vgic_v3_inject_irq(void *arg, unsigned int irq, bool level)
 
 	lr_idx = vgic_v3_get_free_lr(cpu_if->ich_lr_el2, cpu_if->ich_lr_num);
 	if (lr_idx == -1) {
+		/*
+		 * TODO:
+		 *
+		 * 1. Implement pending interrupts.
+		 * 2. Check if there are interrupts in the lr regs with a lower
+		 * priority, and if so, replace one with irq.
+		 * 3. Implement interrupt types.
+		 * 4. Check if there are interrupts in the lr regs with the same
+		 * priority, but a lower type priority (CLK > anything). If so,
+		 * replace one with irq.
+		 */
 		eprintf("All ICH_LR<n>_EL2 registers are used\n");
-		return 0;
+		return (0);
 	}
 
 	if (lr_idx != 0)
 		eprintf("lr_idx = %ld\n", lr_idx);
 
-	cpu_if->ich_lr_el2[lr_idx] = (1UL << 62) | (1UL << 60) | irq;
+	cpu_if->ich_lr_el2[lr_idx] = \
+	    ICH_LR_EL2_STATE_PENDING | ICH_LR_EL2_GROUP_1 | irq;
 
         //if (vgic_update_irq_state(hypctx, irq, level))
         //        vgic_kick_vcpus(hypctx->hyp);
 
-        return 0;
-}
-
-static int
-arm_vgic_maintenance_intr(void *arg)
-{
-
-	struct vgic_v3_softc *vgic_sc;
-	struct arm_gic_softc *gic_sc;
-	int maintenance_intr;
-
-	vgic_sc = arg;
-	gic_sc = device_get_softc(vgic_sc->gic_v3_dev);
-
-	/*
-	maintenance_intr = bus_space_read_4(gic_sc->gic_h_bst,
-					    gic_sc->gic_h_bsh, GICH_MISR);
-
-					    */
-	maintenance_intr = 0;
-	printf("%s: %x\n", __func__, maintenance_intr);
-
-	return (FILTER_HANDLED);
+        return (0);
 }
 
 static int
@@ -1299,8 +785,10 @@ static void vgic_v3_set_ro_regs(device_t dev)
 void
 vgic_v3_init(uint64_t ich_vtr_el2)
 {
-	virt_features.pribits = ICH_VTR_EL2_PRIBITS(ich_vtr_el2);
-	switch (virt_features.pribits) {
+	uint32_t pribits, prebits;
+
+	pribits = ICH_VTR_EL2_PRIBITS(ich_vtr_el2);
+	switch (pribits) {
 	case 5:
 		virt_features.min_prio = 0xf8;
 	case 6:
@@ -1311,8 +799,8 @@ vgic_v3_init(uint64_t ich_vtr_el2)
 		virt_features.min_prio = 0xff;
 	}
 
-	virt_features.prebits = ICH_VTR_EL2_PREBITS(ich_vtr_el2);
-	switch (virt_features.prebits) {
+	prebits = ICH_VTR_EL2_PREBITS(ich_vtr_el2);
+	switch (prebits) {
 	case 5:
 		virt_features.ich_ap0r_num = 1;
 		virt_features.ich_ap1r_num = 1;
@@ -1330,34 +818,9 @@ vgic_v3_init(uint64_t ich_vtr_el2)
 static int
 arm_vgic_attach(device_t dev)
 {
-	int error;
-
 	vgic_v3_set_ro_regs(dev);
 
-	softc.maintenance_int_res = gic_get_maintenance_intr_res(dev);
-	/*
-	 * TODO: gic_v3.c registers interrupts by using intr_isrc_register()
-	 */
-	error = bus_setup_intr(dev, softc.maintenance_int_res,
-			INTR_TYPE_CLK | INTR_MPSAFE,
-			arm_vgic_maintenance_intr, NULL,
-			&softc, &softc.maintenance_int_cookie);
-	if (error) {
-		device_printf(dev, "Cannot set up the Maintenance Interrupt.\n");
-		//goto error_disable_virtualization;
-		device_printf(dev, "Ignoring error %d\n", error);
-	}
-
 	return (0);
-
-	printf("[vgic.c:arm_vgic_attach] Error happened.\n");
-
-	/*
-error_disable_virtualization:
-	hypmode_enabled = 0;
-	printf("Virtualization has been disabled.\n");
-	return (ENXIO);
-	*/
 }
 
 static void

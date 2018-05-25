@@ -62,32 +62,8 @@ struct vm_exit;
 struct vgic_v3_dist {
 	struct mtx dist_lock;
 
-	/* Interrupt enabled */
-	uint32_t irq_enabled_prv[VGIC_MAXCPU][VGIC_PRV_I_NUM / (sizeof(uint32_t) * 8)];
-	uint32_t irq_enabled_shr[VGIC_SHR_I_NUM / (sizeof(uint32_t) * 8)];
-
-	/* Interrupt level */
-	uint32_t irq_state_prv[VGIC_MAXCPU][VGIC_PRV_I_NUM / (sizeof(uint32_t) * 8)];
-	uint32_t irq_state_shr[VGIC_SHR_I_NUM / (sizeof(uint32_t) * 8)]; 
-	/* Level interrupts in progress */
-	uint32_t irq_active_prv[VGIC_MAXCPU][VGIC_PRV_I_NUM / (sizeof(uint32_t) * 8)];
-	uint32_t irq_active_shr[VGIC_SHR_I_NUM / (sizeof(uint32_t) * 8)];
-
-	/* Configure type of IRQ: level or edge triggered */
-	uint32_t irq_conf_prv[VGIC_MAXCPU][VGIC_PRV_I_NUM / (sizeof(uint32_t) * 8)];
-	uint32_t irq_conf_shr[VGIC_SHR_I_NUM / (sizeof(uint32_t) * 8)];
-
-	/* Interrupt targets */
-	uint32_t irq_target_shr[VGIC_SHR_I_NUM / sizeof(uint32_t)];
-
-	uint8_t  irq_sgi_source[VGIC_MAXCPU][VGIC_SGI_NUM];
-
 	uint64_t 	ipa;
 	size_t   	size;
-
-	uint32_t 	enabled;
-	uint32_t 	irq_pending_on_cpu;
-	uint32_t 	sgir;
 
 	uint32_t 	gicd_ctlr;	/* Distributor Control Register */
 	uint32_t 	gicd_typer;	/* Interrupt Controller Type Register */
@@ -170,7 +146,7 @@ void 	vgic_v3_sync_hwstate(void *arg);
 void 	vgic_v3_flush_hwstate(void *arg);
 int 	vgic_v3_vcpu_pending_irq(void *arg);
 int 	vgic_v3_inject_irq(void *arg, unsigned int irq, bool level);
-int 	vgic_v3_remove_irq(void *arg, unsigned int irq);
+int 	vgic_v3_remove_irq(void *arg, unsigned int irq, bool ignore_state);
 void	vgic_v3_init(uint64_t ich_vtr_el2);
 void	vgic_v3_vminit(void *arg);
 void	vgic_v3_cpuinit(void *arg, bool last_vcpu);
@@ -185,8 +161,6 @@ int	vgic_v3_redist_write(void *vm, int vcpuid, uint64_t fault_ipa,
 			     uint64_t val, int size, void *arg);
 
 struct vgic_v3_softc {
-	struct resource *maintenance_int_res;		/* Not used. */
-	void 		*maintenance_int_cookie;	/* Not used. */
 	device_t 	gic_v3_dev;
 	device_t 	vgic_v3_dev;
 };
