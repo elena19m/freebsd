@@ -46,6 +46,9 @@
 #define	IRQ_LEVEL	1
 #define	RES1		0xffffffffffffffffUL
 
+#define vtimer_enabled(ctl)	\
+    (!((ctl) & CNTP_CTL_IMASK) && ((ctl) & CNTP_CTL_ENABLE))
+
 extern struct timecounter arm_tmr_timecount;
 
 uint64_t cnthctl_el2_reg;
@@ -64,11 +67,15 @@ vtimer_attach_to_vm(void *arg, int phys_ns_irq, int virt_irq)
 	struct hyp *hyp;
 	struct vtimer *vtimer;
 
+	eprintf("Entering\n");
+
 	hyp = (struct hyp *)arg;
 	vtimer = &hyp->vtimer;
 
 	vtimer->phys_ns_irq = phys_ns_irq;
 	vtimer->attached = true;
+
+	eprintf("Exiting\n");
 
 	return (0);
 }
@@ -95,26 +102,19 @@ vtimer_inject_irq(struct hypctx *hypctx)
 {
 	struct hyp *hyp;
 	int irq;
-	struct vtimer_cpu *vtimer_cpu = &hypctx->vtimer_cpu;
 
 	hyp = hypctx->hyp;
 	irq = hyp->vtimer.phys_ns_irq;
-
-	vtimer_cpu->cntp_ctl_el0 |= 1 << 1;
+	vgic_v3_inject_irq(hypctx, irq, IRQ_LEVEL);
 }
 
 static void
 vtimer_inject_irq_task(void *context, int pending)
 {
-	struct hyp *hyp;
 	struct hypctx *hypctx;
-	int irq;
 
 	hypctx = (struct hypctx *)context;
-	hyp = hypctx->hyp;
-	irq = hyp->vtimer.phys_ns_irq;
-
-	vgic_v3_inject_irq(hypctx, irq, IRQ_LEVEL);
+	vtimer_inject_irq(hypctx);
 }
 
 int
@@ -177,12 +177,15 @@ vtimer_read_reg(void *vm, int vcpuid, uint64_t *rval, uint32_t inst_syndrome,
 	hyp = vm_get_cookie(vm);
 	vtimer_cpu = &hyp->ctx[vcpuid].vtimer_cpu;
 
+	eprintf("Entering\n");
+
 	if (ISS_MATCH_REG(CNTP_CTL_EL0, inst_syndrome)) {
 		cntpct_el0 = vtimer_read_pct();
 		if (vtimer_cpu->cntp_cval_el0 < cntpct_el0)
 			/* Timer condition met */
-			vtimer_cpu->cntp_ctl_el0 |= CNTP_CTL_ISTATUS;
-		*rval = vtimer_cpu->cntp_ctl_el0;
+			*rval = vtimer_cpu->cntp_ctl_el0 | CNTP_CTL_ISTATUS;
+		else
+			*rval = vtimer_cpu->cntp_ctl_el0;
 
 	} else if (ISS_MATCH_REG(CNTP_CVAL_EL0, inst_syndrome)) {
 		*rval = vtimer_cpu->cntp_cval_el0;
@@ -208,25 +211,15 @@ vtimer_read_reg(void *vm, int vcpuid, uint64_t *rval, uint32_t inst_syndrome,
 		goto out_user;
 	}
 
+	eprintf("Exiting\n");
+
 	*retu = false;
 	return (0);
 
 out_user:
+	eprintf("Exiting to user\n");
 	*retu = true;
 	return (0);
-}
-
-static inline void
-vtimer_enqueue_irq(uint64_t cval, uint64_t pct, struct timeout_task *task)
-{
-	uint64_t diff;
-
-	if (cval < pct)
-		diff = 0;
-	else
-		diff = cval - pct;
-	taskqueue_enqueue_timeout(taskqueue_thread, task,
-	    diff*hz/100000000);
 }
 
 int
@@ -234,41 +227,81 @@ vtimer_write_reg(void *vm, int vcpuid, uint64_t wval, uint32_t inst_syndrome,
     void *arg)
 {
 	struct hyp *hyp;
+	struct hypctx *hypctx;
 	struct vtimer_cpu *vtimer_cpu;
-	uint64_t cntpct_el0;
+	uint64_t cntpct_el0, ctl_el0;
+	int ticks;
+	bool int_toggled_on, int_toggled_off, cval_changed;
 	bool *retu;
 
 	retu = (bool *)arg;
 	hyp = vm_get_cookie(vm);
-	vtimer_cpu = &hyp->ctx[vcpuid].vtimer_cpu;
+	hypctx = &hyp->ctx[vcpuid];
+	vtimer_cpu = &hypctx->vtimer_cpu;
+
+	eprintf("Entering\n");
+
+	int_toggled_on = int_toggled_off = false;
+	cval_changed = false;
+	ctl_el0 = vtimer_cpu->cntp_ctl_el0;
 
 	if (ISS_MATCH_REG(CNTP_CTL_EL0, inst_syndrome)) {
-		/* ISTATUS is set when timer condition is met */
-		wval &= ~CNTP_CTL_ISTATUS;
-		wval &= CNTP_CTL_RES0;
-		vtimer_cpu->cntp_ctl_el0 = wval;
+		if (!vtimer_enabled(ctl_el0) && vtimer_enabled(wval))
+			int_toggled_on = true;
+		if (vtimer_enabled(ctl_el0) && !vtimer_enabled(wval))
+			int_toggled_off = true;
+		/* ISTATUS will be set on read when timer condition is met */
+		vtimer_cpu->cntp_ctl_el0 = wval & ~CNTP_CTL_ISTATUS;
+		eprintf("CNTP_CTL_EL0\n");
 
 	} else if (ISS_MATCH_REG(CNTP_CVAL_EL0, inst_syndrome)) {
+		cval_changed = true && vtimer_enabled(ctl_el0);
 		vtimer_cpu->cntp_cval_el0 = wval;
-		cntpct_el0 = vtimer_read_pct();
-		vtimer_enqueue_irq(vtimer_cpu->cntp_cval_el0, cntpct_el0,
-		    &vtimer_cpu->task);
+		eprintf("CNTP_CVAL_EL0, vtimer_enabled = %s\n",
+		    vtimer_enabled(ctl_el0) ? "true" : "false");
 
 	} else if (ISS_MATCH_REG(CNTP_TVAL_EL0, inst_syndrome)) {
+		cval_changed = true && vtimer_enabled(ctl_el0);
 		cntpct_el0 = vtimer_read_pct();
 		vtimer_cpu->cntp_cval_el0 = (int32_t)wval + cntpct_el0;
-		taskqueue_enqueue_timeout(taskqueue_thread, &vtimer_cpu->task,
-		    (int32_t)wval*hz/100000000);
+		eprintf("CNTP_TVAL_EL0, vtimer_enabled = %s\n",
+		    vtimer_enabled(ctl_el0) ? "true" : "false");
 
 	} else {
 		eprintf("Uknown register\n");
 		goto out_user;
 	}
 
+	if (int_toggled_on || cval_changed) {
+		eprintf("Interrupts toggled ON or cval_changed\n");
+		cntpct_el0 = vtimer_read_pct();
+		if (vtimer_cpu->cntp_cval_el0 < cntpct_el0) {
+			/* TODO inject the irq now */
+			//vtimer_inject_irq(hypctx);
+			ticks = 1;
+		} else {
+			/* Enqueue a task to inject the interrupt, old task
+			 * should be removed. */
+			ticks = (vtimer_cpu->cntp_cval_el0 - cntpct_el0) * hz / \
+			    arm_tmr_timecount.tc_frequency;
+			if (ticks < 1)
+				/* TODO use callout for finer precision */
+				ticks = 1;
+		}
+		taskqueue_enqueue_timeout(taskqueue_thread, &vtimer_cpu->task,
+		    ticks);
+	} else if (int_toggled_off) {
+		/* TODO: drain task, remove irq */
+		eprintf("Interrupts toggled OFF\n");
+	}
+
+	eprintf("Exiting\n");
+
 	*retu = false;
 	return (0);
 
 out_user:
+	eprintf("Exiting to user\n");
 	*retu = true;
 	return (0);
 }
