@@ -434,6 +434,7 @@ vgic_v3_cpuinit(void *arg, bool last_vcpu)
 	vgic_v3_init_redist_regs(redist, hypctx, last_vcpu);
 
 	cpu_if = &hypctx->vgic_cpu_if;
+	mtx_init(&cpu_if->lr_mtx, "VGICv3 ICH_LR_EL2 lock", NULL, MTX_SPIN);
 	/*
 	 * Configure the Interrupt Controller Hyp Control Register.
 	 *
@@ -476,7 +477,7 @@ do {									\
 } while (0)
 
 static void
-init_dist_regs(struct vgic_v3_dist *dist)
+vgic_v3_init_dist_regs(struct vgic_v3_dist *dist)
 {
 	size_t n;
 	size_t reg_size;
@@ -533,7 +534,7 @@ vgic_v3_vminit(void *arg)
 
 	hyp = (struct hyp *)arg;
 	dist = &hyp->vgic_dist;
-	init_dist_regs(dist);
+	vgic_v3_init_dist_regs(dist);
 }
 
 int
@@ -639,7 +640,6 @@ vgic_v3_sync_hwstate(void *arg)
 
 	for_each_set_bit(lr_idx, &cpu_if->ich_elsr_el2, cpu_if->ich_lr_num) {
 		irq = cpu_if->ich_lr_el2[lr_idx] & GICH_LR_VIRTID;
-		cpu_if->irq_to_lr[irq] = VGIC_ICH_LR_EMPTY;
 	}
 }
 
@@ -650,7 +650,7 @@ vgic_v3_vcpu_pending_irq(void *arg)
 }
 
 static inline ssize_t
-vgic_v3_get_free_lr(const uint64_t *ich_lr_el2, size_t ich_lr_num)
+vgic_v3_free_lr_unsafe(const uint64_t *ich_lr_el2, size_t ich_lr_num)
 {
 	ssize_t i;
 
@@ -671,10 +671,14 @@ vgic_v3_remove_irq(void *arg, unsigned int irq, bool ignore_state)
 	hypctx = (struct hypctx *)arg;
 	cpu_if = &hypctx->vgic_cpu_if;
 
+	mtx_lock_spin(&cpu_if->lr_mtx);
+
 	for (i = 0; i < cpu_if->ich_lr_num; i++)
 		if (ICH_LR_EL2_VINTID(cpu_if->ich_lr_el2[i]) == irq &&
 		    (ignore_state || int_pending(cpu_if->ich_lr_el2[i])))
 			cpu_if->ich_lr_el2[i] &= ~ICH_LR_EL2_STATE_MASK;
+
+	mtx_unlock_spin(&cpu_if->lr_mtx);
 
 	/* TODO check if the interrupt is pending and disable it there too */
 
@@ -691,7 +695,9 @@ vgic_v3_inject_irq(void *arg, unsigned int irq, bool level)
 	hypctx = (struct hypctx *)arg;
 	cpu_if = &hypctx->vgic_cpu_if;
 
-	lr_idx = vgic_v3_get_free_lr(cpu_if->ich_lr_el2, cpu_if->ich_lr_num);
+	mtx_lock_spin(&cpu_if->lr_mtx);
+
+	lr_idx = vgic_v3_free_lr_unsafe(cpu_if->ich_lr_el2, cpu_if->ich_lr_num);
 	if (lr_idx == -1) {
 		/*
 		 * TODO:
@@ -713,6 +719,8 @@ vgic_v3_inject_irq(void *arg, unsigned int irq, bool level)
 
 	cpu_if->ich_lr_el2[lr_idx] = \
 	    ICH_LR_EL2_STATE_PENDING | ICH_LR_EL2_GROUP_1 | irq;
+
+	mtx_unlock_spin(&cpu_if->lr_mtx);
 
         //if (vgic_update_irq_state(hypctx, irq, level))
         //        vgic_kick_vcpus(hypctx->hyp);
