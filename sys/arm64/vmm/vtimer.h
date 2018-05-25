@@ -42,20 +42,14 @@ struct vtimer
 
 struct vtimer_cpu
 {
-	struct timeout_task task;
+	struct callout	callout;
 	/*
 	 * CNTP_CTL_EL0:  Counter-timer Physical Timer Control Register
 	 * CNTP_CVAL_EL0: Counter-timer Physical Timer CompareValue Register
 	 */
 	uint64_t	cntp_cval_el0;
 	uint32_t	cntp_ctl_el0;
-	bool		started;
 };
-
-void	vtimer_flush_hwstate(void *arg);
-void 	vtimer_sync_hwstate(void *arg);
-
-void 	vtimer_cpu_terminate(void *arg);
 
 int	vtimer_attach_to_vm(void *arg, int phys_ns_irq, int virt_irq);
 void	vtimer_detach_from_vm(void *arg);

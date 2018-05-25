@@ -87,9 +87,7 @@ vtimer_detach_from_vm(void *arg)
 	hyp = (struct hyp *)arg;
 	for (i = 0; i < VM_MAXCPU; i++) {
 		vtimer_cpu = &hyp->ctx[i].vtimer_cpu;
-		taskqueue_cancel_timeout(taskqueue_thread, &vtimer_cpu->task,
-		    NULL);
-		taskqueue_drain_timeout(taskqueue_thread, &vtimer_cpu->task);
+		callout_drain(&vtimer_cpu->callout);
 	}
 }
 
@@ -105,7 +103,7 @@ vtimer_inject_irq(struct hypctx *hypctx)
 }
 
 static void
-vtimer_inject_irq_task(void *context, int pending)
+vtimer_inject_irq_callout_func(void *context)
 {
 	struct hypctx *hypctx;
 
@@ -156,8 +154,11 @@ vtimer_cpuinit(void *arg)
 	 */
 	vtimer_cpu->cntp_ctl_el0 = CNTP_CTL_IMASK & ~CNTP_CTL_ENABLE;
 
-	TIMEOUT_TASK_INIT(taskqueue_thread, &vtimer_cpu->task, 0,
-	    vtimer_inject_irq_task, hypctx);
+	/*
+	 * Callout function is MP_SAFE because the VGIC uses a spin mutex when
+	 * modifying the list registers.
+	 */
+	callout_init(&vtimer_cpu->callout, 1);
 }
 
 int
@@ -221,9 +222,10 @@ vtimer_write_reg(void *vm, int vcpuid, uint64_t wval, uint32_t inst_syndrome,
 	struct hyp *hyp;
 	struct hypctx *hypctx;
 	struct vtimer_cpu *vtimer_cpu;
-	uint64_t cntpct_el0, ctl_el0;
-	int ticks;
-	bool int_toggled_on, int_toggled_off, cval_changed;
+	uint64_t cntpct_el0, ctl_el0, diff;
+	sbintime_t time;
+	int ret;
+	bool int_toggled_on, int_toggled_off, cval_changed, remove_irq;
 	bool *retu;
 
 	retu = (bool *)arg;
@@ -233,6 +235,7 @@ vtimer_write_reg(void *vm, int vcpuid, uint64_t wval, uint32_t inst_syndrome,
 
 	int_toggled_on = int_toggled_off = false;
 	cval_changed = false;
+	remove_irq = false;
 	ctl_el0 = vtimer_cpu->cntp_ctl_el0;
 
 	if (ISS_MATCH_REG(CNTP_CTL_EL0, inst_syndrome)) {
@@ -262,23 +265,26 @@ vtimer_write_reg(void *vm, int vcpuid, uint64_t wval, uint32_t inst_syndrome,
 		if (vtimer_cpu->cntp_cval_el0 < cntpct_el0) {
 			vtimer_inject_irq(hypctx);
 		} else {
-			/*
-			 * TODO:
-			 *
-			 * Enqueue a task to inject the interrupt, old task
-			 * should be removed.
-			 */
-			ticks = (vtimer_cpu->cntp_cval_el0 - cntpct_el0) * hz / \
-			    arm_tmr_timecount.tc_frequency;
-			/* TODO use callout for finer precision */
-			if (ticks < 1)
-				ticks = 1;
-			taskqueue_enqueue_timeout(taskqueue_thread,
-			    &vtimer_cpu->task, ticks);
+			if (cval_changed) {
+				/* Timer reset, stop the previous timer */
+				ret = callout_stop(&vtimer_cpu->callout);
+				while (ret == 0) {
+					remove_irq = true;
+					ret = callout_stop(&vtimer_cpu->callout);
+				}
+				if (remove_irq)
+					vgic_v3_remove_irq(hypctx,
+					    hyp->vtimer.phys_ns_irq, true);
+			}
+
+			diff = vtimer_cpu->cntp_cval_el0 - cntpct_el0;
+			time = diff * SBT_1S / arm_tmr_timecount.tc_frequency;
+			callout_reset_sbt(&vtimer_cpu->callout, time, 0,
+			    vtimer_inject_irq_callout_func, hypctx, 0);
 		}
 	} else if (int_toggled_off) {
+		callout_drain(&vtimer_cpu->callout);
 		vgic_v3_remove_irq(hypctx, hyp->vtimer.phys_ns_irq, true);
-		/* TODO: drain task */
 		//eprintf("Interrupts toggled OFF\n");
 	}
 

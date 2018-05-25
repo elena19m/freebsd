@@ -136,6 +136,10 @@ struct vgic_v3_cpu_if {
 	 * modified asynchronously by the virtual timer. When the physical CPU
 	 * is multi-core or multi-threaded the virtual timer task might be
 	 * executing on a different core.
+	 *
+	 * Note that the mutex *MUST* be a spin mutex because an interrupt can
+	 * be injected by a callout callback function, thereby modifying the
+	 * list registers from a context where sleeping is forbidden.
 	 */
 	struct mtx	lr_mtx;
 
