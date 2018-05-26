@@ -46,15 +46,26 @@
 #define VGIC_SHR_I_NUM		(VGIC_SPI_NUM)
 
 #define VGIC_ICH_LR_NUM_MAX	16
-#define VGIC_ICH_LR_EMPTY	0xff
-
 #define	VGIC_ICH_AP0R_NUM_MAX	4
 #define	VGIC_ICH_AP1R_NUM_MAX	VGIC_ICH_AP0R_NUM_MAX
 
-#define VGIC_MAXCPU		VM_MAXCPU
+enum virq_type {
+	VIRQ_TYPE_CLK,
+	VIRQ_TYPE_MISC,
+	VIRQ_TYPE_INVALID,
+};
 
-#define VGIC_CFG_LEVEL		0
-#define VGIC_CFG_EDGE		1
+enum virq_group {
+	VIRQ_GROUP_0,
+	VIRQ_GROUP_1,
+	VIRQ_GROUP_INVALID,
+};
+
+struct virq {
+	unsigned int	irq;
+	enum virq_type	type;
+	enum virq_group	group;
+};
 
 struct vm;
 struct vm_exit;
@@ -64,12 +75,11 @@ struct vgic_v3_dist {
 
 	uint64_t 	ipa;
 	size_t   	size;
+	size_t		nirqs;
 
 	uint32_t 	gicd_ctlr;	/* Distributor Control Register */
 	uint32_t 	gicd_typer;	/* Interrupt Controller Type Register */
 	uint32_t 	gicd_pidr2;	/* Distributor Peripheral ID2 Register */
-
-	size_t		nirqs;
 
 	/* Interrupt Clear-Enable and Set-Enable Registers. */
 	uint32_t	*gicd_icenabler_isenabler;
@@ -91,7 +101,6 @@ struct vgic_v3_dist {
 	uint64_t	gicd_ipriorityr_addr_max;
 	uint32_t	*gicd_ipriorityr;
 	size_t		gicd_ipriorityr_num;
-
 
 	/* Interrupt Routing Registers. */
 	uint64_t	gicd_irouter_addr_max;
@@ -117,10 +126,6 @@ struct vgic_v3_redist {
 };
 
 struct vgic_v3_cpu_if {
-	/* Bitmaps for pending IRQs */
-	uint32_t	pending_prv[VGIC_PRV_I_NUM / (sizeof(uint32_t) * 8)];
-	uint32_t	pending_shr[VGIC_SHR_I_NUM / (sizeof(uint32_t) * 8)];
-
 	uint32_t	ich_eisr_el2;	/* End of Interrupt Status Register. */
 	/* ICH_ELRSR_EL2 in ARM GIC Architecture Specification */
 	uint32_t	ich_elsr_el2;	/* Empty List register Status Register. */
@@ -135,7 +140,7 @@ struct vgic_v3_cpu_if {
 	 * We need a mutex for accessing the list registers because they are
 	 * modified asynchronously by the virtual timer. When the physical CPU
 	 * is multi-core or multi-threaded the virtual timer task might be
-	 * executing on a different core.
+	 * executing on a different thread.
 	 *
 	 * Note that the mutex *MUST* be a spin mutex because an interrupt can
 	 * be injected by a callout callback function, thereby modifying the
@@ -155,8 +160,8 @@ int 	vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
 void 	vgic_v3_sync_hwstate(void *arg);
 void 	vgic_v3_flush_hwstate(void *arg);
 int 	vgic_v3_vcpu_pending_irq(void *arg);
-int 	vgic_v3_inject_irq(void *arg, unsigned int irq, bool level);
-int 	vgic_v3_remove_irq(void *arg, unsigned int irq, bool ignore_state);
+int 	vgic_v3_inject_irq(void *arg, struct virq *virq);
+int 	vgic_v3_remove_irq(void *arg, struct virq *virq, bool ignore_state);
 void	vgic_v3_init(uint64_t ich_vtr_el2);
 void	vgic_v3_vminit(void *arg);
 void	vgic_v3_cpuinit(void *arg, bool last_vcpu);

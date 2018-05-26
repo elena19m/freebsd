@@ -95,11 +95,14 @@ static void
 vtimer_inject_irq(struct hypctx *hypctx)
 {
 	struct hyp *hyp;
-	int irq;
+	struct virq virq;
 
 	hyp = hypctx->hyp;
-	irq = hyp->vtimer.phys_ns_irq;
-	vgic_v3_inject_irq(hypctx, irq, IRQ_LEVEL);
+
+	virq.irq = hyp->vtimer.phys_ns_irq;
+	virq.type = VIRQ_TYPE_CLK;
+	virq.group = VIRQ_GROUP_1;
+	vgic_v3_inject_irq(hypctx, &virq);
 }
 
 static void
@@ -215,6 +218,30 @@ out_user:
 	return (0);
 }
 
+static void
+vtimer_deactivate_irq(struct hypctx *hypctx)
+{
+	struct vtimer_cpu *vtimer_cpu;
+	struct virq virq;
+	int ret;
+	bool remove_irq;
+
+	vtimer_cpu = &hypctx->vtimer_cpu;
+	remove_irq = false;
+
+	ret = callout_stop(&vtimer_cpu->callout);
+	while (ret == 0) {
+		remove_irq = true;
+		ret = callout_stop(&vtimer_cpu->callout);
+	}
+	if (remove_irq) {
+		virq.irq = hypctx->hyp->vtimer.phys_ns_irq;
+		virq.type = VIRQ_TYPE_CLK;
+		virq.group = VIRQ_GROUP_1;
+		vgic_v3_remove_irq(hypctx, &virq, true);
+	}
+}
+
 int
 vtimer_write_reg(void *vm, int vcpuid, uint64_t wval, uint32_t inst_syndrome,
     void *arg)
@@ -224,8 +251,7 @@ vtimer_write_reg(void *vm, int vcpuid, uint64_t wval, uint32_t inst_syndrome,
 	struct vtimer_cpu *vtimer_cpu;
 	uint64_t cntpct_el0, ctl_el0, diff;
 	sbintime_t time;
-	int ret;
-	bool int_toggled_on, int_toggled_off, cval_changed, remove_irq;
+	bool int_toggled_on, int_toggled_off, cval_changed;
 	bool *retu;
 
 	retu = (bool *)arg;
@@ -233,9 +259,7 @@ vtimer_write_reg(void *vm, int vcpuid, uint64_t wval, uint32_t inst_syndrome,
 	hypctx = &hyp->ctx[vcpuid];
 	vtimer_cpu = &hypctx->vtimer_cpu;
 
-	int_toggled_on = int_toggled_off = false;
-	cval_changed = false;
-	remove_irq = false;
+	int_toggled_on = int_toggled_off = cval_changed = false;
 	ctl_el0 = vtimer_cpu->cntp_ctl_el0;
 
 	if (ISS_MATCH_REG(CNTP_CTL_EL0, inst_syndrome)) {
@@ -261,30 +285,19 @@ vtimer_write_reg(void *vm, int vcpuid, uint64_t wval, uint32_t inst_syndrome,
 	}
 
 	if (int_toggled_on || (cval_changed && vtimer_enabled(ctl_el0))) {
+		if (cval_changed)
+			vtimer_deactivate_irq(hypctx);
 		cntpct_el0 = vtimer_read_pct();
 		if (vtimer_cpu->cntp_cval_el0 < cntpct_el0) {
 			vtimer_inject_irq(hypctx);
 		} else {
-			if (cval_changed) {
-				/* Timer reset, stop the previous timer */
-				ret = callout_stop(&vtimer_cpu->callout);
-				while (ret == 0) {
-					remove_irq = true;
-					ret = callout_stop(&vtimer_cpu->callout);
-				}
-				if (remove_irq)
-					vgic_v3_remove_irq(hypctx,
-					    hyp->vtimer.phys_ns_irq, true);
-			}
-
 			diff = vtimer_cpu->cntp_cval_el0 - cntpct_el0;
 			time = diff * SBT_1S / arm_tmr_timecount.tc_frequency;
 			callout_reset_sbt(&vtimer_cpu->callout, time, 0,
 			    vtimer_inject_irq_callout_func, hypctx, 0);
 		}
 	} else if (int_toggled_off) {
-		callout_drain(&vtimer_cpu->callout);
-		vgic_v3_remove_irq(hypctx, hyp->vtimer.phys_ns_irq, true);
+		vtimer_deactivate_irq(hypctx);
 		//eprintf("Interrupts toggled OFF\n");
 	}
 
