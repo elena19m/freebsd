@@ -33,8 +33,8 @@
 #define ICH_LR_EL2_PINTID_MASK		(0x3fUL << ICH_LR_EL2_PINTID_SHIFT)
 #define ICH_LR_EL2_PRIO_SHIFT		48
 #define ICH_LR_EL2_PRIO_MASK		(0xffUL << ICH_LR_EL2_PRIO_SHIFT)
-#define ICH_LR_EL2_GROUP_1		(1UL << 60) 	/* Virtual interrupt is Group 1 */
-#define ICH_LR_EL2_HW			(1UL << 61) 	/* Virtual interrupt has a corresponding physical interrupt */
+#define	ICH_LR_EL2_GROUP_SHIFT		60
+#define ICH_LR_EL2_HW			(1UL << 61)
 #define ICH_LR_EL2_STATE_SHIFT		62
 #define ICH_LR_EL2_STATE_MASK		(0x3UL << ICH_LR_EL2_STATE_SHIFT)
 #define	ICH_LR_EL2_STATE(x)		((x) & ICH_LR_EL2_STATE_MASK)

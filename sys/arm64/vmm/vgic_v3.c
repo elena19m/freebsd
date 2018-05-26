@@ -662,11 +662,17 @@ vgic_v3_free_lr_unsafe(const uint64_t *ich_lr_el2, size_t ich_lr_num)
 }
 
 int
-vgic_v3_remove_irq(void *arg, unsigned int irq, bool ignore_state)
+vgic_v3_remove_irq(void *arg, struct virq *virq, bool ignore_state)
 {
         struct hypctx *hypctx;
 	struct vgic_v3_cpu_if *cpu_if;
 	size_t i;
+
+	if (virq->type >= VIRQ_TYPE_INVALID ||
+	    virq->group >= VIRQ_GROUP_INVALID) {
+		eprintf("Malformed virq\n");
+		return (1);
+	}
 
 	hypctx = (struct hypctx *)arg;
 	cpu_if = &hypctx->vgic_cpu_if;
@@ -674,7 +680,7 @@ vgic_v3_remove_irq(void *arg, unsigned int irq, bool ignore_state)
 	mtx_lock_spin(&cpu_if->lr_mtx);
 
 	for (i = 0; i < cpu_if->ich_lr_num; i++)
-		if (ICH_LR_EL2_VINTID(cpu_if->ich_lr_el2[i]) == irq &&
+		if (ICH_LR_EL2_VINTID(cpu_if->ich_lr_el2[i]) == virq->irq &&
 		    (ignore_state || int_pending(cpu_if->ich_lr_el2[i])))
 			cpu_if->ich_lr_el2[i] &= ~ICH_LR_EL2_STATE_MASK;
 
@@ -686,11 +692,17 @@ vgic_v3_remove_irq(void *arg, unsigned int irq, bool ignore_state)
 }
 
 int
-vgic_v3_inject_irq(void *arg, unsigned int irq, bool level)
+vgic_v3_inject_irq(void *arg, struct virq *virq)
 {
         struct hypctx *hypctx;
 	struct vgic_v3_cpu_if *cpu_if;
 	ssize_t lr_idx;
+
+	if (virq->type >= VIRQ_TYPE_INVALID ||
+	    virq->group >= VIRQ_GROUP_INVALID) {
+		eprintf("Malformed virq\n");
+		return (1);
+	}
 
 	hypctx = (struct hypctx *)arg;
 	cpu_if = &hypctx->vgic_cpu_if;
@@ -711,14 +723,15 @@ vgic_v3_inject_irq(void *arg, unsigned int irq, bool level)
 		 * replace one with irq.
 		 */
 		eprintf("All ICH_LR<n>_EL2 registers are used\n");
+		mtx_unlock_spin(&cpu_if->lr_mtx);
 		return (0);
 	}
 
 	if (lr_idx != 0)
 		eprintf("lr_idx = %ld\n", lr_idx);
 
-	cpu_if->ich_lr_el2[lr_idx] = \
-	    ICH_LR_EL2_STATE_PENDING | ICH_LR_EL2_GROUP_1 | irq;
+	cpu_if->ich_lr_el2[lr_idx] = ICH_LR_EL2_STATE_PENDING | \
+	    ((uint64_t)virq->group << ICH_LR_EL2_GROUP_SHIFT) | virq->irq;
 
 	mtx_unlock_spin(&cpu_if->lr_mtx);
 
