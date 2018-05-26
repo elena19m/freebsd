@@ -223,23 +223,21 @@ vtimer_deactivate_irq(struct hypctx *hypctx)
 {
 	struct vtimer_cpu *vtimer_cpu;
 	struct virq virq;
-	int ret;
-	bool remove_irq;
 
 	vtimer_cpu = &hypctx->vtimer_cpu;
-	remove_irq = false;
 
-	ret = callout_stop(&vtimer_cpu->callout);
-	while (ret == 0) {
-		remove_irq = true;
-		ret = callout_stop(&vtimer_cpu->callout);
-	}
-	if (remove_irq) {
-		virq.irq = hypctx->hyp->vtimer.phys_ns_irq;
-		virq.type = VIRQ_TYPE_CLK;
-		virq.group = VIRQ_GROUP_1;
-		vgic_v3_remove_irq(hypctx, &virq, true);
-	}
+	callout_drain(&vtimer_cpu->callout);
+	/*
+	 * The interrupt needs to be deactivated here regardless of the callout
+	 * function being executed. The timer interrupt can be controlled by
+	 * using the CNTP_CTL_EL0.IMASK bit instead of reading the IAR
+	 * register which has the effect that disabling the timer interrupt
+	 * doesn't remove it from the list registers.
+	 */
+	virq.irq = hypctx->hyp->vtimer.phys_ns_irq;
+	virq.type = VIRQ_TYPE_CLK;
+	virq.group = VIRQ_GROUP_1;
+	vgic_v3_remove_irq(hypctx, &virq, true);
 }
 
 int
