@@ -159,15 +159,13 @@ struct vgic_v3_cpu_if {
 
 int 	vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
 			     uint64_t redist_ipa, size_t redist_size);
-void 	vgic_v3_sync_hwstate(void *arg);
-void 	vgic_v3_flush_hwstate(void *arg);
-int 	vgic_v3_vcpu_pending_irq(void *arg);
-int 	vgic_v3_inject_irq(void *arg, struct virq *virq);
-int 	vgic_v3_deactivate_irq(void *arg, struct virq *virq, bool ignore_state);
 void	vgic_v3_init(uint64_t ich_vtr_el2);
 void	vgic_v3_vminit(void *arg);
 void	vgic_v3_cpuinit(void *arg, bool last_vcpu);
-
+void 	vgic_v3_sync_hwstate(void *arg);
+int 	vgic_v3_vcpu_pending_irq(void *arg);
+int 	vgic_v3_inject_irq(void *arg, struct virq *virq);
+int 	vgic_v3_deactivate_irq(void *arg, struct virq *virq, bool ignore_state);
 int 	vgic_v3_dist_read(void *vm, int vcpuid, uint64_t fault_ipa,
 			  uint64_t *rval, int size, void *arg);
 int	vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa,
