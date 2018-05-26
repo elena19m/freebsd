@@ -686,6 +686,7 @@ vgic_v3_remove_irq(void *arg, struct virq *virq, bool ignore_state)
 
 	mtx_unlock_spin(&cpu_if->lr_mtx);
 
+
 	/* TODO check if the interrupt is pending and disable it there too */
 
 	return (0);
