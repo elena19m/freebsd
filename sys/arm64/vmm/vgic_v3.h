@@ -126,15 +126,13 @@ struct vgic_v3_redist {
 };
 
 struct vgic_v3_cpu_if {
-	uint32_t	ich_eisr_el2;	/* End of Interrupt Status Register. */
-	/* ICH_ELRSR_EL2 in ARM GIC Architecture Specification */
-	uint32_t	ich_elsr_el2;	/* Empty List register Status Register. */
-	uint32_t	ich_hcr_el2;	/* Hyp Control Register. */
-	uint32_t	ich_misr_el2;	/* Maintenance Interrupt State Register. */
-	uint32_t	ich_vmcr_el2;	/* Virtual Machine Control Register. */
+	uint32_t	ich_eisr_el2;	/* End of Interrupt Status Register */
+	uint32_t	ich_elsr_el2;	/* Empty List register Status Register (ICH_ELRSR_EL2) */
+	uint32_t	ich_hcr_el2;	/* Hyp Control Register */
+	uint32_t	ich_misr_el2;	/* Maintenance Interrupt State Register */
+	uint32_t	ich_vmcr_el2;	/* Virtual Machine Control Register */
 
-	/* List Registers */
-	uint64_t	ich_lr_el2[VGIC_ICH_LR_NUM_MAX];
+	uint64_t	ich_lr_el2[VGIC_ICH_LR_NUM_MAX]; /* List Registers */
 	size_t		ich_lr_num;
 	/*
 	 * We need a mutex for accessing the list registers because they are
@@ -153,6 +151,10 @@ struct vgic_v3_cpu_if {
 	size_t		ich_ap0r_num;
 	uint32_t	ich_ap1r_el2[VGIC_ICH_AP1R_NUM_MAX];
 	size_t		ich_ap1r_num;
+
+	struct virq	*pending;
+	size_t		pending_size;
+	size_t		pending_num;
 };
 
 int 	vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
@@ -161,7 +163,7 @@ void 	vgic_v3_sync_hwstate(void *arg);
 void 	vgic_v3_flush_hwstate(void *arg);
 int 	vgic_v3_vcpu_pending_irq(void *arg);
 int 	vgic_v3_inject_irq(void *arg, struct virq *virq);
-int 	vgic_v3_remove_irq(void *arg, struct virq *virq, bool ignore_state);
+int 	vgic_v3_deactivate_irq(void *arg, struct virq *virq, bool ignore_state);
 void	vgic_v3_init(uint64_t ich_vtr_el2);
 void	vgic_v3_vminit(void *arg);
 void	vgic_v3_cpuinit(void *arg, bool last_vcpu);

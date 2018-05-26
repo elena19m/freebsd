@@ -65,7 +65,10 @@
 #define VGIC_V3_DEVNAME		"vgic"
 #define VGIC_V3_DEVSTR		"ARM Virtual Generic Interrupt Controller v3"
 
-#define	RES0			(0)
+#define	RES0			0UL
+
+#define	PENDING_SIZE_MIN	32
+#define	PENDING_SIZE_MAX	(1 << 10)
 
 #define	int_pending(lr)		\
     (ICH_LR_EL2_STATE(lr) == ICH_LR_EL2_STATE_PENDING)
@@ -435,6 +438,7 @@ vgic_v3_cpuinit(void *arg, bool last_vcpu)
 
 	cpu_if = &hypctx->vgic_cpu_if;
 	mtx_init(&cpu_if->lr_mtx, "VGICv3 ICH_LR_EL2 lock", NULL, MTX_SPIN);
+
 	/*
 	 * Configure the Interrupt Controller Hyp Control Register.
 	 *
@@ -465,6 +469,11 @@ vgic_v3_cpuinit(void *arg, bool last_vcpu)
 	cpu_if->ich_lr_num = virt_features.ich_lr_num;
 	cpu_if->ich_ap0r_num = virt_features.ich_ap0r_num;
 	cpu_if->ich_ap1r_num = virt_features.ich_ap1r_num;
+
+	cpu_if->pending = malloc(PENDING_SIZE_MIN * sizeof(*cpu_if->pending),
+	    M_VGIC_V3, M_WAITOK | M_ZERO);
+	cpu_if->pending_size = PENDING_SIZE_MIN;
+	cpu_if->pending_num = 0;
 }
 
 #define	INIT_DIST_REG(name, n, base, dist)				\
@@ -593,6 +602,19 @@ vgic_v3_flush_hwstate(void *arg)
 	cpu_if = &hypctx->vgic_cpu_if;
 	dist = &hypctx->hyp->vgic_dist;
 
+	/*
+	 * TODO:
+	 *
+	 * 1. Implement pending interrupts.
+	 * 2. Check if there are interrupts in the lr regs with a lower
+	 * priority, and if so, replace one with irq.
+	 * 3. Implement interrupt types.
+	 * 4. Check if there are interrupts in the lr regs with the same
+	 * priority, but a lower type priority (CLK > anything). If so,
+	 * replace one with irq.
+	 */
+
+
 
 	//mtx_lock_spin(&vgic_dist->dist_lock);
 	
@@ -643,7 +665,7 @@ vgic_v3_sync_hwstate(void *arg)
 	}
 }
 
-int 
+int
 vgic_v3_vcpu_pending_irq(void *arg)
 {
 	return (0);
@@ -661,14 +683,37 @@ vgic_v3_free_lr_unsafe(const uint64_t *ich_lr_el2, size_t ich_lr_num)
 	return (-1);
 }
 
+static int
+vgic_v3_remove_pending_unsafe(struct virq *virq, struct vgic_v3_cpu_if *cpu_if)
+{
+	size_t dest = 0;
+	size_t from = cpu_if->pending_num;
+
+	while (dest < cpu_if->pending_num) {
+		if (cpu_if->pending[dest].irq == virq->irq) {
+			for (from = dest + 1; from < cpu_if->pending_num; from++) {
+				if (cpu_if->pending[from].irq == virq->irq)
+					continue;
+				cpu_if->pending[dest++] = cpu_if->pending[from];
+			}
+			cpu_if->pending_num = dest;
+		} else {
+			dest++;
+		}
+	}
+
+	return (from - dest);
+}
+
 int
-vgic_v3_remove_irq(void *arg, struct virq *virq, bool ignore_state)
+vgic_v3_deactivate_irq(void *arg, struct virq *virq, bool ignore_state)
 {
         struct hypctx *hypctx;
 	struct vgic_v3_cpu_if *cpu_if;
 	size_t i;
 
-	if (virq->type >= VIRQ_TYPE_INVALID ||
+	if (virq->irq > GIC_LAST_SPI ||
+	    virq->type >= VIRQ_TYPE_INVALID ||
 	    virq->group >= VIRQ_GROUP_INVALID) {
 		eprintf("Malformed virq\n");
 		return (1);
@@ -684,10 +729,38 @@ vgic_v3_remove_irq(void *arg, struct virq *virq, bool ignore_state)
 		    (ignore_state || int_pending(cpu_if->ich_lr_el2[i])))
 			cpu_if->ich_lr_el2[i] &= ~ICH_LR_EL2_STATE_MASK;
 
+	vgic_v3_remove_pending_unsafe(virq, cpu_if);
+
 	mtx_unlock_spin(&cpu_if->lr_mtx);
 
+	return (0);
+}
 
-	/* TODO check if the interrupt is pending and disable it there too */
+static int
+vgic_v3_add_pending_unsafe(struct virq *virq, struct vgic_v3_cpu_if *cpu_if)
+{
+	struct virq *new_pending, *old_pending;
+	size_t new_size;
+
+	if (cpu_if->pending_num == cpu_if->pending_size) {
+		/* Double the size of the pending list */
+		new_size = cpu_if->pending_size << 1;
+		if (new_size > PENDING_SIZE_MAX)
+			return (1);
+
+		new_pending = malloc(new_size * sizeof(*cpu_if->pending),
+		    M_VGIC_V3, M_WAITOK | M_ZERO);
+		memcpy(new_pending, cpu_if->pending,
+		    cpu_if->pending_size * sizeof(*virq));
+
+		old_pending = cpu_if->pending;
+		cpu_if->pending = new_pending;
+		cpu_if->pending_size = new_size;
+		free(old_pending, M_VGIC_V3);
+	}
+
+	memcpy(&cpu_if->pending[cpu_if->pending_num], virq, sizeof(*virq));
+	cpu_if->pending_num++;
 
 	return (0);
 }
@@ -698,10 +771,12 @@ vgic_v3_inject_irq(void *arg, struct virq *virq)
         struct hypctx *hypctx;
 	struct vgic_v3_cpu_if *cpu_if;
 	ssize_t lr_idx;
+	int error;
 
-	if (virq->type >= VIRQ_TYPE_INVALID ||
+	if (virq->irq > GIC_LAST_SPI ||
+	    virq->type >= VIRQ_TYPE_INVALID ||
 	    virq->group >= VIRQ_GROUP_INVALID) {
-		eprintf("Malformed virq\n");
+		eprintf("Malformed IRQ %u.\n", virq->irq);
 		return (1);
 	}
 
@@ -712,27 +787,19 @@ vgic_v3_inject_irq(void *arg, struct virq *virq)
 
 	lr_idx = vgic_v3_free_lr_unsafe(cpu_if->ich_lr_el2, cpu_if->ich_lr_num);
 	if (lr_idx == -1) {
-		/*
-		 * TODO:
-		 *
-		 * 1. Implement pending interrupts.
-		 * 2. Check if there are interrupts in the lr regs with a lower
-		 * priority, and if so, replace one with irq.
-		 * 3. Implement interrupt types.
-		 * 4. Check if there are interrupts in the lr regs with the same
-		 * priority, but a lower type priority (CLK > anything). If so,
-		 * replace one with irq.
-		 */
-		eprintf("All ICH_LR<n>_EL2 registers are used\n");
-		mtx_unlock_spin(&cpu_if->lr_mtx);
-		return (0);
+		error = vgic_v3_add_pending_unsafe(virq, cpu_if);
+		if (error) {
+			eprintf("All ICH_LR<n>_EL2 registers are used.\n");
+			eprintf("Unable to mark IRQ %u as pending.\n",
+			    virq->irq);
+		}
+	} else {
+		if (lr_idx != 0)
+			eprintf("lr_idx = %ld\n", lr_idx);
+
+		cpu_if->ich_lr_el2[lr_idx] = ICH_LR_EL2_STATE_PENDING | \
+		    ((uint64_t)virq->group << ICH_LR_EL2_GROUP_SHIFT) | virq->irq;
 	}
-
-	if (lr_idx != 0)
-		eprintf("lr_idx = %ld\n", lr_idx);
-
-	cpu_if->ich_lr_el2[lr_idx] = ICH_LR_EL2_STATE_PENDING | \
-	    ((uint64_t)virq->group << ICH_LR_EL2_GROUP_SHIFT) | virq->irq;
 
 	mtx_unlock_spin(&cpu_if->lr_mtx);
 
