@@ -534,12 +534,7 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	hypctx->elr_el2 = (uint64_t)pc;
 
 	for (;;) {
-		/*
-		 * The order counts because vtimer can inject an interrupt if a
-		 * timer expired.
-		 */
-		//vgic_flush_hwstate(hypctx);
-		//
+		vgic_v3_sync_hwstate(hypctx);
 
 		daif = intr_disable();
 		excp_type = vmm_call_hyp((void *)ktohyp(vmm_enter_guest),
@@ -548,17 +543,12 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 
 		vme->pc = hypctx->elr_el2;
 		vme->inst_length = INSN_SIZE;
-
 		vme->u.hyp.exception_nr = excp_type;
 		vme->u.hyp.esr_el2 = hypctx->exit_info.esr_el2;
 		vme->u.hyp.far_el2 = hypctx->exit_info.far_el2;
 		vme->u.hyp.hpfar_el2 = hypctx->exit_info.hpfar_el2;
 
 		handled = arm64_handle_world_switch(hyp, vcpu, vme);
-
-		/* TODO: sync here or starting the loop (and not emulating)? */
-		//vgic_sync_hwstate(hypctx);
-
 		if (handled == UNHANDLED)
 			/* Exit loop to emulate instruction. */
 			break;

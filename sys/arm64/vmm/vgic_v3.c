@@ -69,6 +69,7 @@
 
 #define	PENDING_SIZE_MIN	32
 #define	PENDING_SIZE_MAX	(1 << 10)
+#define	PENDING_INVALID		(GIC_LAST_SPI + 1)
 
 #define	int_pending(lr)		\
     (ICH_LR_EL2_STATE(lr) == ICH_LR_EL2_STATE_PENDING)
@@ -590,97 +591,13 @@ static void vgic_v3_detach_from_vm(void *arg)
 	free(dist->gicd_irouter, M_VGIC_V3);
 }
 
-/* Called before entering the VM */
-void
-vgic_v3_flush_hwstate(void *arg)
-{
-	struct hypctx *hypctx;
-	struct vgic_v3_cpu_if *cpu_if;
-	struct vgic_v3_dist *dist;
-
-	hypctx = arg;
-	cpu_if = &hypctx->vgic_cpu_if;
-	dist = &hypctx->hyp->vgic_dist;
-
-	/*
-	 * TODO:
-	 *
-	 * 1. Implement pending interrupts.
-	 * 2. Check if there are interrupts in the lr regs with a lower
-	 * priority, and if so, replace one with irq.
-	 * 3. Implement interrupt types.
-	 * 4. Check if there are interrupts in the lr regs with the same
-	 * priority, but a lower type priority (CLK > anything). If so,
-	 * replace one with irq.
-	 */
-
-
-
-	//mtx_lock_spin(&vgic_dist->dist_lock);
-	
-	/*
-	 * TODO:
-	 *
-	 * 1. Check if there are any pending interrupts on this CPU.
-	 * 2. If there are:
-	 * 	a. Check if there are empty lr regs. A lr reg might become
-	 * 	empty when the guest disables the interrupt (like with the timer
-	 * 	interrupt).
-	 * 	b. If there are no more pending interrupts, goto 3. Else,
-	 * 	proceed forward.
-	 *	c. Enable maintenance interrupts.
-	 *	d. Set a variable stating that maintenance interrupts are
-	 *	enabled. This will be read by the code in EL2 to check the
-	 *	cause for the interrupt.
-	 * 3. Else, disable maintenance interrupts.
-	 */
-
-	//mtx_unlock_spin(&vgic_dist->dist_lock);
-}
-
-/*
- * What's the purpose? Why is it called after exiting the VM, just before
- * calling vgic_v3_flush_hwstate?
- */
-void
-vgic_v3_sync_hwstate(void *arg)
-{
-	struct hypctx *hypctx;
-	struct vgic_v3_cpu_if *cpu_if;
-	struct vgic_v3_dist *dist;
-	int lr_idx, irq;
-	bool level_pending;
-
-	hypctx = arg;
-	cpu_if = &hypctx->vgic_cpu_if;
-	dist = &hypctx->hyp->vgic_dist;
-
-	//printf("vgic_sync_hwstate\n");
-
-	//level_pending = vgic_process_maintenance(hypctx);
-	level_pending = false;
-
-	for_each_set_bit(lr_idx, &cpu_if->ich_elsr_el2, cpu_if->ich_lr_num) {
-		irq = cpu_if->ich_lr_el2[lr_idx] & GICH_LR_VIRTID;
-	}
-}
-
 int
 vgic_v3_vcpu_pending_irq(void *arg)
 {
-	return (0);
-}
+	struct hypctx *hypctx = arg;
+	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 
-static inline ssize_t
-vgic_v3_free_lr_unsafe(const uint64_t *ich_lr_el2, size_t ich_lr_num)
-{
-	ssize_t i;
-
-	for (i = 0; i < ich_lr_num; i++)
-		if (int_inactive(ich_lr_el2[i]))
-			return (i);
-
-	return (-1);
+	return (cpu_if->pending_num);
 }
 
 static int
@@ -765,6 +682,20 @@ vgic_v3_add_pending_unsafe(struct virq *virq, struct vgic_v3_cpu_if *cpu_if)
 	return (0);
 }
 
+/* TODO this should return a pointer to the array element like
+ * vgic_v3_highest_priority_pending */
+static inline ssize_t
+vgic_v3_free_lr_unsafe(const uint64_t *ich_lr_el2, size_t ich_lr_num)
+{
+	ssize_t i;
+
+	for (i = 0; i < ich_lr_num; i++)
+		if (int_inactive(ich_lr_el2[i]))
+			return (i);
+
+	return (-1);
+}
+
 int
 vgic_v3_inject_irq(void *arg, struct virq *virq)
 {
@@ -807,6 +738,94 @@ vgic_v3_inject_irq(void *arg, struct virq *virq)
         //        vgic_kick_vcpus(hypctx->hyp);
 
         return (0);
+}
+
+static struct virq *
+vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if)
+{
+	size_t i, max;
+
+	if (cpu_if->pending_num == 0)
+		return (NULL);
+
+	/*
+	 * TODO
+	 *
+	 * - Group 0 has higher priority than Group 1.
+	 * - Check priorities from ipriorityr.
+	 */
+	max = 0;
+	for (i = 1; i < cpu_if->pending_num; i++)
+		if (cpu_if->pending[i].type < cpu_if->pending[max].type)
+			max = i;
+
+	return (&cpu_if->pending[max]);
+}
+
+void
+vgic_v3_sync_hwstate(void *arg)
+{
+	struct hypctx *hypctx = arg;
+	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
+	struct virq *virq;
+	struct virq invalid_virq;
+	ssize_t lr_idx;
+
+	mtx_lock_spin(&cpu_if->lr_mtx);
+
+	if (cpu_if->pending_num == 0)
+		goto out;
+
+	/* TODO Check if interrupts with a higher priority are pending */
+	lr_idx = vgic_v3_free_lr_unsafe(cpu_if->ich_lr_el2, cpu_if->ich_lr_num);
+	if (lr_idx == -1)
+		goto out;
+
+	invalid_virq.irq = PENDING_INVALID;
+	invalid_virq.type = VIRQ_TYPE_INVALID;
+	invalid_virq.group = VIRQ_GROUP_INVALID;
+	for (; lr_idx < cpu_if->ich_lr_num; lr_idx++) {
+		virq = vgic_v3_highest_priority_pending(cpu_if);
+		if (virq->irq == invalid_virq.irq)
+			break;
+		cpu_if->ich_lr_el2[lr_idx] = ICH_LR_EL2_STATE_PENDING | \
+		    ((uint64_t)virq->group << ICH_LR_EL2_GROUP_SHIFT) | virq->irq;
+		/* Mark the scheduled interrupt as invalid */
+		*virq = invalid_virq;
+	}
+	/* Remove all scheduled interrupts */
+	vgic_v3_remove_pending_unsafe(&invalid_virq, cpu_if);
+
+out:
+	mtx_unlock_spin(&cpu_if->lr_mtx);
+	/*
+	 * TODO:
+	 *
+	 * 1. Implement pending interrupts.
+	 * 2. Check if there are interrupts in the lr regs with a lower
+	 * priority, and if so, replace one with irq.
+	 * 3. Implement interrupt types.
+	 * 4. Check if there are interrupts in the lr regs with the same
+	 * priority, but a lower type priority (CLK > anything). If so,
+	 * replace one with irq.
+	 */
+
+	/*
+	 * TODO:
+	 *
+	 * 1. Check if there are any pending interrupts on this CPU.
+	 * 2. If there are:
+	 * 	a. Check if there are empty lr regs. A lr reg might become
+	 * 	empty when the guest disables the interrupt (like with the timer
+	 * 	interrupt).
+	 * 	b. If there are no more pending interrupts, goto 3. Else,
+	 * 	proceed forward.
+	 *	c. Enable maintenance interrupts.
+	 *	d. Set a variable stating that maintenance interrupts are
+	 *	enabled. This will be read by the code in EL2 to check the
+	 *	cause for the interrupt.
+	 * 3. Else, disable maintenance interrupts.
+	 */
 }
 
 static int
