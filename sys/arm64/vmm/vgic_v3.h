@@ -49,6 +49,7 @@
 #define	VGIC_ICH_AP0R_NUM_MAX	4
 #define	VGIC_ICH_AP1R_NUM_MAX	VGIC_ICH_AP0R_NUM_MAX
 
+/* Order matters, a lower values means a higher precedence */
 enum virq_type {
 	VIRQ_TYPE_CLK,
 	VIRQ_TYPE_MISC,

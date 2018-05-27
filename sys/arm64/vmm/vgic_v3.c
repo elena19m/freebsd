@@ -73,7 +73,7 @@
 
 #define	int_pending(lr)		\
     (ICH_LR_EL2_STATE(lr) == ICH_LR_EL2_STATE_PENDING)
-#define	int_inactive(lr)		\
+#define	int_inactive(lr)	\
     (ICH_LR_EL2_STATE(lr) == ICH_LR_EL2_STATE_INACTIVE)
 
 MALLOC_DEFINE(M_VGIC_V3, "ARM VMM VGIC V3", "ARM VMM VGIC V3");
@@ -682,26 +682,12 @@ vgic_v3_add_pending_unsafe(struct virq *virq, struct vgic_v3_cpu_if *cpu_if)
 	return (0);
 }
 
-/* TODO this should return a pointer to the array element like
- * vgic_v3_highest_priority_pending */
-static inline ssize_t
-vgic_v3_free_lr_unsafe(const uint64_t *ich_lr_el2, size_t ich_lr_num)
-{
-	ssize_t i;
-
-	for (i = 0; i < ich_lr_num; i++)
-		if (int_inactive(ich_lr_el2[i]))
-			return (i);
-
-	return (-1);
-}
-
 int
 vgic_v3_inject_irq(void *arg, struct virq *virq)
 {
         struct hypctx *hypctx;
 	struct vgic_v3_cpu_if *cpu_if;
-	ssize_t lr_idx;
+	size_t lr_idx;
 	int error;
 
 	if (virq->irq > GIC_LAST_SPI ||
@@ -716,8 +702,11 @@ vgic_v3_inject_irq(void *arg, struct virq *virq)
 
 	mtx_lock_spin(&cpu_if->lr_mtx);
 
-	lr_idx = vgic_v3_free_lr_unsafe(cpu_if->ich_lr_el2, cpu_if->ich_lr_num);
-	if (lr_idx == -1) {
+	for (lr_idx = 0; lr_idx < cpu_if->ich_lr_num; lr_idx++)
+		if (int_inactive(cpu_if->ich_lr_el2[lr_idx]))
+			break;
+
+	if (lr_idx == cpu_if->ich_lr_num) {
 		error = vgic_v3_add_pending_unsafe(virq, cpu_if);
 		if (error) {
 			eprintf("All ICH_LR<n>_EL2 registers are used.\n");
@@ -727,15 +716,11 @@ vgic_v3_inject_irq(void *arg, struct virq *virq)
 	} else {
 		if (lr_idx != 0)
 			eprintf("lr_idx = %ld\n", lr_idx);
-
 		cpu_if->ich_lr_el2[lr_idx] = ICH_LR_EL2_STATE_PENDING | \
 		    ((uint64_t)virq->group << ICH_LR_EL2_GROUP_SHIFT) | virq->irq;
 	}
 
 	mtx_unlock_spin(&cpu_if->lr_mtx);
-
-        //if (vgic_update_irq_state(hypctx, irq, level))
-        //        vgic_kick_vcpus(hypctx->hyp);
 
         return (0);
 }
@@ -769,28 +754,31 @@ vgic_v3_sync_hwstate(void *arg)
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	struct virq *virq;
 	struct virq invalid_virq;
-	ssize_t lr_idx;
+	size_t lr_idx;
 
 	mtx_lock_spin(&cpu_if->lr_mtx);
 
 	if (cpu_if->pending_num == 0)
 		goto out;
 
-	/* TODO Check if interrupts with a higher priority are pending */
-	lr_idx = vgic_v3_free_lr_unsafe(cpu_if->ich_lr_el2, cpu_if->ich_lr_num);
-	if (lr_idx == -1)
-		goto out;
-
 	invalid_virq.irq = PENDING_INVALID;
 	invalid_virq.type = VIRQ_TYPE_INVALID;
 	invalid_virq.group = VIRQ_GROUP_INVALID;
-	for (; lr_idx < cpu_if->ich_lr_num; lr_idx++) {
+
+	/* TODO Check if interrupts with a higher priority are pending */
+
+	for (lr_idx = 0; lr_idx < cpu_if->ich_lr_num; lr_idx++) {
+		if (!int_inactive(cpu_if->ich_lr_el2[lr_idx]))
+			continue;
+
 		virq = vgic_v3_highest_priority_pending(cpu_if);
 		if (virq->irq == invalid_virq.irq)
+			/* All pending have been scheduled */
 			break;
+
 		cpu_if->ich_lr_el2[lr_idx] = ICH_LR_EL2_STATE_PENDING | \
 		    ((uint64_t)virq->group << ICH_LR_EL2_GROUP_SHIFT) | virq->irq;
-		/* Mark the scheduled interrupt as invalid */
+		/* Mark the scheduled pending interrupt as invalid */
 		*virq = invalid_virq;
 	}
 	/* Remove all scheduled interrupts */
