@@ -685,9 +685,8 @@ vgic_v3_add_pending_unsafe(struct virq *virq, struct vgic_v3_cpu_if *cpu_if)
 int
 vgic_v3_inject_irq(void *arg, struct virq *virq)
 {
-        struct hypctx *hypctx;
-	struct vgic_v3_cpu_if *cpu_if;
-	size_t lr_idx;
+        struct hypctx *hypctx = arg;
+	struct vgic_v3_cpu_if *cpu_if &hypctx->vgic_cpu_if;
 	int error;
 
 	if (virq->irq > GIC_LAST_SPI ||
@@ -697,32 +696,13 @@ vgic_v3_inject_irq(void *arg, struct virq *virq)
 		return (1);
 	}
 
-	hypctx = (struct hypctx *)arg;
-	cpu_if = &hypctx->vgic_cpu_if;
-
 	mtx_lock_spin(&cpu_if->lr_mtx);
-
-	for (lr_idx = 0; lr_idx < cpu_if->ich_lr_num; lr_idx++)
-		if (int_inactive(cpu_if->ich_lr_el2[lr_idx]))
-			break;
-
-	if (lr_idx == cpu_if->ich_lr_num) {
-		error = vgic_v3_add_pending_unsafe(virq, cpu_if);
-		if (error) {
-			eprintf("All ICH_LR<n>_EL2 registers are used.\n");
-			eprintf("Unable to mark IRQ %u as pending.\n",
-			    virq->irq);
-		}
-	} else {
-		if (lr_idx != 0)
-			eprintf("lr_idx = %ld\n", lr_idx);
-		cpu_if->ich_lr_el2[lr_idx] = ICH_LR_EL2_STATE_PENDING | \
-		    ((uint64_t)virq->group << ICH_LR_EL2_GROUP_SHIFT) | virq->irq;
-	}
-
+	error = vgic_v3_add_pending_unsafe(virq, cpu_if);
+	if (error)
+		eprintf("Unable to mark IRQ %u as pending.\n", virq->irq);
 	mtx_unlock_spin(&cpu_if->lr_mtx);
 
-        return (0);
+	return (error);
 }
 
 static struct virq *
@@ -766,6 +746,27 @@ vgic_v3_sync_hwstate(void *arg)
 	invalid_virq.group = VIRQ_GROUP_INVALID;
 
 	/* TODO Check if interrupts with a higher priority are pending */
+
+	/*
+	 * TODO
+	 *
+	 * 1. Check if ICH_VMCR_EL2.VENG{0, 1} is enabled based on the VIRQ
+	 * group (p 8-304, 8-305).
+	 * 2. Check if the interrupt hasn't been masked by reading:
+	 *   a. GICD_ISENABLER0/GICR_ISENABLER0 for intids 0-31 (SGI and PPI)
+	 *   b. GICD_ISENABLED<n> for the the rest.
+	 * 3. Get the interrupt priority from GICD_IPRIORITYR for SPI and
+	 * GICR_IPRIORITYR for SGI and PPI.
+	 * 4. Compare the interrupt priority with the priority mask from the
+	 * ICH_VMCR_EL2.VBPR{0, 1}.
+	 * 5. If the priority is too low, add it to pending.
+	 * 6. If the priority is high enough to be delivered to the CPU:
+	 *   a. Add it to a LR reg if free
+	 *   b. Add it to pending if no lr regs are free. When sync'ing the VGIC
+	 *   on VM resume the interrupt can replace a lower priority interrupt
+	 *   from the LR regs.
+	 */
+
 
 	for (lr_idx = 0; lr_idx < cpu_if->ich_lr_num; lr_idx++) {
 		if (!int_inactive(cpu_if->ich_lr_el2[lr_idx]))
