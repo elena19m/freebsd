@@ -133,13 +133,17 @@ struct vgic_v3_cpu_if {
 	uint32_t	ich_misr_el2;	/* Maintenance Interrupt State Register */
 	uint32_t	ich_vmcr_el2;	/* Virtual Machine Control Register */
 
-	uint64_t	ich_lr_el2[VGIC_ICH_LR_NUM_MAX]; /* List Registers */
+	/*
+	 * The List Registers are part of the VM context and are modified on a
+	 * world switch. They need to be allocated statically so they are
+	 * mapped in the EL2 translation tables when struct hypctx is mapped.
+	 */
+	uint64_t	ich_lr_el2[VGIC_ICH_LR_NUM_MAX];
 	size_t		ich_lr_num;
+
 	/*
 	 * We need a mutex for accessing the list registers because they are
-	 * modified asynchronously by the virtual timer. When the physical CPU
-	 * is multi-core or multi-threaded the virtual timer task might be
-	 * executing on a different thread.
+	 * modified asynchronously by the virtual timer.
 	 *
 	 * Note that the mutex *MUST* be a spin mutex because an interrupt can
 	 * be injected by a callout callback function, thereby modifying the
