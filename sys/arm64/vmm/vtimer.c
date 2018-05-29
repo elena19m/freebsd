@@ -101,7 +101,6 @@ vtimer_inject_irq(struct hypctx *hypctx)
 
 	virq.irq = hyp->vtimer.phys_ns_irq;
 	virq.type = VIRQ_TYPE_CLK;
-	virq.group = VIRQ_GROUP_1;
 	vgic_v3_inject_irq(hypctx, &virq);
 }
 
@@ -236,7 +235,6 @@ vtimer_deactivate_irq(struct hypctx *hypctx)
 	 */
 	virq.irq = hypctx->hyp->vtimer.phys_ns_irq;
 	virq.type = VIRQ_TYPE_CLK;
-	virq.group = VIRQ_GROUP_1;
 	vgic_v3_deactivate_irq(hypctx, &virq, true);
 }
 
