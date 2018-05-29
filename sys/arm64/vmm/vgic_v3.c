@@ -291,15 +291,13 @@ vgic_v3_dist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 		*rval = dist->gicd_pidr2;
 
 	} else if (off >= GICD_IGROUPR_BASE && off < dist->gicd_igroupr_addr_max) {
-		/*
+		/* TODO check alignment */
 		reg_size = sizeof(*dist->gicd_igroupr);
 		idx = (off - GICD_IGROUPR_BASE) / reg_size;
 		if (idx == 0)
 			*rval = redist->gicr_igroupr0;
 		else
 			*rval = dist->gicd_igroupr[idx];
-			*/
-		*rval = read_reg(dist->gicd_igroupr, GICD_IGROUPR_BASE, off);
 
 	} else if (off >= GICD_ICFGR_BASE && off < dist->gicd_icfgr_addr_max) {
 		*rval = read_reg(dist->gicd_icfgr, GICD_ICFGR_BASE, off);
@@ -311,6 +309,7 @@ vgic_v3_dist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 
 	} else if (off >= GICD_ICENABLER_BASE &&
 	    off < dist->gicd_icenabler_addr_max) {
+		/* TODO check alignment */
 		reg_size = sizeof(*dist->gicd_ixenabler);
 		idx = (off - GICD_ICENABLER_BASE) / reg_size;
 		if (idx == 0)
@@ -321,6 +320,7 @@ vgic_v3_dist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 
 	} else if (off >= GICD_ISENABLER_BASE &&
 	    off < dist->gicd_isenabler_addr_max) {
+		/* TODO check alignment */
 		reg_size = sizeof(*dist->gicd_ixenabler);
 		idx = (off - GICD_ISENABLER_BASE) / reg_size;
 		if (idx == 0)
@@ -374,7 +374,14 @@ vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 		eprintf("write: GICD_IIDR not implemented\n");
 
 	} else if (off >= GICD_IGROUPR_BASE && off < dist->gicd_igroupr_addr_max) {
-		write_reg(dist->gicd_igroupr, GICD_IGROUPR_BASE, off, val);
+		/* TODO check alignment */
+		reg_size = sizeof(*dist->gicd_igroupr);
+		idx = (off - GICD_IGROUPR_BASE) / reg_size;
+		if (idx == 0)
+			redist->gicr_igroupr0 = val;
+		else
+			dist->gicd_igroupr[idx] = val;
+
 
 	} else if (off >= GICD_ICFGR_BASE && off < dist->gicd_icfgr_addr_max) {
 		if (off == GICD_ICFGR_BASE)
@@ -388,6 +395,7 @@ vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 
 	} else if (off >= GICD_ICENABLER_BASE &&
 	    off < dist->gicd_icenabler_addr_max) {
+		/* TODO check alignment */
 		reg_size = sizeof(*dist->gicd_ixenabler);
 		idx = (off - GICD_ICENABLER_BASE) / reg_size;
 		/* A write of 1 to ICENABLER disables the interrupt. */
