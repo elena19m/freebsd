@@ -51,6 +51,7 @@
 
 /* Order matters, a lower values means a higher precedence */
 enum virq_type {
+	VIRQ_TYPE_MAXPRIO,
 	VIRQ_TYPE_CLK,
 	VIRQ_TYPE_MISC,
 	VIRQ_TYPE_INVALID,
@@ -82,12 +83,6 @@ struct vgic_v3_dist {
 	uint32_t 	gicd_typer;	/* Interrupt Controller Type Register */
 	uint32_t 	gicd_pidr2;	/* Distributor Peripheral ID2 Register */
 
-	/* Interrupt Clear-Enable and Set-Enable Registers. */
-	uint32_t	*gicd_icenabler_isenabler;
-	size_t		gicd_icenabler_isenabler_num;
-	uint64_t	gicd_icenabler_addr_max;
-	uint64_t	gicd_isenabler_addr_max;
-
 	/* Interrupt Configuration Registers. */
 	uint64_t	gicd_icfgr_addr_max;
 	uint32_t	*gicd_icfgr;
@@ -107,6 +102,12 @@ struct vgic_v3_dist {
 	uint64_t	gicd_irouter_addr_max;
 	uint64_t	*gicd_irouter;
 	size_t		gicd_irouter_num;
+
+	/* Interrupt Clear-Enable and Set-Enable Registers. */
+	uint32_t	*gicd_ixenabler;
+	size_t		gicd_ixenabler_num;
+	uint64_t	gicd_icenabler_addr_max;
+	uint64_t	gicd_isenabler_addr_max;
 };
 
 struct vgic_v3_redist {
@@ -116,7 +117,7 @@ struct vgic_v3_redist {
 	uint64_t	gicr_typer;	/* Redistributor Type Register */
 	uint32_t	gicr_ctlr;	/* Redistributor Control Regiser */
 	uint32_t	gicr_igroupr0;	/* Interrupt Group Register 0 */
-	uint32_t	gicr_icenabler0_isenabler0;
+	uint32_t	gicr_ixenabler0;
 
 	/* Interrupt Priority Registers. */
 	uint32_t	gicr_ipriorityr[VGIC_PRV_I_NUM / GICR_I_PER_IPRIORITYn];
