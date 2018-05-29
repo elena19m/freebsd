@@ -49,7 +49,7 @@
 #define	VGIC_ICH_AP0R_NUM_MAX	4
 #define	VGIC_ICH_AP1R_NUM_MAX	VGIC_ICH_AP0R_NUM_MAX
 
-/* Order matters, a lower values means a higher precedence */
+/* Order matters, a lower value means a higher precedence */
 enum virq_type {
 	VIRQ_TYPE_MAXPRIO,
 	VIRQ_TYPE_CLK,
@@ -57,16 +57,9 @@ enum virq_type {
 	VIRQ_TYPE_INVALID,
 };
 
-enum virq_group {
-	VIRQ_GROUP_0,
-	VIRQ_GROUP_1,
-	VIRQ_GROUP_INVALID,
-};
-
 struct virq {
 	unsigned int	irq;
 	enum virq_type	type;
-	enum virq_group	group;
 };
 
 struct vm;

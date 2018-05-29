@@ -680,8 +680,7 @@ vgic_v3_deactivate_irq(void *arg, struct virq *virq, bool ignore_state)
 	size_t i;
 
 	if (virq->irq > GIC_LAST_SPI ||
-	    virq->type >= VIRQ_TYPE_INVALID ||
-	    virq->group >= VIRQ_GROUP_INVALID) {
+	    virq->type >= VIRQ_TYPE_INVALID) {
 		eprintf("Malformed virq\n");
 		return (1);
 	}
@@ -739,9 +738,9 @@ vgic_v3_inject_irq(void *arg, struct virq *virq)
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	int error;
 
-	if (virq->irq > GIC_LAST_SPI ||
-	    virq->type >= VIRQ_TYPE_INVALID ||
-	    virq->group >= VIRQ_GROUP_INVALID) {
+	/* TODO check irq against dist->nirqs */
+	if (virq->irq >= GIC_LAST_SPI ||
+	    virq->type >= VIRQ_TYPE_INVALID) {
 		eprintf("Malformed IRQ %u.\n", virq->irq);
 		return (1);
 	}
@@ -756,37 +755,39 @@ vgic_v3_inject_irq(void *arg, struct virq *virq)
 }
 
 static bool
-vgic_v3_int_enabled(struct virq *virq, struct hypctx *hypctx)
+vgic_v3_int_enabled(struct virq *virq, struct hypctx *hypctx, int *group)
 {
 	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
 	struct vgic_v3_redist *redist = &hypctx->vgic_redist;
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	size_t off, n;
 
-	if (virq->group == VIRQ_GROUP_0) {
-		if (!(dist->gicd_ctlr & GICD_CTLR_G1))
+	off = virq->irq % 32;
+	n = virq->irq / 32;
+	if (n == 0)
+		*group = (redist->gicr_igroupr0 & (1 << off)) ? 1 : 0;
+	else
+		*group = (dist->gicd_igroupr[n] & (1 << off)) ? 1 : 0;
+
+	if (*group == 1) {
+		if (!(dist->gicd_ctlr & GICD_CTLR_G1A))
 			/* Interrupt disabled in the Distributor */
 			return (false);
-		if (!(cpu_if->ich_vmcr_el2 & ICH_VMCR_EL2_VENG0))
+		if (!(cpu_if->ich_vmcr_el2 & ICH_VMCR_EL2_VENG1))
 			/* Interrupt disabled in the CPU interface */
 			return (false);
-	} else if (virq->group == VIRQ_GROUP_1) {
-		if (!(dist->gicd_ctlr & GICD_CTLR_G1A))
-			return (false);
-		if (!(cpu_if->ich_vmcr_el2 & ICH_VMCR_EL2_VENG1))
-			return (false);
 	} else {
-		/* Unsupported interrupt group */
-		return (false);
+		if (!(dist->gicd_ctlr & GICD_CTLR_G1))
+			return (false);
+		if (!(cpu_if->ich_vmcr_el2 & ICH_VMCR_EL2_VENG0))
+			return (false);
 	}
 
 	/* Check that the interrupt hasn't been disabled */
-	off = virq->irq % 32;
 	if (virq->irq <= GIC_LAST_PPI) {
 		if (!(redist->gicr_ixenabler0 & (1 << off)))
 			return (false);
 	} else {
-		n = virq->irq / 32;
 		if (!(dist->gicd_ixenabler[n] & (1 << off)))
 			return (false);
 	}
@@ -796,7 +797,7 @@ vgic_v3_int_enabled(struct virq *virq, struct hypctx *hypctx)
 
 static struct virq *
 vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
-    struct hypctx *hypctx)
+    struct hypctx *hypctx, int *group)
 {
 	ssize_t max;
 	size_t i;
@@ -808,7 +809,8 @@ vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
 		if (cpu_if->pending[i].irq == PENDING_INVALID)
 			continue;
 
-		enabled = vgic_v3_int_enabled(&cpu_if->pending[i], hypctx);
+		enabled = vgic_v3_int_enabled(&cpu_if->pending[i], hypctx,
+					      group);
 		if (!enabled)
 			continue;
 
@@ -829,6 +831,7 @@ vgic_v3_sync_hwstate(void *arg)
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	struct virq *virq;
 	struct virq invalid_virq;
+	int group;
 	size_t lr_idx;
 
 	mtx_lock_spin(&cpu_if->lr_mtx);
@@ -838,7 +841,6 @@ vgic_v3_sync_hwstate(void *arg)
 
 	invalid_virq.irq = PENDING_INVALID;
 	invalid_virq.type = VIRQ_TYPE_INVALID;
-	invalid_virq.group = VIRQ_GROUP_INVALID;
 
 	/* TODO Check if interrupts with a higher priority are pending */
 
@@ -866,13 +868,13 @@ vgic_v3_sync_hwstate(void *arg)
 		if (!lr_inactive(cpu_if->ich_lr_el2[lr_idx]))
 			continue;
 
-		virq = vgic_v3_highest_priority_pending(cpu_if, hypctx);
+		virq = vgic_v3_highest_priority_pending(cpu_if, hypctx, &group);
 		if (virq == NULL)
 			/* No more pending interrupts */
 			break;
 
 		cpu_if->ich_lr_el2[lr_idx] = ICH_LR_EL2_STATE_PENDING | \
-		    ((uint64_t)virq->group << ICH_LR_EL2_GROUP_SHIFT) | virq->irq;
+		    ((uint64_t)group << ICH_LR_EL2_GROUP_SHIFT) | virq->irq;
 		/* Mark the scheduled pending interrupt as invalid */
 		*virq = invalid_virq;
 	}
