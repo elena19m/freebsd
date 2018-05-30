@@ -136,43 +136,66 @@ vgic_v3_redist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 	if (off == GICR_PIDR2) {
 		/* GICR_PIDR2 has the same value as GICD_PIDR2 */
 		*rval = dist->gicd_pidr2;
+		goto out;
+	}
 
-	} else if (off == GICR_TYPER) {
+	if (off == GICR_TYPER) {
 		*rval = redist->gicr_typer;
+		goto out;
+	}
 
-	} else if (off == GICR_WAKER) {
+	if (off == GICR_WAKER) {
 		/* Redistributor is always awake. */
 		*rval = 0 & ~GICR_WAKER_PS & ~GICR_WAKER_CA;
+		goto out;
+	}
 
-	} else if (off == GICR_CTLR) {
+	if (off == GICR_CTLR) {
 		/* No writes pending */
 		*rval = redist->gicr_ctlr & ~GICR_CTLR_RWP & ~GICR_CTLR_UWP;
+		goto out;
+	}
 
-	} else if (off == GICR_SGI_BASE_SIZE + GICR_IGROUPR0) {
+	if (off == GICR_SGI_BASE_SIZE + GICR_IGROUPR0) {
 		*rval = redist->gicr_igroupr0;
+		goto out;
+	}
 
-	} else if (off == GICR_SGI_BASE_SIZE + GICR_ICENABLER0) {
+	if (off == GICR_SGI_BASE_SIZE + GICR_ICENABLER0) {
 		*rval = redist->gicr_ixenabler0;
+		goto out;
+	}
 
-	} else if (off == GICR_SGI_BASE_SIZE + GICR_ISENABLER0) {
+	if (off == GICR_SGI_BASE_SIZE + GICR_ISENABLER0) {
 		*rval = redist->gicr_ixenabler0;
+		goto out;
+	}
 
-	} else if (off == GICR_SGI_BASE_SIZE + GICR_ICFGR0_BASE) {
+	if (off == GICR_SGI_BASE_SIZE + GICR_ICFGR0_BASE) {
 		*rval = redist->gicr_icfgr0;
+		goto out;
+	}
 
-	} else if (off == GICR_SGI_BASE_SIZE + GICR_ICFGR1_BASE) {
+	if (off == GICR_SGI_BASE_SIZE + GICR_ICFGR1_BASE) {
 		*rval = redist->gicr_icfgr1;
+		goto out;
+	}
 
-	} else if (off >= GICR_SGI_BASE_SIZE + GICD_IPRIORITYR_BASE &&
+	if (off >= GICR_SGI_BASE_SIZE + GICD_IPRIORITYR_BASE &&
 	    off < redist->gicr_ipriorityr_addr_max) {
 		*rval = read_reg(redist->gicr_ipriorityr,
 		    GICR_SGI_BASE_SIZE + GICD_IPRIORITYR_BASE, off);
-
-	} else {
-		eprintf("Unknown register offset: 0x%04lx\n", off);
-		*rval = RES0;
+		goto out;
 	}
 
+	eprintf("Unknown register offset: 0x%04lx\n", off);
+	*rval = RES0;
+
+	/* Return to userland for emulation */
+	*retu = true;
+	return (0);
+
+out:
 	*retu = false;
 	return (0);
 }
@@ -209,52 +232,68 @@ vgic_v3_redist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 
 	if (off == GICR_PIDR2) {
 		eprintf("Warning: Trying to write to read-only register GICR_PIDR2.\n");
+		goto out;
+	}
 
-	} else if (off == GICR_TYPER) {
+	if (off == GICR_TYPER) {
 		eprintf("Warning: Trying to write to read-only register GICR_TYPER.\n");
+		goto out;
+	}
 
-	} else if (off == GICR_WAKER) {
+	if (off == GICR_WAKER) {
 		/*
 		 * Ignore writes to GICRR_WAKER. The Redistributor will always
 		 * be awake.
 		 */
 		;
+		goto out;
+	}
 
-	} else if (off == GICR_CTLR) {
-		/* Writes are never pending. */
+	if (off == GICR_CTLR) {
 		redist->gicr_ctlr = val;
+		goto out;
+	}
 
-	} else if (off == GICR_SGI_BASE_SIZE + GICR_IGROUPR0) {
+	if (off == GICR_SGI_BASE_SIZE + GICR_IGROUPR0) {
 		redist->gicr_igroupr0 = val;
+		goto out;
+	}
 
-	} else if (off == GICR_SGI_BASE_SIZE + GICR_ICENABLER0) {
+	if (off == GICR_SGI_BASE_SIZE + GICR_ICENABLER0) {
 		/* A write of 1 to ICENABLER disables the interrupt. */
-		printf("GICR_ICENABLER, ixenabler0 = 0x%x, val = 0x%lx, ",
-		    redist->gicr_ixenabler0, val);
 		redist->gicr_ixenabler0 &= ~val;
-		printf("final ixenabler0 = 0x%x\n", redist->gicr_ixenabler0);
+		goto out;
+	}
 
-	} else if (off == GICR_SGI_BASE_SIZE + GICR_ISENABLER0) {
+	if (off == GICR_SGI_BASE_SIZE + GICR_ISENABLER0) {
 		/* A write of 1 to ISENABLER enables the interrupt */
-		printf("GICR_ISENABLER, ixenabler0 = 0x%x, val = 0x%lx, ",
-		    redist->gicr_ixenabler0, val);
 		redist->gicr_ixenabler0 |= val;
-		printf("final ixenabler0 = 0x%x\n", redist->gicr_ixenabler0);
+		goto out;
+	}
 
-	} else if (off == GICR_SGI_BASE_SIZE + GICR_ICFGR0_BASE) {
+	if (off == GICR_SGI_BASE_SIZE + GICR_ICFGR0_BASE) {
 		redist->gicr_icfgr0 = val;
+		goto out;
+	}
 
-	} else if (off == GICR_SGI_BASE_SIZE + GICR_ICFGR1_BASE) {
+	if (off == GICR_SGI_BASE_SIZE + GICR_ICFGR1_BASE) {
 		redist->gicr_icfgr1 = val;
+		goto out;
+	}
 
-	} else if (off >= GICR_SGI_BASE_SIZE + GICD_IPRIORITYR_BASE &&
+	if (off >= GICR_SGI_BASE_SIZE + GICD_IPRIORITYR_BASE &&
 	    off < redist->gicr_ipriorityr_addr_max) {
 		write_reg(redist->gicr_ipriorityr,
 		    GICR_SGI_BASE_SIZE + GICD_IPRIORITYR_BASE, off, val);
-	} else {
-		eprintf("Unknown register offset: 0x%04lx\n", off);
+		goto out;
 	}
 
+	eprintf("Unknown register offset: 0x%04lx\n", off);
+
+	*retu = true;
+	return (0);
+
+out:
 	*retu = false;
 	return (0);
 }
@@ -267,7 +306,7 @@ vgic_v3_dist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 	struct vgic_v3_dist *dist;
 	struct vgic_v3_redist *redist;
 	uint64_t off;
-	size_t idx, reg_size;
+	size_t reg_size, n;
 	bool *retu;
 
 	retu = (bool *)arg;
@@ -280,63 +319,86 @@ vgic_v3_dist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 
 	if (off == GICD_CTLR) {
 		*rval = dist->gicd_ctlr;
-
-	} else if (off == GICD_TYPER) {
-		*rval = dist->gicd_typer;
-
-	} else if (off == GICD_IIDR) {
-		*rval = RES0;
-
-	} else if (off == GICD_PIDR2) {
-		*rval = dist->gicd_pidr2;
-
-	} else if (off >= GICD_IGROUPR_BASE && off < dist->gicd_igroupr_addr_max) {
-		/* TODO check alignment */
-		reg_size = sizeof(*dist->gicd_igroupr);
-		idx = (off - GICD_IGROUPR_BASE) / reg_size;
-		if (idx == 0)
-			*rval = redist->gicr_igroupr0;
-		else
-			*rval = dist->gicd_igroupr[idx];
-
-	} else if (off >= GICD_ICFGR_BASE && off < dist->gicd_icfgr_addr_max) {
-		*rval = read_reg(dist->gicd_icfgr, GICD_ICFGR_BASE, off);
-
-	} else if (off >= GICD_IPRIORITYR_BASE &&
-	    off < dist->gicd_ipriorityr_addr_max) {
-		*rval = read_reg(dist->gicd_ipriorityr, GICD_IPRIORITYR_BASE,
-		    off);
-
-	} else if (off >= GICD_ICENABLER_BASE &&
-	    off < dist->gicd_icenabler_addr_max) {
-		/* TODO check alignment */
-		reg_size = sizeof(*dist->gicd_ixenabler);
-		idx = (off - GICD_ICENABLER_BASE) / reg_size;
-		if (idx == 0)
-			/* GICD_ICENABLER<0> is equivalent to GICR_ICENABLER0 */
-			*rval = redist->gicr_ixenabler0;
-		else
-			*rval = dist->gicd_ixenabler[idx];
-
-	} else if (off >= GICD_ISENABLER_BASE &&
-	    off < dist->gicd_isenabler_addr_max) {
-		/* TODO check alignment */
-		reg_size = sizeof(*dist->gicd_ixenabler);
-		idx = (off - GICD_ISENABLER_BASE) / reg_size;
-		if (idx == 0)
-			/* GICD_ISENABLER<0> is equivalent to GICR_ISENABLER0 */
-			*rval = redist->gicr_ixenabler0;
-		else
-			*rval = dist->gicd_ixenabler[idx];
-
-	} else if (off >= GICD_IROUTER_BASE && off < dist->gicd_irouter_addr_max) {
-		*rval = read_reg(dist->gicd_irouter, GICD_IROUTER_BASE, off);
-
-	} else {
-		eprintf("Unknown register offset: 0x%04lx\n", off);
-		*rval = RES0;
+		goto out;
 	}
 
+	if (off == GICD_TYPER) {
+		*rval = dist->gicd_typer;
+		goto out;
+	}
+
+	if (off == GICD_IIDR) {
+		*rval = RES0;
+		goto out;
+	}
+
+	if (off == GICD_PIDR2) {
+		*rval = dist->gicd_pidr2;
+		goto out;
+	}
+
+	if (off >= GICD_IGROUPR_BASE && off < dist->gicd_igroupr_addr_max) {
+		if (off == GICD_IGROUPR_BASE)
+			*rval = redist->gicr_igroupr0;
+		else
+			*rval = read_reg(dist->gicd_igroupr, GICD_IGROUPR_BASE,
+			    off);
+		goto out;
+	}
+
+	if (off >= GICD_ICFGR_BASE && off < dist->gicd_icfgr_addr_max) {
+		*rval = read_reg(dist->gicd_icfgr, GICD_ICFGR_BASE, off);
+		goto out;
+	}
+
+	if (off >= GICD_IPRIORITYR_BASE && off < dist->gicd_ipriorityr_addr_max) {
+		reg_size = sizeof(*dist->gicd_ipriorityr);
+		n = (off - GICD_IPRIORITYR_BASE) / reg_size;
+		/*
+		 * GIC Architecture specification, p 8-483: when affinity
+		 * routing is enabled, GICD_IPRIORITYR<n> is RAZ/WI for
+		 * n = 0 to 7.
+		 */
+		if ((dist->gicd_ctlr & GICD_CTLR_ARE_NS) && n <= 7)
+			*rval = RES0;
+		else
+			*rval = read_reg(dist->gicd_ipriorityr,
+			    GICD_IPRIORITYR_BASE, off);
+		goto out;
+	}
+
+	if (off >= GICD_ICENABLER_BASE && off < dist->gicd_icenabler_addr_max) {
+		/* GICD_ICENABLER<0> is equivalent to GICR_ICENABLER0 */
+		if (off == GICD_ICENABLER_BASE)
+			*rval = redist->gicr_ixenabler0;
+		else
+			*rval = read_reg(dist->gicd_ixenabler,
+			    GICD_ICENABLER_BASE, off);
+		goto out;
+	}
+
+	if (off >= GICD_ISENABLER_BASE && off < dist->gicd_isenabler_addr_max) {
+		/* GICD_ISENABLER<0> is equivalent to GICR_ISENABLER0 */
+		if (off == GICD_ISENABLER_BASE)
+			*rval = redist->gicr_ixenabler0;
+		else
+			*rval = read_reg(dist->gicd_ixenabler,
+			    GICD_ISENABLER_BASE, off);
+		goto out;
+	}
+
+	if (off >= GICD_IROUTER_BASE && off < dist->gicd_irouter_addr_max) {
+		*rval = read_reg(dist->gicd_irouter, GICD_IROUTER_BASE, off);
+		goto out;
+	}
+
+	eprintf("Unknown register offset: 0x%04lx\n", off);
+	*rval = RES0;
+
+	*retu = true;
+	return (0);
+
+out:
 	*retu = false;
 	return (0);
 }
@@ -349,10 +411,10 @@ vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 	struct vgic_v3_dist *dist;
 	struct vgic_v3_redist *redist;
 	uint64_t off;
-	size_t idx, reg_size;
-	bool *retu;
+	uint32_t regval;
+	size_t n, reg_size;
+	bool *retu = arg;
 
-	retu = (bool *)arg;
 	hyp = vm_get_cookie(vm);
 	dist = &hyp->vgic_dist;
 	redist = &hyp->ctx[vcpuid].vgic_redist;
@@ -363,73 +425,90 @@ vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 	if (off == GICD_CTLR) {
 		/* Writes are never pending. */
 		dist->gicd_ctlr = val & ~GICD_CTLR_RWP;
+		goto out;
+	}
 
-	} else if (off == GICD_TYPER) {
+	if (off == GICD_TYPER) {
 		eprintf("Warning: Trying to write to read-only register GICD_TYPER.\n");
+		goto out;
+	}
 
-	} else if (off == GICD_PIDR2) {
+	if (off == GICD_PIDR2) {
 		eprintf("Warning: Trying to write to read-only register GICD_PIDR2.\n");
+		goto out;
+	}
 
-	} else if (off == GICD_IIDR) {
+	if (off == GICD_IIDR) {
 		eprintf("write: GICD_IIDR not implemented\n");
+		goto out;
+	}
 
-	} else if (off >= GICD_IGROUPR_BASE && off < dist->gicd_igroupr_addr_max) {
-		/* TODO check alignment */
-		reg_size = sizeof(*dist->gicd_igroupr);
-		idx = (off - GICD_IGROUPR_BASE) / reg_size;
-		if (idx == 0)
+	if (off >= GICD_IGROUPR_BASE && off < dist->gicd_igroupr_addr_max) {
+		if (off == GICD_IGROUPR_BASE)
 			redist->gicr_igroupr0 = val;
 		else
-			dist->gicd_igroupr[idx] = val;
+			write_reg(dist->gicd_igroupr, GICD_IGROUPR_BASE, off,
+			    val);
+		goto out;
+	}
 
-
-	} else if (off >= GICD_ICFGR_BASE && off < dist->gicd_icfgr_addr_max) {
+	if (off >= GICD_ICFGR_BASE && off < dist->gicd_icfgr_addr_max) {
 		if (off == GICD_ICFGR_BASE)
 			eprintf("Warning: Trying to write to read-only register GICD_ICFGR0.\n");
 		else
 			write_reg(dist->gicd_icfgr, GICD_ICFGR_BASE, off, val);
-
-	} else if (off >= GICD_IPRIORITYR_BASE &&
-	    off < dist->gicd_ipriorityr_addr_max) {
-		write_reg(dist->gicd_ipriorityr, GICD_IPRIORITYR_BASE, off, val);
-
-	} else if (off >= GICD_ICENABLER_BASE &&
-	    off < dist->gicd_icenabler_addr_max) {
-		/* TODO check alignment */
-		reg_size = sizeof(*dist->gicd_ixenabler);
-		idx = (off - GICD_ICENABLER_BASE) / reg_size;
-		/* A write of 1 to ICENABLER disables the interrupt. */
-		if (idx == 0) {
-			printf("GICD_ICENABLER, ixenabler0 = 0x%x, val = 0x%lx, ",
-			    redist->gicr_ixenabler0, val);
-			redist->gicr_ixenabler0 &= ~val;
-			printf("final ixenabler0 = 0x%x\n", redist->gicr_ixenabler0);
-		} else {
-			dist->gicd_ixenabler[idx] &= ~val;
-		}
-
-	} else if (off >= GICD_ISENABLER_BASE &&
-	    off < dist->gicd_isenabler_addr_max) {
-		reg_size = sizeof(*dist->gicd_ixenabler);
-		idx = (off - GICD_ISENABLER_BASE) / reg_size;
-		/* A write of 1 to ISENABLER enables the interrupt. */
-		if (idx == 0) {
-			printf("GICD_ISENABLER, ixenabler0 = 0x%x, val = 0x%lx, ",
-			    redist->gicr_ixenabler0, val);
-			redist->gicr_ixenabler0 |= val;
-			printf("final ixenabler0 = 0x%x\n", redist->gicr_ixenabler0);
-		} else {
-			dist->gicd_ixenabler[idx] |= val;
-		}
-
-	} else if (off >= GICD_IROUTER_BASE &&
-	    off < dist->gicd_irouter_addr_max) {
-		write_reg(dist->gicd_irouter, GICD_IROUTER_BASE, off, val);
-
-	} else {
-		eprintf("Unknown register offset: 0x%04lx\n", off);
+		goto out;
 	}
 
+	if (off >= GICD_IPRIORITYR_BASE && off < dist->gicd_ipriorityr_addr_max) {
+		reg_size = sizeof(*dist->gicd_ipriorityr);
+		n = (off - GICD_IPRIORITYR_BASE) / reg_size;
+		/* See vgic_v3_dist_read() */
+		if ((dist->gicd_ctlr & GICD_CTLR_ARE_NS) && n <= 7)
+			goto out;
+		write_reg(dist->gicd_ipriorityr, GICD_IPRIORITYR_BASE, off, val);
+		goto out;
+	}
+
+	if (off >= GICD_ICENABLER_BASE && off < dist->gicd_icenabler_addr_max) {
+		/* A write of 1 to ICENABLER disables the interrupt. */
+		if (off == GICD_ICENABLER_BASE) {
+			redist->gicr_ixenabler0 &= ~val;
+		} else {
+			regval = read_reg(dist->gicd_ixenabler,
+			    GICD_ICENABLER_BASE, off);
+			regval &= ~val;
+			write_reg(dist->gicd_ixenabler, GICD_ICENABLER_BASE,
+			    off, regval);
+		}
+		goto out;
+	}
+
+	if (off >= GICD_ISENABLER_BASE && off < dist->gicd_isenabler_addr_max) {
+		/* A write of 1 to ISENABLER enables the interrupt. */
+		if (off == GICD_ISENABLER_BASE) {
+			redist->gicr_ixenabler0 |= val;
+		} else {
+			regval = read_reg(dist->gicd_ixenabler,
+			    GICD_ISENABLER_BASE, off);
+			regval |= val;
+			write_reg(dist->gicd_ixenabler, GICD_ISENABLER_BASE,
+			    off, regval);
+		}
+		goto out;
+	}
+
+	if (off >= GICD_IROUTER_BASE && off < dist->gicd_irouter_addr_max) {
+		write_reg(dist->gicd_irouter, GICD_IROUTER_BASE, off, val);
+		goto out;
+	}
+
+	eprintf("Unknown register offset: 0x%04lx\n", off);
+
+	*retu = true;
+	return (0);
+
+out:
 	*retu = false;
 	return (0);
 }
@@ -675,18 +754,16 @@ vgic_v3_remove_pending_unsafe(struct virq *virq, struct vgic_v3_cpu_if *cpu_if)
 int
 vgic_v3_deactivate_irq(void *arg, struct virq *virq, bool ignore_state)
 {
-        struct hypctx *hypctx;
-	struct vgic_v3_cpu_if *cpu_if;
+        struct hypctx *hypctx = arg;
+	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
+	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
 	size_t i;
 
-	if (virq->irq > GIC_LAST_SPI ||
+	if (virq->irq >= dist->nirqs ||
 	    virq->type >= VIRQ_TYPE_INVALID) {
 		eprintf("Malformed virq\n");
 		return (1);
 	}
-
-	hypctx = (struct hypctx *)arg;
-	cpu_if = &hypctx->vgic_cpu_if;
 
 	mtx_lock_spin(&cpu_if->lr_mtx);
 
@@ -736,10 +813,10 @@ vgic_v3_inject_irq(void *arg, struct virq *virq)
 {
         struct hypctx *hypctx = arg;
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
+	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
 	int error;
 
-	/* TODO check irq against dist->nirqs */
-	if (virq->irq >= GIC_LAST_SPI ||
+	if (virq->irq >= dist->nirqs ||
 	    virq->type >= VIRQ_TYPE_INVALID) {
 		eprintf("Malformed IRQ %u.\n", virq->irq);
 		return (1);
@@ -754,27 +831,55 @@ vgic_v3_inject_irq(void *arg, struct virq *virq)
 	return (error);
 }
 
+static uint8_t
+vgic_v3_get_priority(struct virq *virq, struct hypctx *hypctx)
+{
+	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
+	struct vgic_v3_redist *redist = &hypctx->vgic_redist;
+	size_t n;
+	uint32_t off, mask;
+	uint8_t priority;
+
+	n = virq->irq / 4;
+	off = n % 4;
+	mask = 0xff << off;
+	/*
+	 * When affinity routing is enabled, for SGIs and PPIs the
+	 * Redistributor registers are used, and for the SPIs the corresponding
+	 * Distributor registers. When affinity routing is not enabled, the
+	 * Distributor registers are used for all interrupts.
+	 */
+	if ((dist->gicd_ctlr & GICD_CTLR_ARE_NS) && n <= 7)
+		priority = (redist->gicr_ipriorityr[n] & mask) >> off;
+	else
+		priority = (dist->gicd_ipriorityr[n] & mask) >> off;
+
+	return (priority);
+}
+
 static bool
 vgic_v3_int_enabled(struct virq *virq, struct hypctx *hypctx, int *group)
 {
 	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
 	struct vgic_v3_redist *redist = &hypctx->vgic_redist;
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
-	size_t off, n;
+	uint32_t irq_off, irq_mask;
+	int n;
 
-	off = virq->irq % 32;
+	irq_off = virq->irq % 32;
+	irq_mask = 1 << irq_off;
 	n = virq->irq / 32;
-	if (n == 0)
-		*group = (redist->gicr_igroupr0 & (1 << off)) ? 1 : 0;
-	else
-		*group = (dist->gicd_igroupr[n] & (1 << off)) ? 1 : 0;
 
+	if (n == 0)
+		*group = (redist->gicr_igroupr0 & irq_mask) ? 1 : 0;
+	else
+		*group = (dist->gicd_igroupr[n] & irq_mask) ? 1 : 0;
+
+	/* Check that the interrupt group hasn't been disabled */
 	if (*group == 1) {
 		if (!(dist->gicd_ctlr & GICD_CTLR_G1A))
-			/* Interrupt disabled in the Distributor */
 			return (false);
 		if (!(cpu_if->ich_vmcr_el2 & ICH_VMCR_EL2_VENG1))
-			/* Interrupt disabled in the CPU interface */
 			return (false);
 	} else {
 		if (!(dist->gicd_ctlr & GICD_CTLR_G1))
@@ -783,12 +888,12 @@ vgic_v3_int_enabled(struct virq *virq, struct hypctx *hypctx, int *group)
 			return (false);
 	}
 
-	/* Check that the interrupt hasn't been disabled */
+	/* Check that the interrupt ID hasn't been disabled */
 	if (virq->irq <= GIC_LAST_PPI) {
-		if (!(redist->gicr_ixenabler0 & (1 << off)))
+		if (!(redist->gicr_ixenabler0 & irq_mask))
 			return (false);
 	} else {
-		if (!(dist->gicd_ixenabler[n] & (1 << off)))
+		if (!(dist->gicd_ixenabler[n] & irq_mask))
 			return (false);
 	}
 
@@ -799,29 +904,48 @@ static struct virq *
 vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
     struct hypctx *hypctx, int *group)
 {
-	ssize_t max;
-	size_t i;
+	int i, max_idx;
+	uint8_t priority, max_priority;
+	uint8_t vpmr;
 	bool enabled;
 
-	max = -1;
+	vpmr = (cpu_if->ich_vmcr_el2 & ICH_VMCR_EL2_VPMR_MASK) >> \
+	    ICH_VMCR_EL2_VPMR_SHIFT;
+
+	max_idx = -1;
+	max_priority = 0xff;
 	for (i = 0; i < cpu_if->pending_num; i++) {
-		/* Check if the interrupt hasn't been already scheduled */
+		/* Check that the interrupt hasn't been already scheduled */
 		if (cpu_if->pending[i].irq == PENDING_INVALID)
 			continue;
 
 		enabled = vgic_v3_int_enabled(&cpu_if->pending[i], hypctx,
-					      group);
+		    group);
 		if (!enabled)
 			continue;
 
-		if (max == -1 ||
-		    cpu_if->pending[i].type < cpu_if->pending[max].type)
-			max = i;
+		priority = vgic_v3_get_priority(&cpu_if->pending[i], hypctx);
+		if (priority >= vpmr)
+			continue;
+
+		/* XXX Interrupt preemption not supported. */
+
+		if (max_idx == -1) {
+			max_idx = i;
+			max_priority = priority;
+		} else if (priority > max_priority) {
+			max_idx = i;
+			max_priority = priority;
+		} else if (priority == max_priority &&
+		    cpu_if->pending[i].type < cpu_if->pending[max_idx].type) {
+			max_idx = i;
+			max_priority = priority;
+		}
 	}
 
-	if (max == -1)
+	if (max_idx == -1)
 		return (NULL);
-	return (&cpu_if->pending[max]);
+	return (&cpu_if->pending[max_idx]);
 }
 
 void
@@ -830,9 +954,10 @@ vgic_v3_sync_hwstate(void *arg)
 	struct hypctx *hypctx = arg;
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	struct virq *virq;
-	struct virq invalid_virq;
+	struct virq invalid_virq, tmp;
 	int group;
-	size_t lr_idx;
+	int i;
+	int error;
 
 	mtx_lock_spin(&cpu_if->lr_mtx);
 
@@ -842,30 +967,22 @@ vgic_v3_sync_hwstate(void *arg)
 	invalid_virq.irq = PENDING_INVALID;
 	invalid_virq.type = VIRQ_TYPE_INVALID;
 
-	/* TODO Check if interrupts with a higher priority are pending */
-
 	/*
-	 * TODO
-	 *
-	 * 1. Check if ICH_VMCR_EL2.VENG{0, 1} is enabled based on the VIRQ
-	 * group (p 8-304, 8-305).
-	 * 2. Check if the interrupt hasn't been masked by reading:
-	 *   a. GICD_ISENABLER0/GICR_ISENABLER0 for intids 0-31 (SGI and PPI)
-	 *   b. GICD_ISENABLER<n> for the the rest.
-	 * 3. Get the interrupt priority from GICD_IPRIORITYR for SPI and
-	 * GICR_IPRIORITYR for SGI and PPI.
-	 * 4. Compare the interrupt priority with the priority mask from the
-	 * ICH_VMCR_EL2.VBPR{0, 1}.
-	 * 5. If the priority is too low, add it to pending.
-	 * 6. If the priority is high enough to be delivered to the CPU:
-	 *   a. Add it to a LR reg if free
-	 *   b. Add it to pending if no lr regs are free. When sync'ing the VGIC
-	 *   on VM resume the interrupt can replace a lower priority interrupt
-	 *   from the LR regs.
+	 * Add all interrupts from the list registers that are not active to
+	 * pending buffer to be rescheduled in the next step.
 	 */
+	for (i = 0; i < cpu_if->ich_lr_num; i++)
+		if (lr_pending(cpu_if->ich_lr_el2[i])) {
+			tmp.irq = cpu_if->ich_lr_el2[i] & ICH_LR_EL2_VINTID_MASK;
+			tmp.type = VIRQ_TYPE_MAXPRIO;
+			error = vgic_v3_add_pending_unsafe(&tmp, cpu_if);
+			if (error)
+				goto out;
+			cpu_if->ich_lr_el2[i] &= ~ICH_LR_EL2_STATE_MASK;
+		}
 
-	for (lr_idx = 0; lr_idx < cpu_if->ich_lr_num; lr_idx++) {
-		if (!lr_inactive(cpu_if->ich_lr_el2[lr_idx]))
+	for (i = 0; i < cpu_if->ich_lr_num; i++) {
+		if (!lr_inactive(cpu_if->ich_lr_el2[i]))
 			continue;
 
 		virq = vgic_v3_highest_priority_pending(cpu_if, hypctx, &group);
@@ -873,7 +990,7 @@ vgic_v3_sync_hwstate(void *arg)
 			/* No more pending interrupts */
 			break;
 
-		cpu_if->ich_lr_el2[lr_idx] = ICH_LR_EL2_STATE_PENDING | \
+		cpu_if->ich_lr_el2[i] = ICH_LR_EL2_STATE_PENDING | \
 		    ((uint64_t)group << ICH_LR_EL2_GROUP_SHIFT) | virq->irq;
 		/* Mark the scheduled pending interrupt as invalid */
 		*virq = invalid_virq;
@@ -883,17 +1000,6 @@ vgic_v3_sync_hwstate(void *arg)
 
 out:
 	mtx_unlock_spin(&cpu_if->lr_mtx);
-	/*
-	 * TODO:
-	 *
-	 * 1. Implement pending interrupts.
-	 * 2. Check if there are interrupts in the lr regs with a lower
-	 * priority, and if so, replace one with irq.
-	 * 3. Implement interrupt types.
-	 * 4. Check if there are interrupts in the lr regs with the same
-	 * priority, but a lower type priority (CLK > anything). If so,
-	 * replace one with irq.
-	 */
 
 	/*
 	 * TODO:
