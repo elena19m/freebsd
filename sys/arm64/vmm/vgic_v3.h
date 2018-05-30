@@ -113,7 +113,7 @@ struct vgic_v3_redist {
 	uint32_t	gicr_ixenabler0;
 
 	/* Interrupt Priority Registers. */
-	uint32_t	gicr_ipriorityr[VGIC_PRV_I_NUM / GICR_I_PER_IPRIORITYn];
+	uint32_t	gicr_ipriorityr[VGIC_PRV_I_NUM / 4];
 	uint64_t	gicr_ipriorityr_addr_max;
 
 	/* Interupt Configuration Registers */
