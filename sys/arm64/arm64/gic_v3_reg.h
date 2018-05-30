@@ -71,6 +71,7 @@
  */
 #define	GICD_IROUTER_BASE	(0x6000)
 #define	 GICD_IROUTER(n)	(GICD_IROUTER_BASE + ((n) * 8))
+#define	 GICD_IROUTER_IRM	(31)
 
 #define	GICD_PIDR4		0xFFD0
 #define	GICD_PIDR5		0xFFD4
@@ -106,6 +107,10 @@
 #define	GICR_TYPER_CPUNUM(x)	\
 	    (((x) & GICR_TYPER_CPUNUM_MASK) >> GICR_TYPER_CPUNUM_SHIFT)
 #define	GICR_TYPER_AFF_SHIFT	(32)
+#define	GICR_TYPER_AFF0(x)	((x >> GICR_TYPER_AFF_SHIFT) & 0xff)
+#define	GICR_TYPER_AFF1(x)	((x >> (GICR_TYPER_AFF_SHIFT + 8)) & 0xff)
+#define	GICR_TYPER_AFF2(x)	((x >> (GICR_TYPER_AFF_SHIFT + 16)) & 0xff)
+#define	GICR_TYPER_AFF3(x)	((x >> (GICR_TYPER_AFF_SHIFT + 24)) & 0xff)
 
 #define	GICR_WAKER		(0x0014)
 #define	GICR_WAKER_PS		(1 << 1) /* Processor sleep */

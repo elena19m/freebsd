@@ -889,6 +889,38 @@ vgic_v3_get_priority(struct virq *virq, struct hypctx *hypctx)
 }
 
 static bool
+vgic_v3_vcpu_is_irq_target(struct virq *virq, struct hypctx *hypctx)
+{
+	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
+	struct vgic_v3_redist *redist = &hypctx->vgic_redist;
+	uint64_t irouter;
+	uint64_t aff;
+
+	if (!(dist->gicd_ctlr & GICD_CTLR_ARE_NS))
+		/* XXX Affinity routing disabled not implemented */
+		return (true);
+
+	if (virq->irq <= GIC_LAST_PPI)
+		return (true);
+
+	irouter = dist->gicd_irouter[virq->irq];
+	if (irouter & GICD_IROUTER_IRM)
+		/* VCPU is a participating node in 1 of N routing */
+		return (true);
+
+	aff = redist->gicr_typer >> GICR_TYPER_AFF_SHIFT;
+	/* Affinity in format for comparison with irouter */
+	aff = GICR_TYPER_AFF0(redist->gicr_typer) | \
+	    (GICR_TYPER_AFF1(redist->gicr_typer) << 8) | \
+	    (GICR_TYPER_AFF2(redist->gicr_typer) << 16) | \
+	    (GICR_TYPER_AFF3(redist->gicr_typer) << 32);
+	if ((irouter & aff) == aff)
+		return (true);
+	else
+		return (false);
+}
+
+static bool
 vgic_v3_int_enabled(struct virq *virq, struct hypctx *hypctx, int *group)
 {
 	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
@@ -938,7 +970,6 @@ vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
 	int i, max_idx;
 	uint8_t priority, max_priority;
 	uint8_t vpmr;
-	bool enabled;
 
 	vpmr = (cpu_if->ich_vmcr_el2 & ICH_VMCR_EL2_VPMR_MASK) >> \
 	    ICH_VMCR_EL2_VPMR_SHIFT;
@@ -950,16 +981,15 @@ vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
 		if (cpu_if->pending[i].irq == PENDING_INVALID)
 			continue;
 
-		enabled = vgic_v3_int_enabled(&cpu_if->pending[i], hypctx,
-		    group);
-		if (!enabled)
+		if (!vgic_v3_int_enabled(&cpu_if->pending[i], hypctx, group))
+			continue;
+
+		if (!vgic_v3_vcpu_is_irq_target(&cpu_if->pending[i], hypctx))
 			continue;
 
 		priority = vgic_v3_get_priority(&cpu_if->pending[i], hypctx);
 		if (priority >= vpmr)
 			continue;
-
-		/* XXX Interrupt preemption not supported. */
 
 		if (max_idx == -1) {
 			max_idx = i;
