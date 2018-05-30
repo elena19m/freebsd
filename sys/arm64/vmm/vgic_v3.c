@@ -388,6 +388,26 @@ vgic_v3_dist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 	}
 
 	if (off >= GICD_IROUTER_BASE && off < dist->gicd_irouter_addr_max) {
+		reg_size = sizeof(*dist->gicd_irouter);
+		n = (off - GICD_IROUTER_BASE) / reg_size;
+		/*
+		 * GIC Architecture Manual, p 8-485: registers 0 to 31 are
+		 * reserved.
+		 */
+		if (n <= 31) {
+			eprintf("Warning: Trying to read from register GICD_IROUTER%zu\n",
+			    n);
+			*rval = RES0;
+			goto out;
+		}
+		/*
+		 * GIC Architecture Manual, p 8-485: when affinity routing is
+		 * not enabled, the registers are RAZ/WI.
+		 */
+		if (!(dist->gicd_ctlr & GICD_CTLR_ARE_NS)) {
+			*rval = RES0;
+			goto out;
+		}
 		*rval = read_reg(dist->gicd_irouter, GICD_IROUTER_BASE, off);
 		goto out;
 	}
@@ -499,6 +519,17 @@ vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
 	}
 
 	if (off >= GICD_IROUTER_BASE && off < dist->gicd_irouter_addr_max) {
+		reg_size = sizeof(*dist->gicd_ipriorityr);
+		n = (off - GICD_IPRIORITYR_BASE) / reg_size;
+		/* See vgic_v3_dist_read() */
+		if (n <= 31) {
+			eprintf("Warning: Trying to write to register GICD_IROUTER%zu\n",
+			    n);
+			goto out;
+		}
+		/* See vgic_v3_dist_read() */
+		if (!(dist->gicd_ctlr & GICD_CTLR_ARE_NS))
+			goto out;
 		write_reg(dist->gicd_irouter, GICD_IROUTER_BASE, off, val);
 		goto out;
 	}
@@ -977,7 +1008,8 @@ vgic_v3_sync_hwstate(void *arg)
 			tmp.type = VIRQ_TYPE_MAXPRIO;
 			error = vgic_v3_add_pending_unsafe(&tmp, cpu_if);
 			if (error)
-				goto out;
+				/* Pending list full, stop it */
+				break;
 			cpu_if->ich_lr_el2[i] &= ~ICH_LR_EL2_STATE_MASK;
 		}
 
@@ -998,25 +1030,10 @@ vgic_v3_sync_hwstate(void *arg)
 	/* Remove all scheduled interrupts */
 	vgic_v3_remove_pending_unsafe(&invalid_virq, cpu_if);
 
+	/* TODO Enable maintenance interrupts if interrupts are still pending */
+
 out:
 	mtx_unlock_spin(&cpu_if->lr_mtx);
-
-	/*
-	 * TODO:
-	 *
-	 * 1. Check if there are any pending interrupts on this CPU.
-	 * 2. If there are:
-	 * 	a. Check if there are empty lr regs. A lr reg might become
-	 * 	empty when the guest disables the interrupt (like with the timer
-	 * 	interrupt).
-	 * 	b. If there are no more pending interrupts, goto 3. Else,
-	 * 	proceed forward.
-	 *	c. Enable maintenance interrupts.
-	 *	d. Set a variable stating that maintenance interrupts are
-	 *	enabled. This will be read by the code in EL2 to check the
-	 *	cause for the interrupt.
-	 * 3. Else, disable maintenance interrupts.
-	 */
 }
 
 static int
