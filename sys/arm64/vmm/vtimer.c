@@ -133,8 +133,8 @@ vtimer_vminit(void *arg)
 	 * ~CNTHCTL_EL1PCEN: trap access to CNTP_{CTL, CVAL, TVAL}_EL0 from EL1
 	 * CNTHCTL_EL1PCTEN: don't trap access to CNTPCT_EL0
 	 */
-	hyp->vtimer.cnthctl_el2 = \
-	    (cnthctl_el2_reg & ~CNTHCTL_EL1PCEN) | CNTHCTL_EL1PCTEN;
+	hyp->vtimer.cnthctl_el2 = cnthctl_el2_reg & ~CNTHCTL_EL1PCEN;
+	hyp->vtimer.cnthctl_el2 |= CNTHCTL_EL1PCTEN;
 
 	return;
 }

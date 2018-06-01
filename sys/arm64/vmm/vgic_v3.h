@@ -62,8 +62,41 @@ struct virq {
 	enum virq_type	type;
 };
 
+/* The names should always be in ascending order of memory address */
+enum vgic_mmio_region_name {
+	VGIC_GICD_CTLR,
+	VGIC_GICD_TYPER,
+	VGIC_GICD_IGROUPR,
+	VGIC_GICD_ISENABLER,
+	VGIC_GICD_ICENABLER,
+	VGIC_GICD_IPRIORITYR,
+	VGIC_GICD_ICFGR,
+	VGIC_GICD_IROUTER,
+	VGIC_GICD_PIDR2,
+
+	VGIC_GICR_CTLR,
+	VGIC_GICR_TYPER,
+	VGIC_GICR_WAKER,
+	VGIC_GICR_PIDR2,
+	VGIC_GICR_IGROUPR0,
+	VGIC_GICR_ISENABLER0,
+	VGIC_GICR_ICENABLER0,
+	VGIC_GICR_IPRIORITYR,
+	VGIC_GICR_ICFGR0,
+	VGIC_GICR_ICFGR1,
+	VGIC_MEM_REGION_LAST
+};
+
+struct vgic_mmio_region {
+	vm_offset_t start;
+	vm_offset_t end;
+	mem_region_read_t read;
+	mem_region_write_t write;
+};
+
 struct vm;
 struct vm_exit;
+struct hyp;
 
 struct vgic_v3_dist {
 	struct mtx dist_lock;
@@ -75,32 +108,16 @@ struct vgic_v3_dist {
 	uint32_t 	gicd_ctlr;	/* Distributor Control Register */
 	uint32_t 	gicd_typer;	/* Interrupt Controller Type Register */
 	uint32_t 	gicd_pidr2;	/* Distributor Peripheral ID2 Register */
-
 	/* Interrupt Configuration Registers. */
-	uint64_t	gicd_icfgr_addr_max;
 	uint32_t	*gicd_icfgr;
-	size_t		gicd_icfgr_num;
-
 	/* Interrupt Group Register. */
-	uint64_t	gicd_igroupr_addr_max;
 	uint32_t 	*gicd_igroupr;
-	size_t		gicd_igroupr_num;
-
 	/* Interrupt Priority Registers. */
-	uint64_t	gicd_ipriorityr_addr_max;
 	uint32_t	*gicd_ipriorityr;
-	size_t		gicd_ipriorityr_num;
-
 	/* Interrupt Routing Registers. */
-	uint64_t	gicd_irouter_addr_max;
 	uint64_t	*gicd_irouter;
-	size_t		gicd_irouter_num;
-
 	/* Interrupt Clear-Enable and Set-Enable Registers. */
 	uint32_t	*gicd_ixenabler;
-	size_t		gicd_ixenabler_num;
-	uint64_t	gicd_icenabler_addr_max;
-	uint64_t	gicd_isenabler_addr_max;
 };
 
 struct vgic_v3_redist {
@@ -111,11 +128,8 @@ struct vgic_v3_redist {
 	uint32_t	gicr_ctlr;	/* Redistributor Control Regiser */
 	uint32_t	gicr_igroupr0;	/* Interrupt Group Register 0 */
 	uint32_t	gicr_ixenabler0;
-
 	/* Interrupt Priority Registers. */
 	uint32_t	gicr_ipriorityr[VGIC_PRV_I_NUM / 4];
-	uint64_t	gicr_ipriorityr_addr_max;
-
 	/* Interupt Configuration Registers */
 	uint32_t	gicr_icfgr0, gicr_icfgr1;
 };
@@ -162,6 +176,12 @@ void	vgic_v3_init(uint64_t ich_vtr_el2);
 void	vgic_v3_vminit(void *arg);
 void	vgic_v3_cpuinit(void *arg, bool last_vcpu);
 void 	vgic_v3_sync_hwstate(void *arg);
+
+void	dist_mmio_init(struct hyp *hyp);
+void	dist_mmio_destroy(struct hyp *hyp);
+void	redist_mmio_init(struct hypctx *hypctx);
+void	redist_mmio_destroy(struct hypctx *hypctx);
+
 int 	vgic_v3_vcpu_pending_irq(void *arg);
 int 	vgic_v3_inject_irq(void *arg, struct virq *virq);
 int 	vgic_v3_deactivate_irq(void *arg, struct virq *virq, bool ignore_state);

@@ -86,6 +86,7 @@ struct hyp {
 	pmap_t		stage2_map;
 	struct hypctx	ctx[VM_MAXCPU];
 	struct vgic_v3_dist	vgic_dist;
+	struct vgic_mmio_region	*vgic_mmio_regions;
 	struct vm	*vm;
 	struct vtimer	vtimer;
 	uint64_t	vmid_generation;

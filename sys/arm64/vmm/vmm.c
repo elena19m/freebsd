@@ -210,12 +210,6 @@ vmm_handler(module_t mod, int what, void *arg)
 
 	switch (what) {
 	case MOD_LOAD:
-
-		/*
-		printf("VMM_HANDLER:\n");
-		printf("\thypmode_enabled = %lu\n", hypmode_enabled);
-		*/
-
 		vmmdev_init();
 		error = vmm_init();
 		if (error == 0)
@@ -353,6 +347,7 @@ vm_handle_reg_emul(struct vm *vm, int vcpuid, bool *retu)
 
 	error = vmm_emulate_register(vm, vcpuid, vre, vtimer_read_reg,
 	    vtimer_write_reg, retu);
+
 	return (error);
 
 out_user:
@@ -361,43 +356,53 @@ out_user:
 }
 
 static int
+vm_mmio_region_match(const void *key, const void *region)
+{
+	const uint64_t *addr = key;
+	const struct vgic_mmio_region *vmr = region;
+
+	if (*addr < vmr->start)
+		return (-1);
+	else if (*addr >= vmr->start && *addr < vmr->end)
+		return (0);
+	else
+		return (1);
+}
+
+static int
 vm_handle_inst_emul(struct vm *vm, int vcpuid, bool *retu)
 {
 	struct vm_exit *vme;
 	struct vie *vie;
-	struct hyp *hyp;
+	struct hyp *hyp = vm->cookie;
 	struct vgic_v3_dist *dist;
 	struct vgic_v3_redist *redist;
 	uint64_t fault_ipa;
-	mem_region_read_t mread;
-	mem_region_write_t mwrite;
+	struct vgic_mmio_region *vmr;
 	int error;
 
-	hyp = (struct hyp *)vm->cookie;
 	if (!hyp->vgic_attached)
 		goto out_user;
 
 	vme = vm_exitinfo(vm, vcpuid);
 	vie = &vme->u.inst_emul.vie;
 
-
 	fault_ipa = vme->u.inst_emul.gpa;
-	dist = &hyp->vgic_dist;
 	redist = &hyp->ctx[vcpuid].vgic_redist;
+	dist = &hyp->vgic_dist;
 
-	if (fault_ipa >= dist->ipa && fault_ipa < dist->ipa + dist->size) {
-		mread = vgic_v3_dist_read;
-		mwrite = vgic_v3_dist_write;
-	} else if (fault_ipa >= redist->ipa &&
-	    fault_ipa < redist->ipa + redist->size) {
-		mread = vgic_v3_redist_read;
-		mwrite = vgic_v3_redist_write;
-	} else {
+	/* Shortcut */
+	if (!(fault_ipa >= dist->ipa && fault_ipa < dist->ipa + dist->size) &&
+	    !(fault_ipa >= redist->ipa && fault_ipa < redist->ipa + redist->size))
+			goto out_user;
+
+	vmr = bsearch(&fault_ipa, hyp->vgic_mmio_regions, VGIC_MEM_REGION_LAST,
+	    sizeof(struct vgic_mmio_region), vm_mmio_region_match);
+	if (!vmr)
 		goto out_user;
-	}
 
 	error = vmm_emulate_instruction(vm, vcpuid, fault_ipa, vie,
-	    mread, mwrite, retu);
+	    vmr->read, vmr->write, retu);
 
 	return (error);
 
