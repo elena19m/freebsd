@@ -98,459 +98,14 @@ static struct vgic_v3_ro_regs ro_regs;
 /* TODO: Do not manage the softc directly and use the device's softc */
 static struct vgic_v3_softc softc;
 
-#define	read_reg(arr, base, off)						\
-({										\
-	size_t size = sizeof(*arr);						\
-	size_t idx;								\
-	uint64_t val;								\
-										\
-	if (((off) & (size - 1)) != 0) {					\
-		eprintf("Warning: Reading invalid register offset 0x%016lx\n",	\
-				(off));						\
-		val = RES0;							\
-	} else {								\
-		idx = ((off) - (base)) / size;					\
-		val = arr[idx];							\
-	}									\
-	val;									\
-})
-
-int
-vgic_v3_redist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
-    int size, void *arg)
+void
+vgic_v3_cpuinit(void *arg, bool last_vcpu)
 {
-	struct hyp *hyp;
-	struct vgic_v3_redist *redist;
-	struct vgic_v3_dist *dist;
-	uint64_t off;
-	bool *retu;
-
-	retu = (bool *)arg;
-	hyp = vm_get_cookie(vm);
-	redist = &hyp->ctx[vcpuid].vgic_redist;
-	dist = &hyp->vgic_dist;
-
-	/* Offset of redistributor register. */
-	off = fault_ipa - redist->ipa;
-
-	if (off == GICR_PIDR2) {
-		/* GICR_PIDR2 has the same value as GICD_PIDR2 */
-		*rval = dist->gicd_pidr2;
-		goto out;
-	}
-
-	if (off == GICR_TYPER) {
-		*rval = redist->gicr_typer;
-		goto out;
-	}
-
-	if (off == GICR_WAKER) {
-		/* Redistributor is always awake. */
-		*rval = 0 & ~GICR_WAKER_PS & ~GICR_WAKER_CA;
-		goto out;
-	}
-
-	if (off == GICR_CTLR) {
-		/* No writes pending */
-		*rval = redist->gicr_ctlr & ~GICR_CTLR_RWP & ~GICR_CTLR_UWP;
-		goto out;
-	}
-
-	if (off == GICR_SGI_BASE_SIZE + GICR_IGROUPR0) {
-		*rval = redist->gicr_igroupr0;
-		goto out;
-	}
-
-	if (off == GICR_SGI_BASE_SIZE + GICR_ICENABLER0) {
-		*rval = redist->gicr_ixenabler0;
-		goto out;
-	}
-
-	if (off == GICR_SGI_BASE_SIZE + GICR_ISENABLER0) {
-		*rval = redist->gicr_ixenabler0;
-		goto out;
-	}
-
-	if (off == GICR_SGI_BASE_SIZE + GICR_ICFGR0_BASE) {
-		*rval = redist->gicr_icfgr0;
-		goto out;
-	}
-
-	if (off == GICR_SGI_BASE_SIZE + GICR_ICFGR1_BASE) {
-		*rval = redist->gicr_icfgr1;
-		goto out;
-	}
-
-	if (off >= GICR_SGI_BASE_SIZE + GICD_IPRIORITYR_BASE &&
-	    off < redist->gicr_ipriorityr_addr_max) {
-		*rval = read_reg(redist->gicr_ipriorityr,
-		    GICR_SGI_BASE_SIZE + GICD_IPRIORITYR_BASE, off);
-		goto out;
-	}
-
-	eprintf("Unknown register offset: 0x%04lx\n", off);
-	*rval = RES0;
-
-	/* Return to userland for emulation */
-	*retu = true;
-	return (0);
-
-out:
-	*retu = false;
-	return (0);
-}
-
-#define write_reg(reg, base, off, val)						\
-do {										\
-	size_t size = sizeof(*reg);						\
-	size_t idx;								\
-										\
-	if (((off) & (size - 1)) != 0) {					\
-		eprintf("Warning: Writing invalid register offset 0x%016lx\n",	\
-				(off));						\
-	} else {								\
-		idx = ((off) - (base)) / size;					\
-		reg[idx] = val;							\
-	}									\
-} while (0)
-
-int
-vgic_v3_redist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
-    int size, void *arg)
-{
-	struct hyp *hyp;
-	struct vgic_v3_redist *redist;
-	uint64_t off;
-	bool *retu;
-
-	retu = (bool *)arg;
-	hyp = vm_get_cookie(vm);
-	redist = &hyp->ctx[vcpuid].vgic_redist;
-
-	/* Offset of redistributor register. */
-	off = fault_ipa - redist->ipa;
-
-	if (off == GICR_PIDR2) {
-		eprintf("Warning: Trying to write to read-only register GICR_PIDR2.\n");
-		goto out;
-	}
-
-	if (off == GICR_TYPER) {
-		eprintf("Warning: Trying to write to read-only register GICR_TYPER.\n");
-		goto out;
-	}
-
-	if (off == GICR_WAKER) {
-		/*
-		 * Ignore writes to GICRR_WAKER. The Redistributor will always
-		 * be awake.
-		 */
-		;
-		goto out;
-	}
-
-	if (off == GICR_CTLR) {
-		redist->gicr_ctlr = val;
-		goto out;
-	}
-
-	if (off == GICR_SGI_BASE_SIZE + GICR_IGROUPR0) {
-		redist->gicr_igroupr0 = val;
-		goto out;
-	}
-
-	if (off == GICR_SGI_BASE_SIZE + GICR_ICENABLER0) {
-		/* A write of 1 to ICENABLER disables the interrupt. */
-		redist->gicr_ixenabler0 &= ~val;
-		goto out;
-	}
-
-	if (off == GICR_SGI_BASE_SIZE + GICR_ISENABLER0) {
-		/* A write of 1 to ISENABLER enables the interrupt */
-		redist->gicr_ixenabler0 |= val;
-		goto out;
-	}
-
-	if (off == GICR_SGI_BASE_SIZE + GICR_ICFGR0_BASE) {
-		redist->gicr_icfgr0 = val;
-		goto out;
-	}
-
-	if (off == GICR_SGI_BASE_SIZE + GICR_ICFGR1_BASE) {
-		redist->gicr_icfgr1 = val;
-		goto out;
-	}
-
-	if (off >= GICR_SGI_BASE_SIZE + GICD_IPRIORITYR_BASE &&
-	    off < redist->gicr_ipriorityr_addr_max) {
-		write_reg(redist->gicr_ipriorityr,
-		    GICR_SGI_BASE_SIZE + GICD_IPRIORITYR_BASE, off, val);
-		goto out;
-	}
-
-	eprintf("Unknown register offset: 0x%04lx\n", off);
-
-	*retu = true;
-	return (0);
-
-out:
-	*retu = false;
-	return (0);
-}
-
-int
-vgic_v3_dist_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
-    int size, void *arg)
-{
-	struct hyp *hyp;
-	struct vgic_v3_dist *dist;
-	struct vgic_v3_redist *redist;
-	uint64_t off;
-	size_t reg_size, n;
-	bool *retu;
-
-	retu = (bool *)arg;
-	hyp = vm_get_cookie(vm);
-	dist = &hyp->vgic_dist;
-	redist = &hyp->ctx[vcpuid].vgic_redist;
-
-	/* Offset of distributor register */
-	off = fault_ipa - dist->ipa;
-
-	if (off == GICD_CTLR) {
-		*rval = dist->gicd_ctlr;
-		goto out;
-	}
-
-	if (off == GICD_TYPER) {
-		*rval = dist->gicd_typer;
-		goto out;
-	}
-
-	if (off == GICD_IIDR) {
-		*rval = RES0;
-		goto out;
-	}
-
-	if (off == GICD_PIDR2) {
-		*rval = dist->gicd_pidr2;
-		goto out;
-	}
-
-	if (off >= GICD_IGROUPR_BASE && off < dist->gicd_igroupr_addr_max) {
-		if (off == GICD_IGROUPR_BASE)
-			*rval = redist->gicr_igroupr0;
-		else
-			*rval = read_reg(dist->gicd_igroupr, GICD_IGROUPR_BASE,
-			    off);
-		goto out;
-	}
-
-	if (off >= GICD_ICFGR_BASE && off < dist->gicd_icfgr_addr_max) {
-		*rval = read_reg(dist->gicd_icfgr, GICD_ICFGR_BASE, off);
-		goto out;
-	}
-
-	if (off >= GICD_IPRIORITYR_BASE && off < dist->gicd_ipriorityr_addr_max) {
-		reg_size = sizeof(*dist->gicd_ipriorityr);
-		n = (off - GICD_IPRIORITYR_BASE) / reg_size;
-		/*
-		 * GIC Architecture specification, p 8-483: when affinity
-		 * routing is enabled, GICD_IPRIORITYR<n> is RAZ/WI for
-		 * n = 0 to 7.
-		 */
-		if ((dist->gicd_ctlr & GICD_CTLR_ARE_NS) && n <= 7)
-			*rval = RES0;
-		else
-			*rval = read_reg(dist->gicd_ipriorityr,
-			    GICD_IPRIORITYR_BASE, off);
-		goto out;
-	}
-
-	if (off >= GICD_ICENABLER_BASE && off < dist->gicd_icenabler_addr_max) {
-		/* GICD_ICENABLER<0> is equivalent to GICR_ICENABLER0 */
-		if (off == GICD_ICENABLER_BASE)
-			*rval = redist->gicr_ixenabler0;
-		else
-			*rval = read_reg(dist->gicd_ixenabler,
-			    GICD_ICENABLER_BASE, off);
-		goto out;
-	}
-
-	if (off >= GICD_ISENABLER_BASE && off < dist->gicd_isenabler_addr_max) {
-		/* GICD_ISENABLER<0> is equivalent to GICR_ISENABLER0 */
-		if (off == GICD_ISENABLER_BASE)
-			*rval = redist->gicr_ixenabler0;
-		else
-			*rval = read_reg(dist->gicd_ixenabler,
-			    GICD_ISENABLER_BASE, off);
-		goto out;
-	}
-
-	if (off >= GICD_IROUTER_BASE && off < dist->gicd_irouter_addr_max) {
-		reg_size = sizeof(*dist->gicd_irouter);
-		n = (off - GICD_IROUTER_BASE) / reg_size;
-		/*
-		 * GIC Architecture Manual, p 8-485: registers 0 to 31 are
-		 * reserved.
-		 */
-		if (n <= 31) {
-			eprintf("Warning: Trying to read from register GICD_IROUTER%zu\n",
-			    n);
-			*rval = RES0;
-			goto out;
-		}
-		/*
-		 * GIC Architecture Manual, p 8-485: when affinity routing is
-		 * not enabled, the registers are RAZ/WI.
-		 */
-		if (!(dist->gicd_ctlr & GICD_CTLR_ARE_NS)) {
-			*rval = RES0;
-			goto out;
-		}
-		*rval = read_reg(dist->gicd_irouter, GICD_IROUTER_BASE, off);
-		goto out;
-	}
-
-	eprintf("Unknown register offset: 0x%04lx\n", off);
-	*rval = RES0;
-
-	*retu = true;
-	return (0);
-
-out:
-	*retu = false;
-	return (0);
-}
-
-int
-vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t val,
-    int size, void *arg)
-{
-	struct hyp *hyp;
-	struct vgic_v3_dist *dist;
-	struct vgic_v3_redist *redist;
-	uint64_t off;
-	uint32_t regval;
-	size_t n, reg_size;
-	bool *retu = arg;
-
-	hyp = vm_get_cookie(vm);
-	dist = &hyp->vgic_dist;
-	redist = &hyp->ctx[vcpuid].vgic_redist;
-
-	/* Offset of distributor register. */
-	off = fault_ipa - dist->ipa;
-
-	if (off == GICD_CTLR) {
-		/* Writes are never pending. */
-		dist->gicd_ctlr = val & ~GICD_CTLR_RWP;
-		goto out;
-	}
-
-	if (off == GICD_TYPER) {
-		eprintf("Warning: Trying to write to read-only register GICD_TYPER.\n");
-		goto out;
-	}
-
-	if (off == GICD_PIDR2) {
-		eprintf("Warning: Trying to write to read-only register GICD_PIDR2.\n");
-		goto out;
-	}
-
-	if (off == GICD_IIDR) {
-		eprintf("write: GICD_IIDR not implemented\n");
-		goto out;
-	}
-
-	if (off >= GICD_IGROUPR_BASE && off < dist->gicd_igroupr_addr_max) {
-		if (off == GICD_IGROUPR_BASE)
-			redist->gicr_igroupr0 = val;
-		else
-			write_reg(dist->gicd_igroupr, GICD_IGROUPR_BASE, off,
-			    val);
-		goto out;
-	}
-
-	if (off >= GICD_ICFGR_BASE && off < dist->gicd_icfgr_addr_max) {
-		if (off == GICD_ICFGR_BASE)
-			eprintf("Warning: Trying to write to read-only register GICD_ICFGR0.\n");
-		else
-			write_reg(dist->gicd_icfgr, GICD_ICFGR_BASE, off, val);
-		goto out;
-	}
-
-	if (off >= GICD_IPRIORITYR_BASE && off < dist->gicd_ipriorityr_addr_max) {
-		reg_size = sizeof(*dist->gicd_ipriorityr);
-		n = (off - GICD_IPRIORITYR_BASE) / reg_size;
-		/* See vgic_v3_dist_read() */
-		if ((dist->gicd_ctlr & GICD_CTLR_ARE_NS) && n <= 7)
-			goto out;
-		write_reg(dist->gicd_ipriorityr, GICD_IPRIORITYR_BASE, off, val);
-		goto out;
-	}
-
-	if (off >= GICD_ICENABLER_BASE && off < dist->gicd_icenabler_addr_max) {
-		/* A write of 1 to ICENABLER disables the interrupt. */
-		if (off == GICD_ICENABLER_BASE) {
-			redist->gicr_ixenabler0 &= ~val;
-		} else {
-			regval = read_reg(dist->gicd_ixenabler,
-			    GICD_ICENABLER_BASE, off);
-			regval &= ~val;
-			write_reg(dist->gicd_ixenabler, GICD_ICENABLER_BASE,
-			    off, regval);
-		}
-		goto out;
-	}
-
-	if (off >= GICD_ISENABLER_BASE && off < dist->gicd_isenabler_addr_max) {
-		/* A write of 1 to ISENABLER enables the interrupt. */
-		if (off == GICD_ISENABLER_BASE) {
-			redist->gicr_ixenabler0 |= val;
-		} else {
-			regval = read_reg(dist->gicd_ixenabler,
-			    GICD_ISENABLER_BASE, off);
-			regval |= val;
-			write_reg(dist->gicd_ixenabler, GICD_ISENABLER_BASE,
-			    off, regval);
-		}
-		goto out;
-	}
-
-	if (off >= GICD_IROUTER_BASE && off < dist->gicd_irouter_addr_max) {
-		reg_size = sizeof(*dist->gicd_ipriorityr);
-		n = (off - GICD_IPRIORITYR_BASE) / reg_size;
-		/* See vgic_v3_dist_read() */
-		if (n <= 31) {
-			eprintf("Warning: Trying to write to register GICD_IROUTER%zu\n",
-			    n);
-			goto out;
-		}
-		/* See vgic_v3_dist_read() */
-		if (!(dist->gicd_ctlr & GICD_CTLR_ARE_NS))
-			goto out;
-		write_reg(dist->gicd_irouter, GICD_IROUTER_BASE, off, val);
-		goto out;
-	}
-
-	eprintf("Unknown register offset: 0x%04lx\n", off);
-
-	*retu = true;
-	return (0);
-
-out:
-	*retu = false;
-	return (0);
-}
-
-static void
-vgic_v3_init_redist_regs(struct vgic_v3_redist *redist,struct hypctx *hypctx,
-    bool last_vcpu)
-{
+	struct hypctx *hypctx = arg;
+	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
+	struct vgic_v3_redist *redist = &hypctx->vgic_redist;
 	uint64_t aff, vmpidr_el2;
 
-	redist->gicr_typer = 0;
 	vmpidr_el2 = hypctx->vmpidr_el2;
 	/*
 	 * Get affinity for the current CPU. The affinity from MPIDR_EL1
@@ -577,23 +132,6 @@ vgic_v3_init_redist_regs(struct vgic_v3_redist *redist,struct hypctx *hypctx,
 	 */
 	redist->gicr_ctlr = 0 & ~GICR_CTLR_LPI_ENABLE;
 
-	redist->gicr_ipriorityr_addr_max = \
-	    GICR_SGI_BASE_SIZE + GICD_IPRIORITYR_BASE + \
-	    sizeof(redist->gicr_ipriorityr);
-}
-
-void
-vgic_v3_cpuinit(void *arg, bool last_vcpu)
-{
-	struct hypctx *hypctx;
-	struct vgic_v3_cpu_if *cpu_if;
-	struct vgic_v3_redist *redist;
-
-	hypctx = (struct hypctx *)arg;
-	redist = &hypctx->vgic_redist;
-	vgic_v3_init_redist_regs(redist, hypctx, last_vcpu);
-
-	cpu_if = &hypctx->vgic_cpu_if;
 	mtx_init(&cpu_if->lr_mtx, "VGICv3 ICH_LR_EL2 lock", NULL, MTX_SPIN);
 
 	/*
@@ -634,20 +172,11 @@ vgic_v3_cpuinit(void *arg, bool last_vcpu)
 	cpu_if->pending_num = 0;
 }
 
-#define	INIT_DIST_REG(name, n, base, dist)				\
-do {									\
-	(dist)->name = malloc((n) * sizeof(*(dist)->name),		\
-			M_VGIC_V3, M_WAITOK | M_ZERO);			\
-	/* TODO num is not necessary? */				\
-	(dist)->name##_num = (n);					\
-	(dist)->name##_addr_max = (base)+ (n) * sizeof(*(dist)->name);	\
-} while (0)
-
-static void
-vgic_v3_init_dist_regs(struct vgic_v3_dist *dist)
+void
+vgic_v3_vminit(void *arg)
 {
-	size_t n;
-	size_t reg_size;
+	struct hyp *hyp = arg;
+	struct vgic_v3_dist *dist = &hyp->vgic_dist;
 
 	/*
 	 * Configure the Distributor control register.
@@ -665,64 +194,35 @@ vgic_v3_init_dist_regs(struct vgic_v3_dist *dist)
 	dist->gicd_typer = ro_regs.gicd_typer;
 	dist->nirqs = GICD_TYPER_I_NUM(dist->gicd_typer);
 	dist->gicd_pidr2 = ro_regs.gicd_pidr2;
-
-	/* Round up the number of registers to the nearest integer. */
-	n = (dist->nirqs + 16 - 1) / 16;
-	INIT_DIST_REG(gicd_icfgr, n, GICD_ICFGR_BASE, dist);
-
-	n = (dist->nirqs + 32 - 1) / 32;
-	INIT_DIST_REG(gicd_igroupr, n, GICD_IGROUPR_BASE, dist);
-
-	/* ARM GIC Architecture Specification, page 8-483. */
-	n = 8 * ((dist->gicd_typer & GICD_TYPER_ITLINESNUM_MASK) + 1);
-	INIT_DIST_REG(gicd_ipriorityr, n, GICD_IPRIORITYR_BASE, dist);
-
-	/* ARM GIC Architecture Specification, page 8-485. */
-	n = 32 * (dist->gicd_typer & GICD_TYPER_ITLINESNUM_MASK + 1) - 1;
-	INIT_DIST_REG(gicd_irouter, n, GICD_IROUTER_BASE, dist);
-
-	/* ARM GIC Architecture Specification, page 8-471. */
-	n = (dist->gicd_typer & GICD_TYPER_ITLINESNUM_MASK) + 1;
-	reg_size = sizeof(*dist->gicd_ixenabler);
-	dist->gicd_ixenabler = malloc(n * reg_size, M_VGIC_V3,
-	    M_WAITOK | M_ZERO);
-	dist->gicd_ixenabler_num = n;
-	dist->gicd_icenabler_addr_max = GICD_ICENABLER_BASE + n * reg_size;
-	dist->gicd_isenabler_addr_max = GICD_ISENABLER_BASE + n * reg_size;
-}
-
-void
-vgic_v3_vminit(void *arg)
-{
-	struct hyp *hyp;
-	struct vgic_v3_dist *dist;
-
-	hyp = (struct hyp *)arg;
-	dist = &hyp->vgic_dist;
-	vgic_v3_init_dist_regs(dist);
 }
 
 int
 vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
     uint64_t redist_ipa, size_t redist_size)
 {
-	struct hyp *hyp;
-	struct vgic_v3_dist *dist;
+	struct hyp *hyp = arg;
+	struct hypctx *hypctx;
+	struct vgic_v3_dist *dist = &hyp->vgic_dist;
 	struct vgic_v3_redist *redist;
 	int i;
-
-	hyp = (struct hyp *)arg;
-	dist = &hyp->vgic_dist;
 
 	/* Set the distributor address and size for trapping guest access. */
 	dist->ipa = dist_ipa;
 	dist->size = dist_size;
 
+	hyp->vgic_mmio_regions = \
+	    malloc(VGIC_MEM_REGION_LAST * sizeof(*hyp->vgic_mmio_regions),
+	    M_VGIC_V3, M_WAITOK | M_ZERO);
+	dist_mmio_init(hyp);
+
 	for (i = 0; i < VM_MAXCPU; i++) {
-		redist = &hyp->ctx[i].vgic_redist;
+		hypctx = &hyp->ctx[i];
+		redist = &hypctx->vgic_redist;
+
 		/* Set the redistributor address and size. */
 		redist->ipa = redist_ipa;
 		redist->size = redist_size;
+		redist_mmio_init(hypctx);
 	}
 
 	hyp->vgic_attached = true;
@@ -734,21 +234,16 @@ vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
 static void vgic_v3_detach_from_vm(void *arg)
 {
 	struct hyp *hyp = arg;
-	struct vgic_v3_dist *dist = &hyp->vgic_dist;
-	struct vgic_v3_cpu_if *cpu_if;
+	struct hypctx *hypctx;
 	int i;
 
-	free(dist->gicd_igroupr, M_VGIC_V3);
-	free(dist->gicd_icfgr, M_VGIC_V3);
-	free(dist->gicd_ipriorityr, M_VGIC_V3);
-	free(dist->gicd_ixenabler, M_VGIC_V3);
-	free(dist->gicd_irouter, M_VGIC_V3);
-
 	for (i = 0; i < VM_MAXCPU; i++) {
-		cpu_if = &hyp->ctx[i].vgic_cpu_if;
-		if (cpu_if->pending)
-			free(cpu_if->pending, M_VGIC_V3);
+		hypctx = &hyp->ctx[i];
+		redist_mmio_destroy(hypctx);
 	}
+
+	dist_mmio_destroy(hyp);
+	free(hyp->vgic_mmio_regions, M_VGIC_V3);
 }
 
 int
@@ -889,7 +384,7 @@ vgic_v3_get_priority(struct virq *virq, struct hypctx *hypctx)
 }
 
 static bool
-vgic_v3_vcpu_is_irq_target(struct virq *virq, struct hypctx *hypctx)
+vgic_v3_int_target(struct virq *virq, struct hypctx *hypctx)
 {
 	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
 	struct vgic_v3_redist *redist = &hypctx->vgic_redist;
@@ -984,7 +479,7 @@ vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
 		if (!vgic_v3_int_enabled(&cpu_if->pending[i], hypctx, group))
 			continue;
 
-		if (!vgic_v3_vcpu_is_irq_target(&cpu_if->pending[i], hypctx))
+		if (!vgic_v3_int_target(&cpu_if->pending[i], hypctx))
 			continue;
 
 		priority = vgic_v3_get_priority(&cpu_if->pending[i], hypctx);
@@ -1069,11 +564,6 @@ out:
 static int
 arm_vgic_detach(device_t dev)
 {
-	/*
-	device_t parent;
-	*/
-	int error;
-
 	printf("\n[arm64.c:arm_vgic_detach] dev nameunit = %s\n", device_get_nameunit(dev));
 
 	if (softc.vgic_v3_dev == NULL) {
@@ -1084,18 +574,7 @@ arm_vgic_detach(device_t dev)
 	softc.vgic_v3_dev = NULL;
 	softc.gic_v3_dev = NULL;
 
-	error = 0;
-#if 0
-	printf("[arm64.c:arm_vgic_detach] before device_get_parent()\n");
-	parent = device_get_parent(dev);
-	if (parent != NULL) {
-		printf("[arm64.c:arm_vgic_detach] before device_delete_child()\n");
-		error = device_delete_child(parent, dev);
-	}
-#endif
-
-	printf("[arm64.c:arm_vgic_detach] returning %d\n", error);
-	return (error);
+	return (0);
 }
 
 static void vgic_v3_set_ro_regs(device_t dev)
@@ -1175,17 +654,12 @@ arm_vgic_identify(driver_t *driver, device_t parent)
 	device_t dev = NULL;
 	int order;
 
-	printf("[vgic.c:arm_vgic_identify] parent nameunit = %s\n", device_get_nameunit(parent));
-
 	if (softc.vgic_v3_dev == NULL) {
 		order = BUS_PASS_INTERRUPT + BUS_PASS_ORDER_MIDDLE;
 		dev = device_add_child_ordered(parent, order, VGIC_V3_DEVNAME, -1);
 		if (dev != NULL) {
-			printf("[vgic.c:arm_vgic_identify] dev nameunit = %s\n", device_get_nameunit(dev));
 			softc.vgic_v3_dev = dev;
 			softc.gic_v3_dev = parent;
-		} else {
-			printf("Cannot create the Virtual Generic Interrupt Controller device.\n");
 		}
 	}
 }
@@ -1193,7 +667,6 @@ arm_vgic_identify(driver_t *driver, device_t parent)
 static int
 arm_vgic_probe(device_t dev)
 {
-	printf("[vgic.c:arm_vgic_probe] dev nameunit = %s\n", device_get_nameunit(dev));
 	if (softc.vgic_v3_dev == NULL)
 		goto error_disable_virtualization;
 
@@ -1202,7 +675,7 @@ arm_vgic_probe(device_t dev)
 
 error_disable_virtualization:
 	hypmode_enabled = 0;
-	printf("Virtualization has been disabled.\n");
+	eprintf("Virtualization has been disabled.\n");
 	return (ENXIO);
 }
 
