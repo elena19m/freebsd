@@ -65,9 +65,9 @@
 #define	BSP			0
 #define	KERNEL_IMAGE_NAME_LEN	32
 
-#define	GIC_V3_DIST_IPA		0x2f000000UL
+#define	GIC_V3_DIST_START	0x2f000000UL
 #define	GIC_V3_DIST_SIZE	0x10000UL
-#define	GIC_V3_REDIST_IPA	0x2f100000UL
+#define	GIC_V3_REDIST_START	0x2f100000UL
 #define	GIC_V3_REDIST_SIZE	0x200000UL
 
 struct env {
@@ -373,21 +373,21 @@ main(int argc, char** argv)
 	}
 
 	uint64_t mem_end = memory_base_address + mem_size;
-	uint64_t dist_end = GIC_V3_DIST_IPA + GIC_V3_DIST_SIZE;
-	uint64_t redist_end = GIC_V3_REDIST_IPA + GIC_V3_REDIST_SIZE;
+	uint64_t dist_end = GIC_V3_DIST_START + GIC_V3_DIST_SIZE;
+	uint64_t redist_end = GIC_V3_REDIST_START + GIC_V3_REDIST_SIZE;
 
-	if (overlap(GIC_V3_DIST_IPA, dist_end, memory_base_address, mem_end)) {
+	if (overlap(GIC_V3_DIST_SIZE, dist_end, memory_base_address, mem_end)) {
 		fprintf(stderr, "Guest memory overlaps with VGIC Distributor\n");
 		exit(1);
 	}
 
-	if (overlap(GIC_V3_REDIST_IPA, redist_end, memory_base_address, mem_end)) {
+	if (overlap(GIC_V3_REDIST_SIZE, redist_end, memory_base_address, mem_end)) {
 		fprintf(stderr, "Guest memory overlaps with VGIC Redistributor\n");
 		exit(1);
 	}
 
-	error = vm_attach_vgic(ctx, GIC_V3_DIST_IPA, GIC_V3_DIST_SIZE,
-			GIC_V3_REDIST_IPA, GIC_V3_REDIST_SIZE);
+	error = vm_attach_vgic(ctx, GIC_V3_DIST_START, GIC_V3_DIST_SIZE,
+			GIC_V3_REDIST_START, GIC_V3_REDIST_SIZE);
 	if (error) {
 		fprintf(stderr, "Error attaching VGIC to the virtual machine\n");
 		exit(1);

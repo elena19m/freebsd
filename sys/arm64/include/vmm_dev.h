@@ -96,9 +96,9 @@ struct vm_activate_cpu {
 };
 
 struct vm_attach_vgic {
-	uint64_t	dist_ipa;
+	uint64_t	dist_start;
 	size_t		dist_size;
-	uint64_t	redist_ipa;
+	uint64_t	redist_start;
 	size_t		redist_size;
 };
 

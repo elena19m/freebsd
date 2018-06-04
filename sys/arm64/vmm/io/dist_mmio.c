@@ -445,8 +445,8 @@ dist_mmio_init(struct hyp *hyp)
 
 #define	init_mmio_region(addr, num, regbits, shortname)			\
 	hyp->vgic_mmio_regions[VGIC_ ##addr] = (struct vgic_mmio_region){ \
-		.start 	= dist->ipa + addr,				\
-		.end 	= dist->ipa + addr + num * (regbits >> 3),	\
+		.start 	= dist->start + addr,				\
+		.end 	= dist->start + addr + num * (regbits >> 3),	\
 		.read 	= dist_ ##shortname ##_read,			\
 		.write 	= dist_ ##shortname ##_write,			\
 	}
@@ -458,8 +458,8 @@ dist_mmio_init(struct hyp *hyp)
 	    M_DIST_MMIO, M_WAITOK | M_ZERO);
 #define	init_mmio_region_base(addr, num, regbits, shortname)		\
 	hyp->vgic_mmio_regions[VGIC_ ##addr] = (struct vgic_mmio_region){ \
-		.start 	= dist->ipa + addr ##_BASE,			\
-		.end 	= dist->ipa + addr ##_BASE + num * (regbits >> 3), \
+		.start 	= dist->start + addr ##_BASE,			\
+		.end 	= dist->start + addr ##_BASE + num * (regbits >> 3), \
 		.read 	= dist_ ##shortname ##_read,			\
 		.write 	= dist_ ##shortname ##_write,			\
 	}

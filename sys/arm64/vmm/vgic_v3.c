@@ -197,8 +197,8 @@ vgic_v3_vminit(void *arg)
 }
 
 int
-vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
-    uint64_t redist_ipa, size_t redist_size)
+vgic_v3_attach_to_vm(void *arg, uint64_t dist_start, size_t dist_size,
+    uint64_t redist_start, size_t redist_size)
 {
 	struct hyp *hyp = arg;
 	struct hypctx *hypctx;
@@ -207,8 +207,8 @@ vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
 	int i;
 
 	/* Set the distributor address and size for trapping guest access. */
-	dist->ipa = dist_ipa;
-	dist->size = dist_size;
+	dist->start = dist_start;
+	dist->end = dist_start + dist_size;
 
 	hyp->vgic_mmio_regions = \
 	    malloc(VGIC_MEM_REGION_LAST * sizeof(*hyp->vgic_mmio_regions),
@@ -220,8 +220,8 @@ vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
 		redist = &hypctx->vgic_redist;
 
 		/* Set the redistributor address and size. */
-		redist->ipa = redist_ipa;
-		redist->size = redist_size;
+		redist->start = redist_start;
+		redist->end = redist_start + redist_size;
 		redist_mmio_init(hypctx);
 	}
 

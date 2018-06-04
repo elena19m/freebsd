@@ -327,15 +327,15 @@ vcpu_reset(struct vmctx *vmctx, int vcpu)
 }
 
 int
-vm_attach_vgic(struct vmctx *ctx, uint64_t dist_ipa, size_t dist_size,
-		uint64_t redist_ipa, size_t redist_size)
+vm_attach_vgic(struct vmctx *ctx, uint64_t dist_start, size_t dist_size,
+		uint64_t redist_start, size_t redist_size)
 {
 	struct vm_attach_vgic vav;
 
 	bzero(&vav, sizeof(vav));
-	vav.dist_ipa = dist_ipa;
+	vav.dist_start = dist_start;
 	vav.dist_size = dist_size;
-	vav.redist_ipa = redist_ipa;
+	vav.redist_start = redist_start;
 	vav.redist_size = redist_size;
 
 	return (ioctl(ctx->fd, VM_ATTACH_VGIC, &vav));

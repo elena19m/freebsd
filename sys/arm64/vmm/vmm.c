@@ -356,10 +356,10 @@ out_user:
 }
 
 static int
-vm_mmio_region_match(const void *key, const void *region)
+vm_mmio_region_match(const void *key, const void *memb)
 {
 	const uint64_t *addr = key;
-	const struct vgic_mmio_region *vmr = region;
+	const struct vgic_mmio_region *vmr = memb;
 
 	if (*addr < vmr->start)
 		return (-1);
@@ -375,8 +375,6 @@ vm_handle_inst_emul(struct vm *vm, int vcpuid, bool *retu)
 	struct vm_exit *vme;
 	struct vie *vie;
 	struct hyp *hyp = vm->cookie;
-	struct vgic_v3_dist *dist;
-	struct vgic_v3_redist *redist;
 	uint64_t fault_ipa;
 	struct vgic_mmio_region *vmr;
 	int error;
@@ -388,13 +386,6 @@ vm_handle_inst_emul(struct vm *vm, int vcpuid, bool *retu)
 	vie = &vme->u.inst_emul.vie;
 
 	fault_ipa = vme->u.inst_emul.gpa;
-	redist = &hyp->ctx[vcpuid].vgic_redist;
-	dist = &hyp->vgic_dist;
-
-	/* Shortcut */
-	if (!(fault_ipa >= dist->ipa && fault_ipa < dist->ipa + dist->size) &&
-	    !(fault_ipa >= redist->ipa && fault_ipa < redist->ipa + redist->size))
-			goto out_user;
 
 	vmr = bsearch(&fault_ipa, hyp->vgic_mmio_regions, VGIC_MEM_REGION_LAST,
 	    sizeof(struct vgic_mmio_region), vm_mmio_region_match);
@@ -775,13 +766,13 @@ vm_malloc(struct vm *vm, uint64_t ipa, size_t len)
 }
 
 int
-vm_attach_vgic(struct vm *vm, uint64_t dist_ipa, size_t dist_size,
-		uint64_t redist_ipa, size_t redist_size)
+vm_attach_vgic(struct vm *vm, uint64_t dist_start, size_t dist_size,
+		uint64_t redist_start, size_t redist_size)
 {
 	int error;
 
-	error = vgic_v3_attach_to_vm(vm->cookie, dist_ipa, dist_size,
-	    redist_ipa, redist_size);
+	error = vgic_v3_attach_to_vm(vm->cookie, dist_start, dist_size,
+	    redist_start, redist_size);
 
 	return (error);
 }
