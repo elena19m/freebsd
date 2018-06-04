@@ -52,9 +52,9 @@
 
 #include "mmu.h"
 #include "arm64.h"
-#include "vgic_v3.h"
-#include "vtimer.h"
 #include "hyp.h"
+#include "io/vgic_v3.h"
+#include "io/vtimer.h"
 
 #define	HANDLED		1
 #define	UNHANDLED	0

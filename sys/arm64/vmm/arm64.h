@@ -31,8 +31,8 @@
 #include <machine/hypervisor.h>
 
 #include "mmu.h"
-#include "vgic_v3.h"
-#include "vtimer.h"
+#include "io/vgic_v3.h"
+#include "io/vtimer.h"
 
 struct hypctx {
 	struct reg	regs;
@@ -85,8 +85,8 @@ struct hypctx {
 struct hyp {
 	pmap_t		stage2_map;
 	struct hypctx	ctx[VM_MAXCPU];
-	struct vgic_v3_dist	vgic_dist;
 	struct vgic_mmio_region	*vgic_mmio_regions;
+	struct vgic_v3_dist	vgic_dist;
 	struct vm	*vm;
 	struct vtimer	vtimer;
 	uint64_t	vmid_generation;

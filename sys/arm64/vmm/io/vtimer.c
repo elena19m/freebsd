@@ -35,15 +35,13 @@
 #include <sys/timetc.h>
 #include <sys/taskqueue.h>
 
-#include "vmm.h"
+#include <machine/vmm.h>
+#include <arm64/vmm/arm64.h>
+
 #include "vgic_v3.h"
-#include "arm64.h"
 #include "vtimer.h"
 #include "reg_emul.h"
 
-#define	USECS_PER_SEC	1000000
-
-#define	IRQ_LEVEL	1
 #define	RES1		0xffffffffffffffffUL
 
 #define vtimer_enabled(ctl)	\

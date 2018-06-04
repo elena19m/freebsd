@@ -56,11 +56,12 @@
 #include <arm64/arm64/gic_v3_reg.h>
 #include <arm64/arm64/gic_v3_var.h>
 
-#include "hyp.h"
-#include "mmu.h"
+#include <arm64/vmm/hyp.h>
+#include <arm64/vmm/mmu.h>
+#include <arm64/vmm/arm64.h>
+
 #include "vgic_v3.h"
 #include "vgic_v3_reg.h"
-#include "arm64.h"
 
 #define VGIC_V3_DEVNAME		"vgic"
 #define VGIC_V3_DEVSTR		"ARM Virtual Generic Interrupt Controller v3"
