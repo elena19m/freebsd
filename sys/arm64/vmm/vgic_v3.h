@@ -101,8 +101,8 @@ struct hyp;
 struct vgic_v3_dist {
 	struct mtx dist_lock;
 
-	uint64_t 	ipa;
-	size_t   	size;
+	uint64_t 	start;
+	size_t   	end;
 	size_t		nirqs;
 
 	uint32_t 	gicd_ctlr;	/* Distributor Control Register */
@@ -121,8 +121,8 @@ struct vgic_v3_dist {
 };
 
 struct vgic_v3_redist {
-	uint64_t 	ipa;
-	size_t 	 	size;
+	uint64_t 	start;
+	uint64_t 	end;
 
 	uint64_t	gicr_typer;	/* Redistributor Type Register */
 	uint32_t	gicr_ctlr;	/* Redistributor Control Regiser */
@@ -170,8 +170,8 @@ struct vgic_v3_cpu_if {
 	size_t		pending_num;
 };
 
-int 	vgic_v3_attach_to_vm(void *arg, uint64_t dist_ipa, size_t dist_size,
-			     uint64_t redist_ipa, size_t redist_size);
+int 	vgic_v3_attach_to_vm(void *arg, uint64_t dist_start, size_t dist_size,
+			     uint64_t redist_start, size_t redist_size);
 void	vgic_v3_init(uint64_t ich_vtr_el2);
 void	vgic_v3_vminit(void *arg);
 void	vgic_v3_cpuinit(void *arg, bool last_vcpu);

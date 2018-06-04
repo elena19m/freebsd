@@ -318,8 +318,8 @@ redist_mmio_init(struct hypctx *hypctx)
 
 #define	init_mmio_region(addr, frame, num, regbits, shortname)		\
 	hyp->vgic_mmio_regions[VGIC_ ##addr] = (struct vgic_mmio_region){ \
-		.start 	= redist->ipa + frame + addr,			\
-		.end 	= redist->ipa + frame + addr + num * (regbits / 8), \
+		.start 	= redist->start + frame + addr,			\
+		.end 	= redist->start + frame + addr + num * (regbits / 8), \
 		.read 	= redist_ ##shortname ##_read,			\
 		.write 	= redist_ ##shortname ##_write,			\
 	}
@@ -333,8 +333,8 @@ redist_mmio_init(struct hypctx *hypctx)
 
 #define	init_mmio_region_base(addr, frame, num, regbits, shortname)	\
 	hyp->vgic_mmio_regions[VGIC_ ##addr] = (struct vgic_mmio_region){ \
-		.start 	= redist->ipa + frame + addr ##_BASE,		\
-		.end 	= redist->ipa + frame + addr ##_BASE + num * (regbits / 8), \
+		.start 	= redist->start + frame + addr ##_BASE,		\
+		.end 	= redist->start + frame + addr ##_BASE + num * (regbits / 8), \
 		.read 	= redist_ ##shortname ##_read,			\
 		.write 	= redist_ ##shortname ##_write,			\
 	}
