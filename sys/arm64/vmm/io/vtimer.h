@@ -29,10 +29,6 @@
 #ifndef _VMM_VTIMER_H_
 #define _VMM_VTIMER_H_
 
-#include <sys/taskqueue.h>
-
-#include <machine/vmm_instruction_emul.h>
-
 struct vtimer
 {
 	uint64_t	cnthctl_el2;

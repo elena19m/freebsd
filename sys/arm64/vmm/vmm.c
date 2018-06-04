@@ -62,8 +62,9 @@
 #include "vmm_mem.h"
 #include "mmu.h"
 #include "arm64.h"
-#include "vgic_v3.h"
-#include "vtimer.h"
+
+#include "io/vgic_v3.h"
+#include "io/vtimer.h"
 
 #define	BSP	0			/* the boostrap processor */
 

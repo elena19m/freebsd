@@ -1,8 +1,8 @@
 #include <machine/vmm.h>
 #include <machine/vmm_instruction_emul.h>
+#include <arm64/vmm/arm64.h>
 
-#include "../vgic_v3.h"
-#include "../arm64.h"
+#include "vgic_v3.h"
 
 enum access_type {
 	READ,
