@@ -337,6 +337,9 @@ vm_handle_reg_emul(struct vm *vm, int vcpuid, bool *retu)
 	struct hyp *hyp;
 	struct vm_exit *vme;
 	struct vre *vre;
+	reg_read_t rread;
+	reg_write_t rwrite;
+	uint32_t iss_reg;
 	int error;
 
 	hyp = (struct hyp *)vm->cookie;
@@ -346,8 +349,25 @@ vm_handle_reg_emul(struct vm *vm, int vcpuid, bool *retu)
 	vme = vm_exitinfo(vm, vcpuid);
 	vre = &vme->u.reg_emul.vre;
 
-	error = vmm_emulate_register(vm, vcpuid, vre, vtimer_read_reg,
-	    vtimer_write_reg, retu);
+	iss_reg = vre->inst_syndrome & ISS_MSR_REG_MASK;
+	switch (iss_reg) {
+	case ISS_CNTP_CTL_EL0:
+		rread = vtimer_phys_ctl_read;
+		rwrite = vtimer_phys_ctl_write;
+		break;
+	case ISS_CNTP_CVAL_EL0:
+		rread = vtimer_phys_cval_read;
+		rwrite = vtimer_phys_cval_write;
+		break;
+	case ISS_CNTP_TVAL_EL0:
+		rread = vtimer_phys_tval_read;
+		rwrite = vtimer_phys_tval_write;
+		break;
+	default:
+		goto out_user;
+	}
+
+	error = vmm_emulate_register(vm, vcpuid, vre, rread, rwrite, retu);
 
 	return (error);
 

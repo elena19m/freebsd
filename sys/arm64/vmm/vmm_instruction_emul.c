@@ -80,7 +80,7 @@ vmm_emulate_register(void *vm, int vcpuid, struct vre *vre, reg_read_t regread,
 	int error;
 
 	if (vre->dir == VM_DIR_READ) {
-		error = regread(vm, vcpuid, &val, vre->inst_syndrome, regarg);
+		error = regread(vm, vcpuid, &val, regarg);
 		if (error)
 			goto out;
 		error = vm_set_register(vm, vcpuid, vre->reg, val);
@@ -88,7 +88,7 @@ vmm_emulate_register(void *vm, int vcpuid, struct vre *vre, reg_read_t regread,
 		error = vm_get_register(vm, vcpuid, vre->reg, &val);
 		if (error)
 			goto out;
-		error = regwrite(vm, vcpuid, val, vre->inst_syndrome, regarg);
+		error = regwrite(vm, vcpuid, val, regarg);
 	}
 
 out:

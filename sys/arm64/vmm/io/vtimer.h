@@ -29,6 +29,42 @@
 #ifndef _VMM_VTIMER_H_
 #define _VMM_VTIMER_H_
 
+#define	CNTP_CTL_EL0_OP0	0b11
+#define	CNTP_CTL_EL0_OP2	0b001
+#define	CNTP_CTL_EL0_OP1	0b011
+#define	CNTP_CTL_EL0_CRn	0b1110
+#define	CNTP_CTL_EL0_CRm	0b0010
+#define	ISS_CNTP_CTL_EL0	\
+    (CNTP_CTL_EL0_OP0 << ISS_MSR_OP0_SHIFT | 	\
+     CNTP_CTL_EL0_OP2 << ISS_MSR_OP2_SHIFT |	\
+     CNTP_CTL_EL0_OP1 << ISS_MSR_OP1_SHIFT | 	\
+     CNTP_CTL_EL0_CRn << ISS_MSR_CRn_SHIFT |	\
+     CNTP_CTL_EL0_CRm << ISS_MSR_CRm_SHIFT)
+
+#define	CNTP_CVAL_EL0_OP0	0b11
+#define	CNTP_CVAL_EL0_OP1	0b011
+#define	CNTP_CVAL_EL0_OP2	0b010
+#define	CNTP_CVAL_EL0_CRn	0b1110
+#define	CNTP_CVAL_EL0_CRm	0b0010
+#define	ISS_CNTP_CVAL_EL0	\
+    (CNTP_CVAL_EL0_OP0 << ISS_MSR_OP0_SHIFT | 	\
+     CNTP_CVAL_EL0_OP2 << ISS_MSR_OP2_SHIFT |	\
+     CNTP_CVAL_EL0_OP1 << ISS_MSR_OP1_SHIFT | 	\
+     CNTP_CVAL_EL0_CRn << ISS_MSR_CRn_SHIFT |	\
+     CNTP_CVAL_EL0_CRm << ISS_MSR_CRm_SHIFT)
+
+#define	CNTP_TVAL_EL0_OP0	0b11
+#define	CNTP_TVAL_EL0_OP1	0b011
+#define	CNTP_TVAL_EL0_OP2	0b000
+#define	CNTP_TVAL_EL0_CRn	0b1110
+#define	CNTP_TVAL_EL0_CRm	0b0010
+#define	ISS_CNTP_TVAL_EL0	\
+    (CNTP_TVAL_EL0_OP0 << ISS_MSR_OP0_SHIFT | 	\
+     CNTP_TVAL_EL0_OP2 << ISS_MSR_OP2_SHIFT |	\
+     CNTP_TVAL_EL0_OP1 << ISS_MSR_OP1_SHIFT | 	\
+     CNTP_TVAL_EL0_CRn << ISS_MSR_CRn_SHIFT |	\
+     CNTP_TVAL_EL0_CRm << ISS_MSR_CRm_SHIFT)
+
 struct vtimer
 {
 	uint64_t	cnthctl_el2;
@@ -53,9 +89,11 @@ int 	vtimer_init(uint64_t cnthctl_el2);
 void 	vtimer_vminit(void *arg);
 void 	vtimer_cpuinit(void *arg);
 
-int 	vtimer_read_reg(void *vm, int vcpuid, uint64_t *rval,
-			uint32_t inst_syndrome, void *arg);
-int 	vtimer_write_reg(void *vm, int vcpuid, uint64_t wval,
-			 uint32_t inst_syndrome, void *arg);
+int 	vtimer_phys_ctl_read(void *vm, int vcpuid, uint64_t *rval, void *arg);
+int 	vtimer_phys_ctl_write(void *vm, int vcpuid, uint64_t wval, void *arg);
+int 	vtimer_phys_cval_read(void *vm, int vcpuid, uint64_t *rval, void *arg);
+int 	vtimer_phys_cval_write(void *vm, int vcpuid, uint64_t wval, void *arg);
+int 	vtimer_phys_tval_read(void *vm, int vcpuid, uint64_t *rval, void *arg);
+int 	vtimer_phys_tval_write(void *vm, int vcpuid, uint64_t wval, void *arg);
 
 #endif
