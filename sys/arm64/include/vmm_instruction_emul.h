@@ -38,10 +38,8 @@ typedef int (*mem_region_write_t)(void *vm, int cpuid, uint64_t gpa,
 /*
  * Callback functions to read and write registers.
  */
-typedef int (*reg_read_t)(void *vm, int cpuid, uint64_t *rval,
-			  uint32_t inst_syndrome, void *arg);
-typedef int (*reg_write_t)(void *vm, int cpuid, uint64_t wval,
-			   uint32_t inst_syndrome, void *arg);
+typedef int (*reg_read_t)(void *vm, int cpuid, uint64_t *rval, void *arg);
+typedef int (*reg_write_t)(void *vm, int cpuid, uint64_t wval, void *arg);
 
 /*
  * Emulate the decoded 'vie' instruction when it contains a memory operation.

@@ -36,11 +36,11 @@
 #include <sys/taskqueue.h>
 
 #include <machine/vmm.h>
+#include <machine/armreg.h>
 #include <arm64/vmm/arm64.h>
 
 #include "vgic_v3.h"
 #include "vtimer.h"
-#include "reg_emul.h"
 
 #define	RES1		0xffffffffffffffffUL
 
@@ -161,58 +161,23 @@ vtimer_cpuinit(void *arg)
 	callout_init(&vtimer_cpu->callout, 1);
 }
 
-int
-vtimer_read_reg(void *vm, int vcpuid, uint64_t *rval, uint32_t inst_syndrome,
-    void *arg)
+static void
+vtimer_schedule_irq(struct vtimer_cpu *vtimer_cpu, struct hypctx *hypctx)
 {
-	struct hyp *hyp;
-	struct vtimer_cpu *vtimer_cpu;
+	sbintime_t time;
 	uint64_t cntpct_el0;
-	bool *retu;
+	uint64_t diff;
 
-	retu = (bool *)arg;
-	hyp = vm_get_cookie(vm);
-	vtimer_cpu = &hyp->ctx[vcpuid].vtimer_cpu;
-
-	if (ISS_MATCH_REG(CNTP_CTL_EL0, inst_syndrome)) {
-		cntpct_el0 = vtimer_read_pct();
-		if (vtimer_cpu->cntp_cval_el0 < cntpct_el0)
-			/* Timer condition met */
-			*rval = vtimer_cpu->cntp_ctl_el0 | CNTP_CTL_ISTATUS;
-		else
-			*rval = vtimer_cpu->cntp_ctl_el0;
-
-	} else if (ISS_MATCH_REG(CNTP_CVAL_EL0, inst_syndrome)) {
-		*rval = vtimer_cpu->cntp_cval_el0;
-
-	} else if (ISS_MATCH_REG(CNTP_TVAL_EL0, inst_syndrome)) {
-		if (!(vtimer_cpu->cntp_ctl_el0 & CNTP_CTL_ENABLE)) {
-			/*
-			 * ARMv8 Architecture Manual, p. D7-2702: the result of
-			 * reading TVAL when the timer is disabled is UNKNOWN. I
-			 * have chosen to return the maximum value possible on
-			 * 32 bits which means the timer will fire very far into
-			 * the future.
-			 */
-			*rval = (uint32_t)RES1;
-		} else {
-			cntpct_el0 = vtimer_read_pct();
-			*rval = vtimer_cpu->cntp_cval_el0 - cntpct_el0;
-		}
-
+	cntpct_el0 = vtimer_read_pct();
+	if (vtimer_cpu->cntp_cval_el0 < cntpct_el0) {
+		/* Timer set in the past, trigger interrupt */
+		vtimer_inject_irq(hypctx);
 	} else {
-		eprintf("Uknown register\n");
-		*rval = 0;
-		goto out_user;
+		diff = vtimer_cpu->cntp_cval_el0 - cntpct_el0;
+		time = diff * SBT_1S / arm_tmr_timecount.tc_frequency;
+		callout_reset_sbt(&vtimer_cpu->callout, time, 0,
+		    vtimer_inject_irq_callout_func, hypctx, 0);
 	}
-
-	*retu = false;
-	return (0);
-
-out_user:
-	eprintf("Exiting to user\n");
-	*retu = true;
-	return (0);
 }
 
 static void
@@ -237,69 +202,149 @@ vtimer_deactivate_irq(struct hypctx *hypctx)
 }
 
 int
-vtimer_write_reg(void *vm, int vcpuid, uint64_t wval, uint32_t inst_syndrome,
-    void *arg)
+vtimer_phys_ctl_read(void *vm, int vcpuid, uint64_t *rval, void *arg)
+{
+	struct hyp *hyp;
+	struct vtimer_cpu *vtimer_cpu;
+	uint64_t cntpct_el0;
+	bool *retu = arg;
+
+	hyp = vm_get_cookie(vm);
+	vtimer_cpu = &hyp->ctx[vcpuid].vtimer_cpu;
+
+	cntpct_el0 = vtimer_read_pct();
+	if (vtimer_cpu->cntp_cval_el0 < cntpct_el0)
+		/* Timer condition met */
+		*rval = vtimer_cpu->cntp_ctl_el0 | CNTP_CTL_ISTATUS;
+	else
+		*rval = vtimer_cpu->cntp_ctl_el0 & ~CNTP_CTL_ISTATUS;
+
+	*retu = false;
+	return (0);
+}
+
+int
+vtimer_phys_ctl_write(void *vm, int vcpuid, uint64_t wval, void *arg)
 {
 	struct hyp *hyp;
 	struct hypctx *hypctx;
 	struct vtimer_cpu *vtimer_cpu;
-	uint64_t cntpct_el0, ctl_el0, diff;
-	sbintime_t time;
-	bool int_toggled_on, int_toggled_off, cval_changed;
-	bool *retu;
+	uint64_t ctl_el0;
+	bool timer_toggled_on, timer_toggled_off;
+	bool *retu = arg;
 
-	retu = (bool *)arg;
 	hyp = vm_get_cookie(vm);
 	hypctx = &hyp->ctx[vcpuid];
 	vtimer_cpu = &hypctx->vtimer_cpu;
 
-	int_toggled_on = int_toggled_off = cval_changed = false;
+	timer_toggled_on = timer_toggled_off = false;
 	ctl_el0 = vtimer_cpu->cntp_ctl_el0;
 
-	if (ISS_MATCH_REG(CNTP_CTL_EL0, inst_syndrome)) {
-		if (!vtimer_enabled(ctl_el0) && vtimer_enabled(wval))
-			int_toggled_on = true;
-		if (vtimer_enabled(ctl_el0) && !vtimer_enabled(wval))
-			int_toggled_off = true;
-		/* ISTATUS will be set on read when timer condition is met */
-		vtimer_cpu->cntp_ctl_el0 = wval & ~CNTP_CTL_ISTATUS;
+	if (!vtimer_enabled(ctl_el0) && vtimer_enabled(wval))
+		timer_toggled_on = true;
+	if (vtimer_enabled(ctl_el0) && !vtimer_enabled(wval))
+		timer_toggled_off = true;
 
-	} else if (ISS_MATCH_REG(CNTP_CVAL_EL0, inst_syndrome)) {
-		cval_changed = true;
-		vtimer_cpu->cntp_cval_el0 = wval;
+	vtimer_cpu->cntp_ctl_el0 = wval;
 
-	} else if (ISS_MATCH_REG(CNTP_TVAL_EL0, inst_syndrome)) {
-		cval_changed = true;
-		cntpct_el0 = vtimer_read_pct();
-		vtimer_cpu->cntp_cval_el0 = (int32_t)wval + cntpct_el0;
-
-	} else {
-		eprintf("Uknown register\n");
-		goto out_user;
-	}
-
-	if (int_toggled_on || (cval_changed && vtimer_enabled(ctl_el0))) {
-		if (cval_changed)
-			vtimer_deactivate_irq(hypctx);
-		cntpct_el0 = vtimer_read_pct();
-		if (vtimer_cpu->cntp_cval_el0 < cntpct_el0) {
-			vtimer_inject_irq(hypctx);
-		} else {
-			diff = vtimer_cpu->cntp_cval_el0 - cntpct_el0;
-			time = diff * SBT_1S / arm_tmr_timecount.tc_frequency;
-			callout_reset_sbt(&vtimer_cpu->callout, time, 0,
-			    vtimer_inject_irq_callout_func, hypctx, 0);
-		}
-	} else if (int_toggled_off) {
+	if (timer_toggled_on)
+		vtimer_schedule_irq(vtimer_cpu, hypctx);
+	else if (timer_toggled_off)
 		vtimer_deactivate_irq(hypctx);
-		//eprintf("Interrupts toggled OFF\n");
+
+	*retu = false;
+	return (0);
+}
+
+int
+vtimer_phys_cval_read(void *vm, int vcpuid, uint64_t *rval, void *arg)
+{
+	struct hyp *hyp;
+	struct vtimer_cpu *vtimer_cpu;
+	bool *retu = arg;
+
+	hyp = vm_get_cookie(vm);
+	vtimer_cpu = &hyp->ctx[vcpuid].vtimer_cpu;
+
+	*rval = vtimer_cpu->cntp_cval_el0;
+
+	*retu = false;
+	return (0);
+}
+
+int
+vtimer_phys_cval_write(void *vm, int vcpuid, uint64_t wval, void *arg)
+{
+	struct hyp *hyp;
+	struct hypctx *hypctx;
+	struct vtimer_cpu *vtimer_cpu;
+	bool *retu = arg;
+
+	hyp = vm_get_cookie(vm);
+	hypctx = &hyp->ctx[vcpuid];
+	vtimer_cpu = &hypctx->vtimer_cpu;
+
+	vtimer_cpu->cntp_cval_el0 = wval;
+
+	if (vtimer_enabled(vtimer_cpu->cntp_ctl_el0)) {
+		vtimer_deactivate_irq(hypctx);
+		vtimer_schedule_irq(vtimer_cpu, hypctx);
 	}
 
 	*retu = false;
 	return (0);
+}
 
-out_user:
-	eprintf("Exiting to user\n");
-	*retu = true;
+int
+vtimer_phys_tval_read(void *vm, int vcpuid, uint64_t *rval, void *arg)
+{
+	struct hyp *hyp;
+	struct vtimer_cpu *vtimer_cpu;
+	uint32_t cntpct_el0;
+	bool *retu = arg;
+
+	hyp = vm_get_cookie(vm);
+	vtimer_cpu = &hyp->ctx[vcpuid].vtimer_cpu;
+
+	cntpct_el0 = vtimer_read_pct();
+	if (!(vtimer_cpu->cntp_ctl_el0 & CNTP_CTL_ENABLE)) {
+		/*
+		 * ARMv8 Architecture Manual, p. D7-2702: the result of reading
+		 * TVAL when the timer is disabled is UNKNOWN. I have chosen to
+		 * return the maximum value possible on 32 bits which means the
+		 * timer will fire very far into the future.
+		 */
+		*rval = (uint32_t)RES1;
+	} else {
+		cntpct_el0 = vtimer_read_pct();
+		*rval = vtimer_cpu->cntp_cval_el0 - cntpct_el0;
+	}
+
+	*retu = false;
+	return (0);
+}
+
+int
+vtimer_phys_tval_write(void *vm, int vcpuid, uint64_t wval, void *arg)
+{
+	struct hyp *hyp;
+	struct hypctx *hypctx;
+	struct vtimer_cpu *vtimer_cpu;
+	uint64_t cntpct_el0;
+	bool *retu = arg;
+
+	hyp = vm_get_cookie(vm);
+	hypctx = &hyp->ctx[vcpuid];
+	vtimer_cpu = &hypctx->vtimer_cpu;
+
+	cntpct_el0 = vtimer_read_pct();
+	vtimer_cpu->cntp_cval_el0 = (int32_t)wval + cntpct_el0;
+
+	if (vtimer_enabled(vtimer_cpu->cntp_ctl_el0)) {
+		vtimer_deactivate_irq(hypctx);
+		vtimer_schedule_irq(vtimer_cpu, hypctx);
+	}
+
+	*retu = false;
 	return (0);
 }
