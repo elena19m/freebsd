@@ -77,8 +77,7 @@ struct hypctx {
 	struct vgic_v3_cpu_if	vgic_cpu_if;
 	struct vgic_v3_redist	vgic_redist;
 #ifdef VFP
-	struct vfpstate host_vfp_state;
-	struct vfpstate guest_vfp_state;
+	struct vfpstate	vfpstate;
 #endif
 };
 

@@ -207,6 +207,14 @@ hyp_vectors:
 .macro do_world_switch_to_host
 	.align 	7
 	SAVE_GUEST_REGS()
+#ifdef VFP
+	/*
+	 * Saving the guest VFP registers needs to come after saving the rest of
+	 * the registers because the process dirties the regular registers.
+	 */
+	SAVE_GUEST_VFP_REGS()
+	LOAD_HOST_VFP_REGS()
+#endif
 	LOAD_HOST_REGS()
 	SAVE_EXIT_INFO()
 
@@ -350,6 +358,15 @@ ENTRY(vmm_enter_guest)
 	msr	tpidr_el2, x0
 
 	SAVE_HOST_REGS()
+#ifdef VFP
+	SAVE_HOST_VFP_REGS()
+	/*
+	 * Loading the guest VFP registers needs to come before loading the
+ 	 * rest of the registers because this process dirties the regular
+	 * registers.
+ 	 */
+	LOAD_GUEST_VFP_REGS()
+#endif
 	LOAD_GUEST_REGS()
 
 	/* Enter guest */

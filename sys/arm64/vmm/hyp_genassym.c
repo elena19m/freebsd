@@ -122,6 +122,40 @@ ASSYM(HYPCTX_VTIMER_CPU_CNTP_CTL_EL0, offsetof(struct hypctx, vtimer_cpu.cntp_ct
 ASSYM(HYPCTX_VTIMER_CPU_CNTP_CVAL_EL0, offsetof(struct hypctx, vtimer_cpu.cntp_cval_el0));
 
 #ifdef VFP
-ASSYM(HYPCTX_HOST_VFP_STATE, offsetof(struct hypctx, host_vfp_state));
-ASSYM(HYPCTX_GUEST_VFP_STATE, offsetof(struct hypctx, guest_vfp_state));
+ASSYM(HYPCTX_VFPSTATE_Q0, offsetof(struct hypctx, vfpstate.vfp_regs) + 0 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q1, offsetof(struct hypctx, vfpstate.vfp_regs) + 1 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q2, offsetof(struct hypctx, vfpstate.vfp_regs) + 2 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q3, offsetof(struct hypctx, vfpstate.vfp_regs) + 3 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q4, offsetof(struct hypctx, vfpstate.vfp_regs) + 4 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q5, offsetof(struct hypctx, vfpstate.vfp_regs) + 5 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q6, offsetof(struct hypctx, vfpstate.vfp_regs) + 6 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q7, offsetof(struct hypctx, vfpstate.vfp_regs) + 7 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q8, offsetof(struct hypctx, vfpstate.vfp_regs) + 8 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q9, offsetof(struct hypctx, vfpstate.vfp_regs) + 9 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q10, offsetof(struct hypctx, vfpstate.vfp_regs) + 10 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q11, offsetof(struct hypctx, vfpstate.vfp_regs) + 11 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q12, offsetof(struct hypctx, vfpstate.vfp_regs) + 12 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q13, offsetof(struct hypctx, vfpstate.vfp_regs) + 13 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q14, offsetof(struct hypctx, vfpstate.vfp_regs) + 14 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q15, offsetof(struct hypctx, vfpstate.vfp_regs) + 15 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q16, offsetof(struct hypctx, vfpstate.vfp_regs) + 16 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q17, offsetof(struct hypctx, vfpstate.vfp_regs) + 17 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q18, offsetof(struct hypctx, vfpstate.vfp_regs) + 18 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q19, offsetof(struct hypctx, vfpstate.vfp_regs) + 19 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q20, offsetof(struct hypctx, vfpstate.vfp_regs) + 20 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q21, offsetof(struct hypctx, vfpstate.vfp_regs) + 21 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q22, offsetof(struct hypctx, vfpstate.vfp_regs) + 22 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q23, offsetof(struct hypctx, vfpstate.vfp_regs) + 23 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q24, offsetof(struct hypctx, vfpstate.vfp_regs) + 24 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q25, offsetof(struct hypctx, vfpstate.vfp_regs) + 25 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q26, offsetof(struct hypctx, vfpstate.vfp_regs) + 26 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q27, offsetof(struct hypctx, vfpstate.vfp_regs) + 27 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q28, offsetof(struct hypctx, vfpstate.vfp_regs) + 28 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q29, offsetof(struct hypctx, vfpstate.vfp_regs) + 29 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q30, offsetof(struct hypctx, vfpstate.vfp_regs) + 30 * 16);
+ASSYM(HYPCTX_VFPSTATE_Q31, offsetof(struct hypctx, vfpstate.vfp_regs) + 31 * 16);
+
+
+ASSYM(HYPCTX_VFPSTATE_FPCR, offsetof(struct hypctx, vfpstate.vfp_fpcr));
+ASSYM(HYPCTX_VFPSTATE_FPSR, offsetof(struct hypctx, vfpstate.vfp_fpsr));
 #endif

@@ -79,11 +79,50 @@
 	PUSH_SYS_REG_PAIR(CNTV_CTL_EL0, CNTV_CVAL_EL0);	\
 	PUSH_SYS_REG(CNTHCTL_EL2);
 
+#define	SAVE_HOST_VFP_REGS()				\
+	stp	q0, q1, [sp, #-16 * 2]!;		\
+	stp	q2, q3, [sp, #-16 * 2]!;		\
+	stp	q4, q5, [sp, #-16 * 2]!;		\
+	stp	q6, q7, [sp, #-16 * 2]!;		\
+	stp	q8, q9, [sp, #-16 * 2]!;		\
+	stp	q10, q11, [sp, #-16 * 2]!;		\
+	stp	q12, q13, [sp, #-16 * 2]!;		\
+	stp	q14, q15, [sp, #-16 * 2]!;		\
+	stp	q16, q17, [sp, #-16 * 2]!;		\
+	stp	q18, q19, [sp, #-16 * 2]!;		\
+	stp	q20, q21, [sp, #-16 * 2]!;		\
+	stp	q22, q23, [sp, #-16 * 2]!;		\
+	stp	q24, q25, [sp, #-16 * 2]!;		\
+	stp	q26, q27, [sp, #-16 * 2]!;		\
+	stp	q28, q29, [sp, #-16 * 2]!;		\
+	stp	q30, q31, [sp, #-16 * 2]!;		\
+	PUSH_SYS_REG_PAIR(FPCR, FPSR);
+
 
 #define POP_SYS_REG_PAIR(reg0, reg1)			\
 	ldp	x2, x1, [sp], #16;			\
 	msr	reg1, x2;				\
 	msr	reg0, x1;
+
+
+#define LOAD_HOST_VFP_REGS()				\
+	POP_SYS_REG_PAIR(FPCR, FPSR);			\
+	ldp	q30, q31, [sp], #16 * 2;		\
+	ldp	q28, q29, [sp], #16 * 2;		\
+	ldp	q26, q27, [sp], #16 * 2;		\
+	ldp	q24, q25, [sp], #16 * 2;		\
+	ldp	q22, q23, [sp], #16 * 2;		\
+	ldp	q20, q21, [sp], #16 * 2;		\
+	ldp	q18, q19, [sp], #16 * 2;		\
+	ldp	q16, q17, [sp], #16 * 2;		\
+	ldp	q14, q15, [sp], #16 * 2;		\
+	ldp	q12, q13, [sp], #16 * 2;		\
+	ldp	q10, q11, [sp], #16 * 2;		\
+	ldp	q8, q9, [sp], #16 * 2;			\
+	ldp	q6, q7, [sp], #16 * 2;			\
+	ldp	q4, q5, [sp], #16 * 2;			\
+	ldp	q2, q3, [sp], #16 * 2;			\
+	ldp	q0, q1, [sp], #16 * 2;			\
 
 
 #define POP_SYS_REG(reg)				\
@@ -209,8 +248,8 @@
 	str	x1, [x0, x2];
 
 
-#define	SAVE_REG(reg)					\
-	mov	x1, #HYPCTX_REGS_##reg;			\
+#define	SAVE_REG(prefix, reg)				\
+	mov	x1, prefix ##_ ##reg;			\
 	str	reg, [x0, x1];
 
 
@@ -225,8 +264,8 @@
  * stored in contiguous memory addresses.
  */
 
-#define	SAVE_REG_PAIR(reg0, reg1)			\
-	mov	x1, #HYPCTX_REGS_##reg0;		\
+#define	SAVE_REG_PAIR(prefix, reg0, reg1)		\
+	mov	x1, prefix ##_ ##reg0;			\
 	add	x1, x0, x1;				\
 	stp	reg0, reg1, [x1];
 
@@ -247,21 +286,21 @@
 	stp	x1, x2, [sp, #-16]!;			\
 							\
 	/* Save the other registers */			\
-	SAVE_REG_PAIR(X3, X4);				\
-	SAVE_REG_PAIR(X5, X6);				\
-	SAVE_REG_PAIR(X7, X8);				\
-	SAVE_REG_PAIR(X9, X10);				\
-	SAVE_REG_PAIR(X11, X12);			\
-	SAVE_REG_PAIR(X13, X14);			\
-	SAVE_REG_PAIR(X15, X16);			\
-	SAVE_REG_PAIR(X17, X18);			\
-	SAVE_REG_PAIR(X19, X20);			\
-	SAVE_REG_PAIR(X21, X22);			\
-	SAVE_REG_PAIR(X23, X24);			\
-	SAVE_REG_PAIR(X25, X26);			\
-	SAVE_REG_PAIR(X27, X28);			\
-	SAVE_REG(X29);					\
-	SAVE_REG(LR);					\
+	SAVE_REG_PAIR(HYPCTX_REGS, X3, X4);		\
+	SAVE_REG_PAIR(HYPCTX_REGS, X5, X6);		\
+	SAVE_REG_PAIR(HYPCTX_REGS, X7, X8);		\
+	SAVE_REG_PAIR(HYPCTX_REGS, X9, X10);		\
+	SAVE_REG_PAIR(HYPCTX_REGS, X11, X12);		\
+	SAVE_REG_PAIR(HYPCTX_REGS, X13, X14);		\
+	SAVE_REG_PAIR(HYPCTX_REGS, X15, X16);		\
+	SAVE_REG_PAIR(HYPCTX_REGS, X17, X18);		\
+	SAVE_REG_PAIR(HYPCTX_REGS, X19, X20);		\
+	SAVE_REG_PAIR(HYPCTX_REGS, X21, X22);		\
+	SAVE_REG_PAIR(HYPCTX_REGS, X23, X24);		\
+	SAVE_REG_PAIR(HYPCTX_REGS, X25, X26);		\
+	SAVE_REG_PAIR(HYPCTX_REGS, X27, X28);		\
+	SAVE_REG(HYPCTX_REGS, X29);			\
+	SAVE_REG(HYPCTX_REGS, LR);			\
 							\
 	/* Pop and save x1 and x2 */			\
 	ldp	x1, x2, [sp], #16;			\
@@ -338,16 +377,60 @@
 	SAVE_SYS_REG(HYPCTX, SPSR_EL2);
 
 
-#define	LOAD_REG(reg)					\
-	mov	x1, #HYPCTX_REGS_##reg;			\
-	ldr	reg, [x0, x1];
+#define	SAVE_GUEST_VFP_REGS()				\
+	SAVE_REG_PAIR(HYPCTX_VFPSTATE, Q0, Q1);		\
+	SAVE_REG_PAIR(HYPCTX_VFPSTATE, Q2, Q3);		\
+	SAVE_REG_PAIR(HYPCTX_VFPSTATE, Q4, Q5);		\
+	SAVE_REG_PAIR(HYPCTX_VFPSTATE, Q6, Q7);		\
+	SAVE_REG_PAIR(HYPCTX_VFPSTATE, Q8, Q9);		\
+	SAVE_REG_PAIR(HYPCTX_VFPSTATE, Q10, Q11);	\
+	SAVE_REG_PAIR(HYPCTX_VFPSTATE, Q12, Q13);	\
+	SAVE_REG_PAIR(HYPCTX_VFPSTATE, Q14, Q15);	\
+	SAVE_REG_PAIR(HYPCTX_VFPSTATE, Q16, Q17);	\
+	SAVE_REG_PAIR(HYPCTX_VFPSTATE, Q18, Q19);	\
+	SAVE_REG_PAIR(HYPCTX_VFPSTATE, Q20, Q21);	\
+	SAVE_REG_PAIR(HYPCTX_VFPSTATE, Q22, Q23);	\
+	SAVE_REG_PAIR(HYPCTX_VFPSTATE, Q24, Q25);	\
+	SAVE_REG_PAIR(HYPCTX_VFPSTATE, Q26, Q27);	\
+	SAVE_REG_PAIR(HYPCTX_VFPSTATE, Q28, Q29);	\
+	SAVE_REG_PAIR(HYPCTX_VFPSTATE, Q30, Q31);	\
+							\
+	SAVE_SYS_REG(HYPCTX_VFPSTATE, FPCR);		\
+	SAVE_SYS_REG(HYPCTX_VFPSTATE, FPSR);
 
 
 /* See SAVE_REG_PAIR */
-#define LOAD_REG_PAIR(reg0, reg1)			\
-	mov	x1, #HYPCTX_REGS_##reg0;		\
+#define LOAD_REG_PAIR(prefix, reg0, reg1)		\
+	mov	x1, prefix ##_ ##reg0;			\
 	add	x1, x0, x1;				\
 	ldp	reg0, reg1, [x1];
+
+
+#define	LOAD_GUEST_VFP_REGS()				\
+	LOAD_REG_PAIR(HYPCTX_VFPSTATE, Q0, Q1);		\
+	LOAD_REG_PAIR(HYPCTX_VFPSTATE, Q2, Q3);		\
+	LOAD_REG_PAIR(HYPCTX_VFPSTATE, Q4, Q5);		\
+	LOAD_REG_PAIR(HYPCTX_VFPSTATE, Q6, Q7);		\
+	LOAD_REG_PAIR(HYPCTX_VFPSTATE, Q8, Q9);		\
+	LOAD_REG_PAIR(HYPCTX_VFPSTATE, Q10, Q11);	\
+	LOAD_REG_PAIR(HYPCTX_VFPSTATE, Q12, Q13);	\
+	LOAD_REG_PAIR(HYPCTX_VFPSTATE, Q14, Q15);	\
+	LOAD_REG_PAIR(HYPCTX_VFPSTATE, Q16, Q17);	\
+	LOAD_REG_PAIR(HYPCTX_VFPSTATE, Q18, Q19);	\
+	LOAD_REG_PAIR(HYPCTX_VFPSTATE, Q20, Q21);	\
+	LOAD_REG_PAIR(HYPCTX_VFPSTATE, Q22, Q23);	\
+	LOAD_REG_PAIR(HYPCTX_VFPSTATE, Q24, Q25);	\
+	LOAD_REG_PAIR(HYPCTX_VFPSTATE, Q26, Q27);	\
+	LOAD_REG_PAIR(HYPCTX_VFPSTATE, Q28, Q29);	\
+	LOAD_REG_PAIR(HYPCTX_VFPSTATE, Q30, Q31);	\
+							\
+	SAVE_SYS_REG(HYPCTX_VFPSTATE, FPCR);		\
+	SAVE_SYS_REG(HYPCTX_VFPSTATE, FPSR);
+
+
+#define	LOAD_REG(prefix, reg)				\
+	mov	x1, prefix ##_ ##reg;			\
+	ldr	reg, [x0, x1];
 
 
 /*
@@ -365,21 +448,21 @@
 	stp	x2, x3, [sp, #-16]!;			\
 							\
 	/* Load the other registers */			\
-	LOAD_REG_PAIR(X2, X3);				\
-	LOAD_REG_PAIR(X4, X5);				\
-	LOAD_REG_PAIR(X6, X7);				\
-	LOAD_REG_PAIR(X8, X9);				\
-	LOAD_REG_PAIR(X10, X11);			\
-	LOAD_REG_PAIR(X12, X13);			\
-	LOAD_REG_PAIR(X14, X15);			\
-	LOAD_REG_PAIR(X16, X17);			\
-	LOAD_REG_PAIR(X18, X19);			\
-	LOAD_REG_PAIR(X20, X21);			\
-	LOAD_REG_PAIR(X22, X23);			\
-	LOAD_REG_PAIR(X24, X25);			\
-	LOAD_REG_PAIR(X26, X27);			\
-	LOAD_REG_PAIR(X28, X29);			\
-	LOAD_REG(LR);					\
+	LOAD_REG_PAIR(HYPCTX_REGS, X2, X3);		\
+	LOAD_REG_PAIR(HYPCTX_REGS, X4, X5);		\
+	LOAD_REG_PAIR(HYPCTX_REGS, X6, X7);		\
+	LOAD_REG_PAIR(HYPCTX_REGS, X8, X9);		\
+	LOAD_REG_PAIR(HYPCTX_REGS, X10, X11);		\
+	LOAD_REG_PAIR(HYPCTX_REGS, X12, X13);		\
+	LOAD_REG_PAIR(HYPCTX_REGS, X14, X15);		\
+	LOAD_REG_PAIR(HYPCTX_REGS, X16, X17);		\
+	LOAD_REG_PAIR(HYPCTX_REGS, X18, X19);		\
+	LOAD_REG_PAIR(HYPCTX_REGS, X20, X21);		\
+	LOAD_REG_PAIR(HYPCTX_REGS, X22, X23);		\
+	LOAD_REG_PAIR(HYPCTX_REGS, X24, X25);		\
+	LOAD_REG_PAIR(HYPCTX_REGS, X26, X27);		\
+	LOAD_REG_PAIR(HYPCTX_REGS, X28, X29);		\
+	LOAD_REG(HYPCTX_REGS, LR);			\
 							\
 	/* Pop guest x0 and x1 from the stack */	\
 	ldp	x0, x1, [sp], #16;			\
