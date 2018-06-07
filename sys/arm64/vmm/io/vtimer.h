@@ -75,7 +75,10 @@ struct vtimer
 struct vtimer_cpu
 {
 	struct callout	callout;
+	uint32_t	cntkctl_el1;
 	/*
+	 * Emulated registers:
+	 *
 	 * CNTP_CTL_EL0:  Counter-timer Physical Timer Control Register
 	 * CNTP_CVAL_EL0: Counter-timer Physical Timer CompareValue Register
 	 */

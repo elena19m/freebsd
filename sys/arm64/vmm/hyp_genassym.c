@@ -118,8 +118,7 @@ ASSYM(HYPCTX_VGIC_ICH_MISR_EL2, offsetof(struct hypctx, vgic_cpu_if.ich_misr_el2
 ASSYM(HYPCTX_VGIC_ICH_VMCR_EL2, offsetof(struct hypctx, vgic_cpu_if.ich_vmcr_el2));
 ASSYM(HYPCTX_VGIC_ICH_LR_EL2, offsetof(struct hypctx, vgic_cpu_if.ich_lr_el2));
 
-ASSYM(HYPCTX_VTIMER_CPU_CNTP_CTL_EL0, offsetof(struct hypctx, vtimer_cpu.cntp_ctl_el0));
-ASSYM(HYPCTX_VTIMER_CPU_CNTP_CVAL_EL0, offsetof(struct hypctx, vtimer_cpu.cntp_cval_el0));
+ASSYM(HYPCTX_VTIMER_CPU_CNTKCTL_EL1, offsetof(struct hypctx, vtimer_cpu.cntkctl_el1));
 
 #ifdef VFP
 ASSYM(HYPCTX_VFPSTATE_Q0, offsetof(struct hypctx, vfpstate.vfp_regs) + 0 * 16);
