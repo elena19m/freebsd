@@ -172,12 +172,12 @@
 	ldp	x0, x1, [sp], #16;			\
 
 
-#define	SAVE_ARRAY_REG(reg, to, remaining)		\
+#define	SAVE_ARRAY_REG64(reg, dest, remaining)		\
 	cmp	remaining, #0;				\
 	beq	9f;					\
 	mrs	x7, reg;				\
-	str	x7, [to];				\
-	add	to, to, #8;				\
+	str	x7, [dest];				\
+	add	dest, dest, #8;				\
 	sub	remaining, remaining, #1;
 
 
@@ -188,24 +188,33 @@
 	/* x1 holds the destination address */		\
 	mov	x1, #HYPCTX_VGIC_ICH_LR_EL2;		\
 	add	x1, x0, x1;				\
-	SAVE_ARRAY_REG(ich_lr0_el2, x1, x3);		\
-	SAVE_ARRAY_REG(ich_lr1_el2, x1, x3);		\
-	SAVE_ARRAY_REG(ich_lr2_el2, x1, x3);		\
-	SAVE_ARRAY_REG(ich_lr3_el2, x1, x3);		\
-	SAVE_ARRAY_REG(ich_lr4_el2, x1, x3);		\
-	SAVE_ARRAY_REG(ich_lr5_el2, x1, x3);		\
-	SAVE_ARRAY_REG(ich_lr6_el2, x1, x3);		\
-	SAVE_ARRAY_REG(ich_lr7_el2, x1, x3);		\
-	SAVE_ARRAY_REG(ich_lr8_el2, x1, x3);		\
-	SAVE_ARRAY_REG(ich_lr9_el2, x1, x3);		\
-	SAVE_ARRAY_REG(ich_lr10_el2, x1, x3);		\
-	SAVE_ARRAY_REG(ich_lr11_el2, x1, x3);		\
-	SAVE_ARRAY_REG(ich_lr12_el2, x1, x3);		\
-	SAVE_ARRAY_REG(ich_lr13_el2, x1, x3);		\
-	SAVE_ARRAY_REG(ich_lr14_el2, x1, x3);		\
-	SAVE_ARRAY_REG(ich_lr15_el2, x1, x3);		\
+	SAVE_ARRAY_REG64(ich_lr0_el2, x1, x3);		\
+	SAVE_ARRAY_REG64(ich_lr1_el2, x1, x3);		\
+	SAVE_ARRAY_REG64(ich_lr2_el2, x1, x3);		\
+	SAVE_ARRAY_REG64(ich_lr3_el2, x1, x3);		\
+	SAVE_ARRAY_REG64(ich_lr4_el2, x1, x3);		\
+	SAVE_ARRAY_REG64(ich_lr5_el2, x1, x3);		\
+	SAVE_ARRAY_REG64(ich_lr6_el2, x1, x3);		\
+	SAVE_ARRAY_REG64(ich_lr7_el2, x1, x3);		\
+	SAVE_ARRAY_REG64(ich_lr8_el2, x1, x3);		\
+	SAVE_ARRAY_REG64(ich_lr9_el2, x1, x3);		\
+	SAVE_ARRAY_REG64(ich_lr10_el2, x1, x3);		\
+	SAVE_ARRAY_REG64(ich_lr11_el2, x1, x3);		\
+	SAVE_ARRAY_REG64(ich_lr12_el2, x1, x3);		\
+	SAVE_ARRAY_REG64(ich_lr13_el2, x1, x3);		\
+	SAVE_ARRAY_REG64(ich_lr14_el2, x1, x3);		\
+	SAVE_ARRAY_REG64(ich_lr15_el2, x1, x3);		\
 9:;							\
 	;
+
+
+#define	SAVE_ARRAY_REG32(reg, dest, remaining)		\
+	cmp	remaining, #0;				\
+	beq	9f;					\
+	mrs	x7, reg;				\
+	str	w7, [dest];				\
+	add	dest, dest, #4;				\
+	sub	remaining, remaining, #1;
 
 
 #define	SAVE_AP0R_REGS()				\
@@ -215,10 +224,10 @@
 	/* x1 holds the destination address */		\
 	mov	x1, #HYPCTX_VGIC_ICH_AP0R_EL2;		\
 	add	x1, x0, x1;				\
-	SAVE_ARRAY_REG(ich_ap0r0_el2, x1, x3);		\
-	SAVE_ARRAY_REG(ich_ap0r1_el2, x1, x3);		\
-	SAVE_ARRAY_REG(ich_ap0r2_el2, x1, x3);		\
-	SAVE_ARRAY_REG(ich_ap0r3_el2, x1, x3);		\
+	SAVE_ARRAY_REG32(ich_ap0r0_el2, x1, x3);	\
+	SAVE_ARRAY_REG32(ich_ap0r1_el2, x1, x3);	\
+	SAVE_ARRAY_REG32(ich_ap0r2_el2, x1, x3);	\
+	SAVE_ARRAY_REG32(ich_ap0r3_el2, x1, x3);	\
 9:;							\
 	;
 
@@ -230,10 +239,10 @@
 	/* x1 holds the destination address */		\
 	mov	x1, #HYPCTX_VGIC_ICH_AP1R_EL2;		\
 	add	x1, x0, x1;				\
-	SAVE_ARRAY_REG(ich_ap1r0_el2, x1, x3);		\
-	SAVE_ARRAY_REG(ich_ap1r1_el2, x1, x3);		\
-	SAVE_ARRAY_REG(ich_ap1r2_el2, x1, x3);		\
-	SAVE_ARRAY_REG(ich_ap1r3_el2, x1, x3);		\
+	SAVE_ARRAY_REG32(ich_ap1r0_el2, x1, x3);	\
+	SAVE_ARRAY_REG32(ich_ap1r1_el2, x1, x3);	\
+	SAVE_ARRAY_REG32(ich_ap1r2_el2, x1, x3);	\
+	SAVE_ARRAY_REG32(ich_ap1r3_el2, x1, x3);	\
 9:;							\
 	;
 
@@ -243,16 +252,21 @@
  * hypctx register offset can be larger than that. To get around this limitation
  * we use a temporary register to hold the offset.
  */
-#define	SAVE_SYS_REG(prefix, reg)			\
+#define	SAVE_SYS_REG64(prefix, reg)			\
 	mrs	x1, reg;				\
 	mov	x2, prefix ##_ ##reg;			\
 	str	x1, [x0, x2];
 
 
+#define	SAVE_SYS_REG32(prefix, reg)			\
+	mrs	x1, reg;				\
+	mov	x2, prefix ##_ ##reg;			\
+	str	w1, [x0, x2];
+
+
 #define	SAVE_REG(prefix, reg)				\
 	mov	x1, prefix ##_ ##reg;			\
 	str	reg, [x0, x1];
-
 
 /*
  * The STP and LDP instructions takes an immediate in the range of [-512, 504]
@@ -329,7 +343,7 @@
 #define	SAVE_GUEST_REGS()				\
 	SAVE_GUEST_X_REGS();				\
 							\
-	SAVE_SYS_REG(HYPCTX_VTIMER_CPU, CNTKCTL_EL1);	\
+	SAVE_SYS_REG32(HYPCTX_VTIMER_CPU, CNTKCTL_EL1);	\
 							\
 	/*						\
  	 * ICH_EISR_EL2, ICH_ELSR_EL2 and ICH_MISR_EL2 are read-only and are \
@@ -337,11 +351,11 @@
 	 * interrupt virtualization process and we need to inspect them in \
 	 * the VGIC driver. \
  	 */						\
-	SAVE_SYS_REG(HYPCTX_VGIC, ICH_EISR_EL2);	\
-	SAVE_SYS_REG(HYPCTX_VGIC, ICH_ELSR_EL2);	\
-	SAVE_SYS_REG(HYPCTX_VGIC, ICH_MISR_EL2);	\
-	SAVE_SYS_REG(HYPCTX_VGIC, ICH_HCR_EL2);		\
-	SAVE_SYS_REG(HYPCTX_VGIC, ICH_VMCR_EL2);	\
+	SAVE_SYS_REG32(HYPCTX_VGIC, ICH_EISR_EL2);	\
+	SAVE_SYS_REG32(HYPCTX_VGIC, ICH_ELSR_EL2);	\
+	SAVE_SYS_REG32(HYPCTX_VGIC, ICH_MISR_EL2);	\
+	SAVE_SYS_REG32(HYPCTX_VGIC, ICH_HCR_EL2);	\
+	SAVE_SYS_REG32(HYPCTX_VGIC, ICH_VMCR_EL2);	\
 							\
 	SAVE_LR_REGS();					\
 	SAVE_AP0R_REGS();				\
@@ -352,32 +366,32 @@
 	mov	x2, #HYPCTX_REGS_SP;			\
 	str	x1, [x0, x2];				\
 							\
-	SAVE_SYS_REG(HYPCTX, ACTLR_EL1);		\
-	SAVE_SYS_REG(HYPCTX, AMAIR_EL1);		\
-	SAVE_SYS_REG(HYPCTX, ELR_EL1);			\
-	SAVE_SYS_REG(HYPCTX, FAR_EL1);			\
-	SAVE_SYS_REG(HYPCTX, MAIR_EL1);			\
-	SAVE_SYS_REG(HYPCTX, PAR_EL1);			\
-	SAVE_SYS_REG(HYPCTX, TCR_EL1);			\
-	SAVE_SYS_REG(HYPCTX, TPIDR_EL1);		\
-	SAVE_SYS_REG(HYPCTX, TTBR0_EL1);		\
-	SAVE_SYS_REG(HYPCTX, TTBR1_EL1);		\
-	SAVE_SYS_REG(HYPCTX, VBAR_EL1);			\
+	SAVE_SYS_REG64(HYPCTX, ACTLR_EL1);		\
+	SAVE_SYS_REG64(HYPCTX, AMAIR_EL1);		\
+	SAVE_SYS_REG64(HYPCTX, ELR_EL1);		\
+	SAVE_SYS_REG64(HYPCTX, FAR_EL1);		\
+	SAVE_SYS_REG64(HYPCTX, MAIR_EL1);		\
+	SAVE_SYS_REG64(HYPCTX, PAR_EL1);		\
+	SAVE_SYS_REG64(HYPCTX, TCR_EL1);		\
+	SAVE_SYS_REG64(HYPCTX, TPIDR_EL1);		\
+	SAVE_SYS_REG64(HYPCTX, TTBR0_EL1);		\
+	SAVE_SYS_REG64(HYPCTX, TTBR1_EL1);		\
+	SAVE_SYS_REG64(HYPCTX, VBAR_EL1);		\
 							\
-	SAVE_SYS_REG(HYPCTX, AFSR0_EL1);		\
-	SAVE_SYS_REG(HYPCTX, AFSR1_EL1);		\
-	SAVE_SYS_REG(HYPCTX, CONTEXTIDR_EL1);		\
-	SAVE_SYS_REG(HYPCTX, CPACR_EL1);		\
-	SAVE_SYS_REG(HYPCTX, ESR_EL1);			\
-	SAVE_SYS_REG(HYPCTX, SCTLR_EL1);		\
-	SAVE_SYS_REG(HYPCTX, SPSR_EL1);			\
+	SAVE_SYS_REG32(HYPCTX, AFSR0_EL1);		\
+	SAVE_SYS_REG32(HYPCTX, AFSR1_EL1);		\
+	SAVE_SYS_REG32(HYPCTX, CONTEXTIDR_EL1);		\
+	SAVE_SYS_REG32(HYPCTX, CPACR_EL1);		\
+	SAVE_SYS_REG32(HYPCTX, ESR_EL1);		\
+	SAVE_SYS_REG32(HYPCTX, SCTLR_EL1);		\
+	SAVE_SYS_REG32(HYPCTX, SPSR_EL1);		\
 							\
-	SAVE_SYS_REG(HYPCTX, ELR_EL2);			\
-	SAVE_SYS_REG(HYPCTX, HCR_EL2);			\
-	SAVE_SYS_REG(HYPCTX, VPIDR_EL2);		\
-	SAVE_SYS_REG(HYPCTX, VMPIDR_EL2);		\
-	SAVE_SYS_REG(HYPCTX, CPTR_EL2);			\
-	SAVE_SYS_REG(HYPCTX, SPSR_EL2);
+	SAVE_SYS_REG64(HYPCTX, ELR_EL2);		\
+	SAVE_SYS_REG64(HYPCTX, HCR_EL2);		\
+	SAVE_SYS_REG64(HYPCTX, VPIDR_EL2);		\
+	SAVE_SYS_REG64(HYPCTX, VMPIDR_EL2);		\
+	SAVE_SYS_REG32(HYPCTX, CPTR_EL2);		\
+	SAVE_SYS_REG32(HYPCTX, SPSR_EL2);
 
 
 #define	SAVE_GUEST_VFP_REGS()				\
@@ -398,8 +412,21 @@
 	SAVE_REG_PAIR(HYPCTX_VFPSTATE, Q28, Q29);	\
 	SAVE_REG_PAIR(HYPCTX_VFPSTATE, Q30, Q31);	\
 							\
-	SAVE_SYS_REG(HYPCTX_VFPSTATE, FPCR);		\
-	SAVE_SYS_REG(HYPCTX_VFPSTATE, FPSR);
+	SAVE_SYS_REG32(HYPCTX_VFPSTATE, FPCR);		\
+	SAVE_SYS_REG32(HYPCTX_VFPSTATE, FPSR);
+
+
+/* See SAVE_SYS_REG */
+#define	LOAD_SYS_REG64(prefix, reg)			\
+	mov	x1, prefix ##_ ##reg;			\
+	ldr	x2, [x0, x1];				\
+	msr	reg, x2;
+
+
+#define	LOAD_SYS_REG32(prefix, reg)			\
+	mov	x1, prefix ##_ ##reg;			\
+	ldr	w2, [x0, x1];				\
+	msr	reg, x2;
 
 
 /* See SAVE_REG_PAIR */
@@ -427,8 +454,8 @@
 	LOAD_REG_PAIR(HYPCTX_VFPSTATE, Q28, Q29);	\
 	LOAD_REG_PAIR(HYPCTX_VFPSTATE, Q30, Q31);	\
 							\
-	SAVE_SYS_REG(HYPCTX_VFPSTATE, FPCR);		\
-	SAVE_SYS_REG(HYPCTX_VFPSTATE, FPSR);
+	LOAD_SYS_REG32(HYPCTX_VFPSTATE, FPCR);		\
+	LOAD_SYS_REG32(HYPCTX_VFPSTATE, FPSR);
 
 
 #define	LOAD_REG(prefix, reg)				\
@@ -471,19 +498,12 @@
 	ldp	x0, x1, [sp], #16;			\
 
 
-/* See SAVE_SYS_REG */
-#define	LOAD_SYS_REG(prefix, reg)			\
-	mov	x1, prefix ##_ ##reg;			\
-	ldr	x2, [x0, x1];				\
-	msr	reg, x2;
-
-
-#define	LOAD_ARRAY_REG(reg, from, remaining)		\
+#define	LOAD_ARRAY_REG64(reg, src, remaining)		\
 	cmp	remaining, #0;				\
 	beq	9f;					\
-	ldr	x2, [from];				\
+	ldr	x2, [src];				\
 	msr	reg, x2;				\
-	add	from, from, #8;				\
+	add	src, src, #8;				\
 	sub	remaining, remaining, #1;
 
 
@@ -494,24 +514,33 @@
 	mov	x1, #HYPCTX_VGIC_ICH_LR_EL2;		\
 	/* x1 holds the load address */			\
 	add	x1, x0, x1;				\
-	LOAD_ARRAY_REG(ich_lr0_el2, x1, x3);		\
-	LOAD_ARRAY_REG(ich_lr1_el2, x1, x3);		\
-	LOAD_ARRAY_REG(ich_lr2_el2, x1, x3);		\
-	LOAD_ARRAY_REG(ich_lr3_el2, x1, x3);		\
-	LOAD_ARRAY_REG(ich_lr4_el2, x1, x3);		\
-	LOAD_ARRAY_REG(ich_lr5_el2, x1, x3);		\
-	LOAD_ARRAY_REG(ich_lr6_el2, x1, x3);		\
-	LOAD_ARRAY_REG(ich_lr7_el2, x1, x3);		\
-	LOAD_ARRAY_REG(ich_lr8_el2, x1, x3);		\
-	LOAD_ARRAY_REG(ich_lr9_el2, x1, x3);		\
-	LOAD_ARRAY_REG(ich_lr10_el2, x1, x3);		\
-	LOAD_ARRAY_REG(ich_lr11_el2, x1, x3);		\
-	LOAD_ARRAY_REG(ich_lr12_el2, x1, x3);		\
-	LOAD_ARRAY_REG(ich_lr13_el2, x1, x3);		\
-	LOAD_ARRAY_REG(ich_lr14_el2, x1, x3);		\
-	LOAD_ARRAY_REG(ich_lr15_el2, x1, x3);		\
+	LOAD_ARRAY_REG64(ich_lr0_el2, x1, x3);		\
+	LOAD_ARRAY_REG64(ich_lr1_el2, x1, x3);		\
+	LOAD_ARRAY_REG64(ich_lr2_el2, x1, x3);		\
+	LOAD_ARRAY_REG64(ich_lr3_el2, x1, x3);		\
+	LOAD_ARRAY_REG64(ich_lr4_el2, x1, x3);		\
+	LOAD_ARRAY_REG64(ich_lr5_el2, x1, x3);		\
+	LOAD_ARRAY_REG64(ich_lr6_el2, x1, x3);		\
+	LOAD_ARRAY_REG64(ich_lr7_el2, x1, x3);		\
+	LOAD_ARRAY_REG64(ich_lr8_el2, x1, x3);		\
+	LOAD_ARRAY_REG64(ich_lr9_el2, x1, x3);		\
+	LOAD_ARRAY_REG64(ich_lr10_el2, x1, x3);		\
+	LOAD_ARRAY_REG64(ich_lr11_el2, x1, x3);		\
+	LOAD_ARRAY_REG64(ich_lr12_el2, x1, x3);		\
+	LOAD_ARRAY_REG64(ich_lr13_el2, x1, x3);		\
+	LOAD_ARRAY_REG64(ich_lr14_el2, x1, x3);		\
+	LOAD_ARRAY_REG64(ich_lr15_el2, x1, x3);		\
 9:;							\
 	;
+
+
+#define	LOAD_ARRAY_REG32(reg, src, remaining)		\
+	cmp	remaining, #0;				\
+	beq	9f;					\
+	ldr	w2, [src];				\
+	msr	reg, x2;				\
+	add	src, src, #4;				\
+	sub	remaining, remaining, #1;
 
 
 #define	LOAD_AP0R_REGS();				\
@@ -521,10 +550,10 @@
 	/* x1 holds the load address */			\
 	mov	x1, #HYPCTX_VGIC_ICH_AP0R_EL2;		\
 	add	x1, x0, x1;				\
-	LOAD_ARRAY_REG(ich_ap0r0_el2, x1, x3);		\
-	LOAD_ARRAY_REG(ich_ap0r1_el2, x1, x3);		\
-	LOAD_ARRAY_REG(ich_ap0r2_el2, x1, x3);		\
-	LOAD_ARRAY_REG(ich_ap0r3_el2, x1, x3);		\
+	LOAD_ARRAY_REG32(ich_ap0r0_el2, x1, x3);	\
+	LOAD_ARRAY_REG32(ich_ap0r1_el2, x1, x3);	\
+	LOAD_ARRAY_REG32(ich_ap0r2_el2, x1, x3);	\
+	LOAD_ARRAY_REG32(ich_ap0r3_el2, x1, x3);	\
 9:;							\
 	;
 
@@ -536,10 +565,10 @@
 	/* x1 holds the load address */			\
 	mov	x1, #HYPCTX_VGIC_ICH_AP1R_EL2;		\
 	add	x1, x0, x1;				\
-	LOAD_ARRAY_REG(ich_ap1r0_el2, x1, x3);		\
-	LOAD_ARRAY_REG(ich_ap1r1_el2, x1, x3);		\
-	LOAD_ARRAY_REG(ich_ap1r2_el2, x1, x3);		\
-	LOAD_ARRAY_REG(ich_ap1r3_el2, x1, x3);		\
+	LOAD_ARRAY_REG32(ich_ap1r0_el2, x1, x3);	\
+	LOAD_ARRAY_REG32(ich_ap1r1_el2, x1, x3);	\
+	LOAD_ARRAY_REG32(ich_ap1r2_el2, x1, x3);	\
+	LOAD_ARRAY_REG32(ich_ap1r3_el2, x1, x3);	\
 9:;							\
 	;
 
@@ -580,36 +609,36 @@
  * tpidr_el2 - struct hypctx address
  */
 #define	LOAD_GUEST_REGS()				\
-	LOAD_SYS_REG(HYPCTX, ACTLR_EL1);		\
-	LOAD_SYS_REG(HYPCTX, AMAIR_EL1);		\
-	LOAD_SYS_REG(HYPCTX, ELR_EL1);			\
-	LOAD_SYS_REG(HYPCTX, FAR_EL1);			\
-	LOAD_SYS_REG(HYPCTX, MAIR_EL1);			\
-	LOAD_SYS_REG(HYPCTX, PAR_EL1);			\
-	LOAD_SYS_REG(HYPCTX, TCR_EL1);			\
-	LOAD_SYS_REG(HYPCTX, TPIDR_EL1);		\
-	LOAD_SYS_REG(HYPCTX, TTBR0_EL1);		\
-	LOAD_SYS_REG(HYPCTX, TTBR1_EL1);		\
-	LOAD_SYS_REG(HYPCTX, VBAR_EL1);			\
-	LOAD_SYS_REG(HYPCTX, AFSR0_EL1);		\
-	LOAD_SYS_REG(HYPCTX, AFSR1_EL1);		\
-	LOAD_SYS_REG(HYPCTX, CONTEXTIDR_EL1);		\
-	LOAD_SYS_REG(HYPCTX, CPACR_EL1);		\
-	LOAD_SYS_REG(HYPCTX, ESR_EL1);			\
-	LOAD_SYS_REG(HYPCTX, SCTLR_EL1);		\
-	LOAD_SYS_REG(HYPCTX, SPSR_EL1);			\
+	LOAD_SYS_REG64(HYPCTX, ACTLR_EL1);		\
+	LOAD_SYS_REG64(HYPCTX, AMAIR_EL1);		\
+	LOAD_SYS_REG64(HYPCTX, ELR_EL1);		\
+	LOAD_SYS_REG64(HYPCTX, FAR_EL1);		\
+	LOAD_SYS_REG64(HYPCTX, MAIR_EL1);		\
+	LOAD_SYS_REG64(HYPCTX, PAR_EL1);		\
+	LOAD_SYS_REG64(HYPCTX, TCR_EL1);		\
+	LOAD_SYS_REG64(HYPCTX, TPIDR_EL1);		\
+	LOAD_SYS_REG64(HYPCTX, TTBR0_EL1);		\
+	LOAD_SYS_REG64(HYPCTX, TTBR1_EL1);		\
+	LOAD_SYS_REG64(HYPCTX, VBAR_EL1);		\
+	LOAD_SYS_REG32(HYPCTX, AFSR0_EL1);		\
+	LOAD_SYS_REG32(HYPCTX, AFSR1_EL1);		\
+	LOAD_SYS_REG32(HYPCTX, CONTEXTIDR_EL1);		\
+	LOAD_SYS_REG32(HYPCTX, CPACR_EL1);		\
+	LOAD_SYS_REG32(HYPCTX, ESR_EL1);		\
+	LOAD_SYS_REG32(HYPCTX, SCTLR_EL1);		\
+	LOAD_SYS_REG32(HYPCTX, SPSR_EL1);		\
 							\
-	LOAD_SYS_REG(HYPCTX, ELR_EL2);			\
-	LOAD_SYS_REG(HYPCTX, HCR_EL2);			\
-	LOAD_SYS_REG(HYPCTX, VPIDR_EL2);		\
-	LOAD_SYS_REG(HYPCTX, VMPIDR_EL2);		\
-	LOAD_SYS_REG(HYPCTX, CPTR_EL2);			\
-	LOAD_SYS_REG(HYPCTX, SPSR_EL2);			\
+	LOAD_SYS_REG64(HYPCTX, ELR_EL2);		\
+	LOAD_SYS_REG64(HYPCTX, HCR_EL2);		\
+	LOAD_SYS_REG64(HYPCTX, VPIDR_EL2);		\
+	LOAD_SYS_REG64(HYPCTX, VMPIDR_EL2);		\
+	LOAD_SYS_REG32(HYPCTX, CPTR_EL2);		\
+	LOAD_SYS_REG32(HYPCTX, SPSR_EL2);		\
 							\
-	LOAD_SYS_REG(HYPCTX_VGIC, ICH_HCR_EL2);		\
-	LOAD_SYS_REG(HYPCTX_VGIC, ICH_VMCR_EL2);	\
+	LOAD_SYS_REG32(HYPCTX_VGIC, ICH_HCR_EL2);	\
+	LOAD_SYS_REG32(HYPCTX_VGIC, ICH_VMCR_EL2);	\
 							\
-	LOAD_SYS_REG(HYPCTX_VTIMER_CPU, CNTKCTL_EL1);	\
+	LOAD_SYS_REG32(HYPCTX_VTIMER_CPU, CNTKCTL_EL1);	\
 							\
 	LOAD_HYP_REG(HYP, VTTBR_EL2);			\
 	LOAD_HYP_REG(HYP_VTIMER, CNTHCTL_EL2);		\
@@ -634,16 +663,8 @@
  * x0 - struct hypctx address
  */
 #define	SAVE_EXIT_INFO()				\
-	mrs	x1, esr_el2;				\
-	mov	x2, #HYPCTX_EXIT_INFO_ESR_EL2;		\
-	str	w1, [x0, x2];				\
-							\
-	mrs	x1, far_el2;				\
-	mov	x2, #HYPCTX_EXIT_INFO_FAR_EL2;		\
-	str	w1, [x0, x2];				\
-							\
-	mrs	x1, hpfar_el2;				\
-	mov	x2, #HYPCTX_EXIT_INFO_HPFAR_EL2;	\
-	str	w1, [x0, x2];				\
+	SAVE_SYS_REG32(HYPCTX_EXIT_INFO, ESR_EL2);	\
+	SAVE_SYS_REG64(HYPCTX_EXIT_INFO, FAR_EL2);	\
+	SAVE_SYS_REG64(HYPCTX_EXIT_INFO, HPFAR_EL2);	\
 
 #endif /* !_VMM_HYP_MACROS_H_ */
