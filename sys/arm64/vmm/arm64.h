@@ -45,6 +45,7 @@ struct hypctx {
 	uint64_t	fp;		/* Frame Pointer */
 	uint64_t	mair_el1;	/* Memory Attribute Indirection Register */
 	uint64_t	par_el1;	/* Physical Address Register */
+	uint64_t	sp_el0;		/* Stack Pointer */
 	uint64_t	tcr_el1;	/* Translation Control Register */
 	uint64_t	tpidr_el1;	/* EL1 Software ID Register */
 	uint64_t	ttbr0_el1;	/* Translation Table Base Register 0 */
