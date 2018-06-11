@@ -59,7 +59,7 @@
 	stp	x24, x25, [sp, #-16]!;			\
 	stp	x26, x27, [sp, #-16]!;			\
 	stp	x28, x29, [sp, #-16]!;			\
-	str	lr, [sp, #-16]!;			\
+	stp	lr, fp, [sp, #-16]!;			\
 							\
 	/* Push the system registers */			\
 	PUSH_SYS_REG(SP_EL1);				\
@@ -154,7 +154,7 @@
 	POP_SYS_REG(SP_EL1);				\
 							\
 	/* Pop the regular registers */			\
-	ldr	lr, [sp], #16;				\
+	ldp	lr, fp, [sp], #16;			\
 	ldp	x28, x29, [sp], #16;			\
 	ldp	x26, x27, [sp], #16;			\
 	ldp	x24, x25, [sp], #16;			\
@@ -342,6 +342,8 @@
  */
 #define	SAVE_GUEST_REGS()				\
 	SAVE_GUEST_X_REGS();				\
+							\
+	SAVE_REG(HYPCTX, FP);				\
 							\
 	SAVE_SYS_REG32(HYPCTX_VTIMER_CPU, CNTKCTL_EL1);	\
 							\
@@ -639,6 +641,8 @@
 	LOAD_SYS_REG32(HYPCTX_VGIC, ICH_VMCR_EL2);	\
 							\
 	LOAD_SYS_REG32(HYPCTX_VTIMER_CPU, CNTKCTL_EL1);	\
+							\
+	LOAD_REG(HYPCTX, FP);				\
 							\
 	LOAD_HYP_REG(HYP, VTTBR_EL2);			\
 	LOAD_HYP_REG(HYP_VTIMER, CNTHCTL_EL2);		\

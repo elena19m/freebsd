@@ -74,6 +74,7 @@ ASSYM(HYPCTX_ACTLR_EL1, offsetof(struct hypctx, actlr_el1));
 ASSYM(HYPCTX_AMAIR_EL1, offsetof(struct hypctx, amair_el1));
 ASSYM(HYPCTX_ELR_EL1, offsetof(struct hypctx, elr_el1));
 ASSYM(HYPCTX_FAR_EL1, offsetof(struct hypctx, far_el1));
+ASSYM(HYPCTX_FP, offsetof(struct hypctx, fp));
 ASSYM(HYPCTX_PAR_EL1, offsetof(struct hypctx, par_el1));
 ASSYM(HYPCTX_MAIR_EL1, offsetof(struct hypctx, mair_el1));
 ASSYM(HYPCTX_TCR_EL1, offsetof(struct hypctx, tcr_el1));
