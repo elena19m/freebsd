@@ -47,6 +47,8 @@ struct hypctx {
 	uint64_t	par_el1;	/* Physical Address Register */
 	uint64_t	sp_el0;		/* Stack Pointer */
 	uint64_t	tcr_el1;	/* Translation Control Register */
+	uint64_t	tpidr_el0;	/* EL0 Software ID Register */
+	uint64_t	tpidrro_el0;	/* Read-only Thread ID Register */
 	uint64_t	tpidr_el1;	/* EL1 Software ID Register */
 	uint64_t	ttbr0_el1;	/* Translation Table Base Register 0 */
 	uint64_t	ttbr1_el1;	/* Translation Table Base Register 1 */
