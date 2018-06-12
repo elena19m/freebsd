@@ -90,30 +90,6 @@
 #define EXCP_TYPE_EL2_FIQ	6
 #define EXCP_TYPE_EL2_ERROR	7
 
-#ifndef __ASSEMBLER__
-
-static inline const char *excp_type_str(const int excp_type)
-{
-	static const char *str[] = {
-		[EXCP_TYPE_EL1_SYNC] 	= "EXCP_TYPE_EL1_SYNC",
-		[EXCP_TYPE_EL1_IRQ] 	= "EXCP_TYPE_EL1_IRQ",
-		[EXCP_TYPE_EL1_FIQ] 	= "EXCP_TYPE_EL1_FIQ",
-		[EXCP_TYPE_EL1_ERROR] 	= "EXCP_TYPE_EL1_ERROR",
-		[EXCP_TYPE_EL2_SYNC] 	= "EXCP_TYPE_EL2_SYNC",
-		[EXCP_TYPE_EL2_IRQ] 	= "EXCP_TYPE_EL2_IRQ",
-		[EXCP_TYPE_EL2_FIQ] 	= "EXCP_TYPE_EL2_FIQ",
-		[EXCP_TYPE_EL2_ERROR] 	= "EXCP_TYPE_EL2_ERROR",
-	};
-	size_t excp_type_max = nitems(str);
-
-	if (excp_type >= excp_type_max)
-		return "EXCP_TYPE_UNKNOWN";
-	else
-		return str[excp_type];
-}
-
-#endif /* !__ASSEMBLER__ */
-
 #define	HYP_GET_VECTOR_TABLE	-1
 
 #endif /* !_VMM_HYP_H_ */
