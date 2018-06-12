@@ -24,7 +24,9 @@ ident		FOUNDATION_GUEST
 makeoptions	DEBUG=-g		# Build kernel with gdb(1) debug symbols
 
 options 	MD_ROOT			# MD is a potential root device
+options	   	MD_ROOT_SIZE=12000
 makeoptions	MFS_IMAGE=/usr/home/alex/arm64-workspace/ramdisk/ramdisk-guest.img
+options		ROOTDEVNAME=\"ufs:md0\"
 
 options 	SCHED_ULE		# ULE scheduler
 options 	PREEMPTION		# Enable kernel thread preemption
@@ -114,7 +116,7 @@ device		cpufreq
 # Bus drivers
 device		pci
 device		al_pci		# Annapurna Alpine PCI-E
-options 	PCI_HP			# PCI-Express native HotPlug
+options 	PCI_HP		# PCI-Express native HotPlug
 options 	PCI_IOV		# PCI SR-IOV support
 
 # Ethernet NICs
@@ -237,7 +239,6 @@ device		bvmconsole
 # Chip-specific errata
 #options 	THUNDERX_PASS_1_1_ERRATA
 
-#options 	FDT
 #device		acpi
 
 # The crypto framework is required by IPSEC
