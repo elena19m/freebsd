@@ -498,8 +498,7 @@ arm64_handle_world_switch(struct hyp *hyp, int vcpu, struct vm_exit *vme)
 	case EXCP_TYPE_EL2_IRQ:
 	case EXCP_TYPE_EL2_FIQ:
 	case EXCP_TYPE_EL2_ERROR:
-		eprintf("Unhandled exception type: %s\n",
-		    excp_type_str(excp_type));
+		eprintf("Unhandled exception type: %s\n", __STRING(excp_type));
 		vme->exitcode = VM_EXITCODE_BOGUS;
 		handled = UNHANDLED;
 		break;
