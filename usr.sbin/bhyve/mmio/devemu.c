@@ -103,8 +103,8 @@ devemu_parse_opts(const char *args)
 		*emul++ = '\0';
 
 		/* <size>@<base-addr>#<irq> */
-		if (sscanf(str, "%llx@%llx#%lld", &size, &baddr, &irq) != 3 &&
-		    sscanf(str, "%llu@%llu#%lld", &size, &baddr, &irq) != 3) {
+		if (sscanf(str, "%jx@%jx#%jd", &size, &baddr, &irq) != 3 &&
+		    sscanf(str, "%jx@%jx#%jd", &size, &baddr, &irq) != 3) {
 			devemu_parse_opts_usage(str);
 			goto parse_error;
 		}
@@ -128,7 +128,7 @@ devemu_parse_opts(const char *args)
 				break;
 
 		if (dif != NULL) {
-			fprintf(stderr, "The requested address 0x%llx is "
+			fprintf(stderr, "The requested address 0x%jx is "
 				"already bound or overlapping\r\n", baddr);
 			error = EINVAL;
 			goto parse_error;
