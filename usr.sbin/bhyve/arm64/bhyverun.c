@@ -107,6 +107,13 @@ paddr_guest2host(struct vmctx *ctx, uintptr_t iaddr, size_t len)
 	return (vm_map_ipa(ctx, iaddr, len));
 }
 
+int
+fbsdrun_virtio_msix(void)
+{
+
+	return 0;
+}
+
 static void *
 fbsdrun_start_thread(void *param)
 {
