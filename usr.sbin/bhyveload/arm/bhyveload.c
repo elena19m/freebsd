@@ -120,7 +120,7 @@ main(int argc, char** argv)
 	int dtb_address_is_offset;
 	uint64_t kernel_load_address, memory_base_address, dtb_address;
 	uint64_t periphbase;
-	char kernel_image_name[KERNEL_IMAGE_NAME_LEN];
+	char kernel_image_name[KERNEL_IMAGE_NAME_LEN + 1];
 	struct stat st;
 	void *addr;
 
@@ -133,6 +133,7 @@ main(int argc, char** argv)
 	memory_base_address = 0xc0000000;
 	periphbase = 0x2c000000;
 	strncpy(kernel_image_name, "kernel.bin", KERNEL_IMAGE_NAME_LEN);
+	kernel_image_name[KERNEL_IMAGE_NAME_LEN] = '\0';
 
 	while ((opt = getopt(argc, argv, "d:k:l:b:m:p")) != -1) {
 		switch (opt) {
