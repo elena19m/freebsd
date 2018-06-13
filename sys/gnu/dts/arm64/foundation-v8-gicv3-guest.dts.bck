@@ -1,8 +1,9 @@
 /*
  * ARM Ltd.
  *
- * ARMv8 Foundation model DTS
+ * ARMv8 Foundation model DTS (GICv3 configuration)
  */
+
 /dts-v1/;
 
 / {
@@ -29,6 +30,8 @@
 			device_type = "cpu";
 			compatible = "arm,armv8";
 			reg = <0x0 0x0>;
+			//enable-method = "spin-table";
+			//cpu-release-addr = <0x0 0x8000fff8>;
 			next-level-cache = <&L2_0>;
 		};
 
@@ -37,10 +40,23 @@
 		};
 	};
 
+	/* 128 MB of memory from address 0x80000000 to 0x88000000 (64bit) */
 	memory@80000000 {
 		device_type = "memory";
-		reg = <0x00000000 0x80000000 0 0x80000000>,
-		      <0x00000008 0x80000000 0 0x80000000>;
+		reg = <0x00000000 0x80000000 0  0x08000000>;
+	};
+
+	gic: interrupt-controller@2f000000 {
+		compatible = "arm,gic-v3";
+		#interrupt-cells = <3>;
+		#size-cells = <2>;
+		interrupt-controller;
+		reg =	<0x0 0x2f000000 0x0 0x10000>,
+			<0x0 0x2f100000 0x0 0x200000>,
+			<0x0 0x2c000000 0x0 0x2000>,
+			<0x0 0x2c010000 0x0 0x2000>,
+			<0x0 0x2c02f000 0x0 0x2000>;
+		interrupts = <1 9 4>;
 	};
 
 	timer {
@@ -153,11 +169,6 @@
 				clock-names = "uartclk", "apb_pclk";
 			};
 
-			virtio_block@0130000 {
-				compatible = "virtio,mmio";
-				reg = <0x130000 0x200>;
-				interrupts = <0 42 4>;
-			};
 		};
 	};
 };
