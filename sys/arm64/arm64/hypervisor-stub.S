@@ -24,7 +24,6 @@
  * SUCH DAMAGE.
  */
 
-#include "assym.s"
 #include <machine/asm.h>
 
 __FBSDID("$FreeBSD$");

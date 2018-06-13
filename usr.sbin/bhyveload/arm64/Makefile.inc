@@ -8,6 +8,6 @@ SRCS=	bhyveload.c \
 
 .PATH:	${.CURDIR}/../../sys/arm64/vmm
 
-CFLAGS += -I${.CURDIR}/../../sys/boot/common
+CFLAGS += -I${.CURDIR}/../../stand/common
 
 MK_MAN=no
