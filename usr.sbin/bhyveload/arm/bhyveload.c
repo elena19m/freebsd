@@ -215,6 +215,8 @@ main(int argc, char** argv)
 
 	error = vm_attach_vgic(ctx, periphbase + 0x1000, periphbase + 0x2000);
 	if (error) {
+		perror("vm_attach_vgic");
+		exit(1);
 	}
 	munmap(addr, st.st_size);
 
