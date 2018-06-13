@@ -332,7 +332,7 @@ main(int argc, char *argv[])
                 case 'c':
 			guest_ncpus = atoi(optarg);
 			break;
-		case 'm':
+		case 's':
 			if (devemu_parse_opts(optarg) != 0)
 				exit(1);
 			break;
