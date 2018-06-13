@@ -321,7 +321,7 @@ main(int argc, char *argv[])
 	progname = basename(argv[0]);
 	guest_ncpus = 1;
 
-	while ((c = getopt(argc, argv, "abehAHIPp:g:c:s:S:m:")) != -1) {
+	while ((c = getopt(argc, argv, "abehAB:HIPp:g:c:s:S:")) != -1) {
 		switch (c) {
 		case 'b':
 			bvmcons = 1;
@@ -336,8 +336,12 @@ main(int argc, char *argv[])
 			if (devemu_parse_opts(optarg) != 0)
 				exit(1);
 			break;
+		case 'B':
+			memory_base_address = strtoul(optarg, NULL, 0);
+			break;
 		case 'h':
 			usage(0);
+			break;
 		default:
 			usage(1);
 		}
