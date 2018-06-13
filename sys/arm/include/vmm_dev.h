@@ -100,6 +100,11 @@ struct vm_attach_vgic {
 	uint64_t	cpu_int_paddr;
 };
 
+struct vm_passthru_memory {
+	uint64_t	addr;
+	uint64_t	size;
+};
+
 struct vm_irq {
 	uint32_t irq;
 };
@@ -140,6 +145,9 @@ enum {
 
 	/* vm_attach_vgic */
 	IOCNUM_ATTACH_VGIC = 110,
+
+	/* vm_passthru_memory */
+	IOCNUM_PASSTHRU_MEMORY = 120,
 };
 
 #define	VM_RUN		\
@@ -176,5 +184,7 @@ enum {
 	_IOW('v', IOCNUM_GET_CPUSET, struct vm_cpuset)
 #define	VM_ATTACH_VGIC	\
 	_IOW('v', IOCNUM_ATTACH_VGIC, struct vm_attach_vgic)
+#define	VM_PASSTHRU_MEMORY	\
+	_IOW('v', IOCNUM_PASSTHRU_MEMORY, struct vm_passthru_memory)
 
 #endif
