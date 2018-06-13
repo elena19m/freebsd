@@ -117,7 +117,8 @@ main(int argc, char** argv)
 	uint64_t mem_size;
 	int opt, error;
 	int kernel_image_fd;
-	uint64_t kernel_load_address, memory_base_address;
+	int dtb_address_is_offset;
+	uint64_t kernel_load_address, memory_base_address, dtb_address;
 	uint64_t periphbase;
 	char kernel_image_name[KERNEL_IMAGE_NAME_LEN];
 	struct stat st;
@@ -126,13 +127,20 @@ main(int argc, char** argv)
 	progname = basename(argv[0]);
 
 	mem_size = 128 * MB;
+	dtb_address = 0x0;
+	dtb_address_is_offset = 0;
 	kernel_load_address = 0xc0000000;
 	memory_base_address = 0xc0000000;
 	periphbase = 0x2c000000;
 	strncpy(kernel_image_name, "kernel.bin", KERNEL_IMAGE_NAME_LEN);
 
-	while ((opt = getopt(argc, argv, "k:l:b:m:p")) != -1) {
+	while ((opt = getopt(argc, argv, "d:k:l:b:m:p")) != -1) {
 		switch (opt) {
+		case 'd':
+			dtb_address = strtoul(optarg, NULL, 0);
+			if (optarg[0] == '+' || optarg[0] == '-')
+				dtb_address_is_offset = 1;
+			break;
 		case 'k':
 			strncpy(kernel_image_name, optarg, KERNEL_IMAGE_NAME_LEN);
 			break;
@@ -159,6 +167,9 @@ main(int argc, char** argv)
 		usage();
 
 	vmname = argv[0];
+
+	if (dtb_address_is_offset)
+		dtb_address += kernel_load_address;
 
 	kernel_image_fd = open(kernel_image_name, O_RDONLY);
 	if (kernel_image_fd == -1) {
@@ -207,5 +218,10 @@ main(int argc, char** argv)
 	munmap(addr, st.st_size);
 
 	guest_setreg(VM_REG_GUEST_PC, kernel_load_address);
+	/* Linux boot ABI */
+	guest_setreg(VM_REG_GUEST_R0, 0x0);
+	guest_setreg(VM_REG_GUEST_R1, VM_LINUX_AUTO_PLATFORM);
+	guest_setreg(VM_REG_GUEST_R2, dtb_address);
+
 	return 0;
 }

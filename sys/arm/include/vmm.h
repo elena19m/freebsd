@@ -87,6 +87,8 @@ enum vm_reg_name {
 #define	VM_INTINFO_HWEXCEPTION	(3 << 8)
 #define	VM_INTINFO_SWINTR	(4 << 8)
 
+#define	VM_LINUX_AUTO_PLATFORM	0xffffffff
+
 #ifdef _KERNEL
 
 #define	VM_MAX_NAMELEN	32
