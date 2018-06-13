@@ -149,7 +149,8 @@ __FBSDID("$FreeBSD$");
 #include <machine/machdep.h>
 #include <machine/md_var.h>
 #include <machine/pcb.h>
-#include <machine/pmap.h>
+
+#include <arm/include/physmem.h>
 
 #define	PMAP_ASSERT_STAGE1(pmap)	MPASS((pmap)->pm_stage == PM_STAGE1)
 #define	PMAP_ASSERT_STAGE2(pmap)	MPASS((pmap)->pm_stage == PM_STAGE2)
@@ -447,6 +448,7 @@ pmap_l0(pmap_t pmap, vm_offset_t va)
 {
 	KASSERT(pmap->pm_type != PT_STAGE2,
 	    ("Level 0 table is invalid for PT_STAGE2 pmap"));
+
 	return (&pmap->pm_l0[pmap_l0_index(va)]);
 }
 
@@ -471,7 +473,7 @@ pmap_l1(pmap_t pmap, vm_offset_t va)
 	if ((pmap_load(l0) & ATTR_DESCR_MASK) != L0_TABLE)
 		return (NULL);
 
-	return(pmap_l0_to_l1(l0, va));
+	return (pmap_l0_to_l1(l0, va));
 }
 
 static __inline vm_page_t
@@ -1736,8 +1738,12 @@ _pmap_unwire_l3(pmap_t pmap, vm_offset_t va, vm_page_t m, struct spglist *free)
 		pmap_unwire_l3(pmap, va, l2pg, free);
 	} else if (m->pindex < (NUL2E + NUL1E)) {
 		/* We just released an l2, unhold the matching l1 */
+		pd_entry_t *l0, tl0;
 		vm_page_t l1pg;
-		l1pg = pmap_l1pg(pmap, va);
+
+		l0 = pmap_l0(pmap, va);
+		tl0 = pmap_load(l0);
+		l1pg = PHYS_TO_VM_PAGE(tl0 & ~ATTR_MASK);
 		pmap_unwire_l3(pmap, va, l1pg, free);
 	}
 	pmap_invalidate_page(pmap, va);
@@ -1822,7 +1828,7 @@ pmap_pinit_stage(pmap_t pmap, enum pmap_stage stage, int levels)
 	if (pm_type == PT_STAGE1) {
 		while ((l0pt = vm_page_alloc(NULL, 0, VM_ALLOC_NORMAL |
 		    VM_ALLOC_NOOBJ | VM_ALLOC_WIRED | VM_ALLOC_ZERO)) == NULL)
-			VM_WAIT;
+			vm_wait(NULL);
 	} else {
 		uint64_t npages;
 		uint64_t alignment;
@@ -1851,7 +1857,7 @@ pmap_pinit_stage(pmap_t pmap, enum pmap_stage stage, int levels)
 		    VM_ALLOC_NOOBJ | VM_ALLOC_WIRED | VM_ALLOC_ZERO,
 		    npages, DMAP_MIN_PHYSADDR, DMAP_MAX_PHYSADDR,
 		    alignment, 0, VM_MEMATTR_DEFAULT)) == NULL)
-			VM_WAIT;
+			vm_wait(NULL);
 	}
 
 	pmap->pm_l0_paddr = VM_PAGE_TO_PHYS(m);
@@ -1980,9 +1986,7 @@ _pmap_alloc_l3(pmap_t pmap, vm_pindex_t ptepindex, struct rwlock **lockp)
 				/* recurse for allocating page dir */
 				if (_pmap_alloc_l3(pmap, NUL2E + NUL1E + l0index,
 				    lockp) == NULL) {
-					--m->wire_count;
-					/* XXX: release mem barrier? */
-					atomic_subtract_int(&vm_cnt.v_wire_count, 1);
+					vm_page_unwire_noq(m);
 					vm_page_free_zero(m);
 					return (NULL);
 				}
@@ -1990,6 +1994,7 @@ _pmap_alloc_l3(pmap_t pmap, vm_pindex_t ptepindex, struct rwlock **lockp)
 				l1pg = PHYS_TO_VM_PAGE(tl0 & ~ATTR_MASK);
 				l1pg->wire_count++;
 			}
+
 			l1 = (pd_entry_t *)PHYS_TO_DMAP(pmap_load(l0) & ~ATTR_MASK);
 			l1 = &l1[ptepindex & Ln_ADDR_MASK];
 		} else {
@@ -2012,29 +2017,22 @@ _pmap_alloc_l3(pmap_t pmap, vm_pindex_t ptepindex, struct rwlock **lockp)
 				/* recurse for allocating page dir */
 				if (_pmap_alloc_l3(pmap, NUL2E + l1index,
 				    lockp) == NULL) {
-					--m->wire_count;
-					atomic_subtract_int(
-					    &vm_cnt.v_wire_count, 1);
+					vm_page_unwire_noq(m);
 					vm_page_free_zero(m);
 					return (NULL);
 				}
 				tl0 = pmap_load(l0);
-				l1 = (pd_entry_t *)PHYS_TO_DMAP(
-				    tl0 & ~ATTR_MASK);
+				l1 = (pd_entry_t *)PHYS_TO_DMAP(tl0 & ~ATTR_MASK);
 				l1 = &l1[l1index & Ln_ADDR_MASK];
 			} else {
-				l1 = (pd_entry_t *)PHYS_TO_DMAP(
-				    tl0 & ~ATTR_MASK);
+				l1 = (pd_entry_t *)PHYS_TO_DMAP(tl0 & ~ATTR_MASK);
 				l1 = &l1[l1index & Ln_ADDR_MASK];
 				tl1 = pmap_load(l1);
 				if (tl1 == 0) {
 					/* recurse for allocating page dir */
 					if (_pmap_alloc_l3(pmap, NUL2E + l1index,
 					    lockp) == NULL) {
-						--m->wire_count;
-						/* XXX: release mem barrier? */
-						atomic_subtract_int(
-						    &vm_cnt.v_wire_count, 1);
+						vm_page_unwire_noq(m);
 						vm_page_free_zero(m);
 						return (NULL);
 					}
