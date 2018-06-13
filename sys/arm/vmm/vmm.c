@@ -681,6 +681,17 @@ vm_attach_vgic(struct vm *vm, uint64_t distributor_paddr, uint64_t cpu_int_paddr
 	return vgic_attach_to_vm(vm->cookie, distributor_paddr, cpu_int_paddr);
 }
 
+int vm_passthru_memory(struct vm *vm, uint64_t addr, uint64_t size)
+{
+	lpae_vmmmap_set(vm->cookie,
+	    (lpae_vm_vaddr_t)addr,
+	    (lpae_vm_paddr_t)addr,
+	    size,
+	    VM_PROT_READ | VM_PROT_WRITE);
+
+	return (0);
+}
+
 int
 vm_assert_irq(struct vm *vm, uint32_t irq, bool level)
 {

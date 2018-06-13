@@ -340,6 +340,17 @@ vm_attach_vgic(struct vmctx *ctx, uint64_t distributor_paddr, uint64_t cpu_int_p
 	return (ioctl(ctx->fd, VM_ATTACH_VGIC, &vav));
 }
 
+int vm_passthru_memory(struct vmctx *ctx, uint64_t addr, uint64_t size)
+{
+	struct vm_passthru_memory vpm;
+
+	bzero(&vpm, sizeof(vpm));
+	vpm.addr = addr;
+	vpm.size = size;
+
+	return (ioctl(ctx->fd, VM_PASSTHRU_MEMORY, &vpm));
+}
+
 int
 vm_assert_irq(struct vmctx *ctx, uint32_t irq)
 {

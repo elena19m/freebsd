@@ -59,6 +59,14 @@
 static char *vmname, *progname;
 static struct vmctx *ctx;
 
+struct passthru_info {
+	LIST_ENTRY(passthru_info) link;
+	uint64_t addr;
+	uint64_t size;
+};
+
+LIST_HEAD(, passthru_info) passthru_info_head =
+	LIST_HEAD_INITIALIZER(passthru_info_head);
 
 /*
  * Guest virtual machinee
@@ -92,10 +100,66 @@ static void
 guest_setreg(enum vm_reg_name vmreg, uint64_t v)
 {
 	int error;
-	
+
 	error = vm_set_register(ctx, BSP, vmreg, v);
 	if (error) {
 		perror("vm_set_register");
+	}
+}
+
+static void
+passthru_insert_info(uint64_t addr, uint64_t size)
+{
+	struct passthru_info *info;
+
+	info = malloc(sizeof(*info));
+	if (info == NULL) {
+		perror("malloc");
+		exit(1);
+	}
+
+	info->addr = addr;
+	info->size = size;
+
+	LIST_INSERT_HEAD(&passthru_info_head, info, link);
+}
+
+static void
+passthru_insert_info_parse(const char *arg)
+{
+	int error;
+	uint64_t size, addr;
+
+	error = sscanf(arg, "%llx@%llx", &size, &addr);
+	if (error < 2)
+		error = sscanf(arg, "%llu@%llu", &size, &addr);
+	if ((error < 2) || (size == 0) || (addr == 0)) {
+		fprintf(stderr, "Invalid passthru '%s'\r\n", arg);
+		return;
+	}
+
+	passthru_insert_info(addr, size);
+}
+
+static void
+passthru_memory_setup(void)
+{
+	int err;
+	struct passthru_info *info, *tmp_info;
+
+	LIST_FOREACH_SAFE(info, &passthru_info_head, link, tmp_info) {
+		printf("[%s]: passthruing... addr: %llx; size: %llx\r\n",
+		       __func__, info->addr, info->size);
+		err = vm_passthru_memory(ctx, info->addr, info->size);
+		if (err) {
+			perror("vm_setup_memory");
+			exit(1);
+		}
+
+		printf("[%s]: mapped addr: %llx; size: %llx\r\n",
+		       __func__, info->addr, info->size);
+		LIST_REMOVE(info, link);
+		free(info);
 	}
 }
 
@@ -124,6 +188,8 @@ main(int argc, char** argv)
 	struct stat st;
 	void *addr;
 
+	LIST_INIT(&passthru_info_head);
+
 	progname = basename(argv[0]);
 
 	mem_size = 128 * MB;
@@ -135,8 +201,11 @@ main(int argc, char** argv)
 	strncpy(kernel_image_name, "kernel.bin", KERNEL_IMAGE_NAME_LEN);
 	kernel_image_name[KERNEL_IMAGE_NAME_LEN] = '\0';
 
-	while ((opt = getopt(argc, argv, "d:k:l:b:m:p")) != -1) {
+	while ((opt = getopt(argc, argv, "P:d:k:l:b:m:p")) != -1) {
 		switch (opt) {
+		case 'P':
+			passthru_insert_info_parse(optarg);
+			break;
 		case 'd':
 			dtb_address = strtoul(optarg, NULL, 0);
 			if (optarg[0] == '+' || optarg[0] == '-')
@@ -189,6 +258,8 @@ main(int argc, char** argv)
 		perror("vm_open");
 		exit(1);
 	}
+
+	passthru_memory_setup();
 
 	error = vm_setup_memory(ctx, memory_base_address, mem_size, VM_MMAP_ALL);
 	if (error) {
