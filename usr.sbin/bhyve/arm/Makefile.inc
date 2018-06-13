@@ -15,5 +15,4 @@ LIBADD=
 
 BHYVE_BUS=	mmio
 
-CFLAGS+= 	-I${BHYVE_SRCTOP}/arm
 CFLAGS+= 	-I${BHYVE_SYSDIR}/sys/dev/virtio/mmio
