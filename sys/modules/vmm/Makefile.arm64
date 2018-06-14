@@ -1,5 +1,5 @@
-SRCS+=	hyp_assym.h
-DPSRCS=	hyp_genassym.c
+DPSRCS+=	hyp_assym.h
+DPSRCS+=	hyp_genassym.c
 
 CFLAGS+= -I${.CURDIR}/../../arm64/vmm -I${.CURDIR}/../../arm64/include
 
@@ -26,4 +26,4 @@ hyp_assym.h:    hyp_genassym.o
 	sh ${SYSDIR}/kern/genassym.sh hyp_genassym.o > ${.TARGET}
 
 hyp_genassym.o:
-	${CC} -c ${CFLAGS:N-fno-common} ${.IMPSRC}
+	${CC} -c ${CFLAGS:N-flto:N-fno-common} ${.IMPSRC}

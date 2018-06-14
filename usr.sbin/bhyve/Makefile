@@ -16,27 +16,6 @@ BHYVE_SYSDIR?=${SRCTOP}
 BHYVE_SRCTOP?=${.CURDIR}
 
 SRCS=	\
-	atkbdc.c		\
-	acpi.c			\
-	audio.c			\
-	bhyvegc.c		\
-	bhyverun.c		\
-	block_if.c		\
-	bootrom.c		\
-	console.c		\
-	consport.c		\
-	ctl_util.c		\
-	ctl_scsi_all.c		\
-	dbgport.c		\
-	fwctl.c			\
-	gdb.c			\
-	hda_codec.c		\
-	inout.c			\
-	ioapic.c		\
-	kernemu_dev.c		\
-	mem.c			\
-	mevent.c		\
-	mptbl.c			\
 	net_backends.c		\
 	net_utils.c		\
 	pci_ahci.c		\
@@ -77,10 +56,6 @@ SRCS=	\
 	spinup_ap.c		\
 	iov.c			\
 	block_if.c		\
-	devemu_virtio_block.c	\
-	devemu_virtio_console.c	\
-	devemu_virtio_net.c	\
-	devemu_virtio_rnd.c	\
 	mevent.c		\
 	sockstream.c
 

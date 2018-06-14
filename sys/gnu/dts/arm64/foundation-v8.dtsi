@@ -3,7 +3,6 @@
  *
  * ARMv8 Foundation model DTS
  */
-/dts-v1/;
 
 / {
 	model = "Foundation-v8A";

@@ -217,7 +217,6 @@ device		tun		# Packet tunnel.
 device		md		# Memory "disks"
 device		gif		# IPv6 and IPv4 tunneling
 device		firmware	# firmware assist module
-device		psci		# Support for ARM PSCI
 
 # EXT_RESOURCES pseudo devices
 options 	EXT_RESOURCES
@@ -234,7 +233,6 @@ device		bpf		# Berkeley packet filter
 # Chip-specific errata
 options 	THUNDERX_PASS_1_1_ERRATA
 
-options 	FDT
 device		acpi
 
 # The crypto framework is required by IPSEC
