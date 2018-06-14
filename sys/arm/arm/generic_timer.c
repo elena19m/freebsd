@@ -353,7 +353,7 @@ arm_tmr_acpi_add_irq(device_t parent, device_t dev, int rid, u_int irq)
 static void
 arm_tmr_acpi_identify(driver_t *driver, device_t parent)
 {
-	struct arm_tmr_softc *sc;
+	//struct arm_tmr_softc *sc;
 	ACPI_TABLE_GTDT *gtdt;
 	vm_paddr_t physaddr;
 	device_t dev;

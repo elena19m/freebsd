@@ -15,10 +15,14 @@ SRCS+=	\
 	consport.c		\
 	dbgport.c		\
 	fwctl.c			\
+	gdb.c			\
+	hda_codec.c		\
 	inout.c			\
 	ioapic.c		\
 	mem.c			\
 	mptbl.c			\
+	pci_hda.c		\
+	pci_nvme.c		\
 	pm.c			\
 	post.c			\
 	ps2kbd.c		\
@@ -34,7 +38,7 @@ SRCS+=	\
 	xmsr.c			\
 	spinup_ap.c
 
-LIBADD=	z
+LIBADD+=	z
 
 .if ${MK_OPENSSL} == "no"
 CFLAGS+=-DNO_OPENSSL

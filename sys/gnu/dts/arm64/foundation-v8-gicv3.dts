@@ -3,6 +3,7 @@
  *
  * ARMv8 Foundation model DTS (GICv3 configuration)
  */
+
 /dts-v1/;
 
 #include "foundation-v8.dtsi"

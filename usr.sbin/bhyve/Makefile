@@ -16,65 +16,8 @@ BHYVE_SYSDIR?=${SRCTOP}
 BHYVE_SRCTOP?=${.CURDIR}
 
 SRCS=	\
-	atkbdc.c		\
-	acpi.c			\
-	audio.c			\
-	bhyvegc.c		\
-	bhyverun.c		\
-	block_if.c		\
-	bootrom.c		\
-	console.c		\
-	consport.c		\
-	ctl_util.c		\
-	ctl_scsi_all.c		\
-	dbgport.c		\
-	fwctl.c			\
-	gdb.c			\
-	hda_codec.c		\
-	inout.c			\
-	ioapic.c		\
-	kernemu_dev.c		\
-	mem.c			\
-	mevent.c		\
-	mptbl.c			\
 	net_backends.c		\
 	net_utils.c		\
-	pci_ahci.c		\
-	pci_e82545.c		\
-	pci_emul.c		\
-	pci_hda.c		\
-	pci_fbuf.c		\
-	pci_hostbridge.c	\
-	pci_irq.c		\
-	pci_lpc.c		\
-	pci_nvme.c		\
-	pci_passthru.c		\
-	pci_virtio_9p.c		\
-	pci_virtio_block.c	\
-	pci_virtio_console.c	\
-	pci_virtio_net.c	\
-	pci_virtio_rnd.c	\
-	pci_virtio_scsi.c	\
-	pci_uart.c		\
-	pci_xhci.c		\
-	pm.c			\
-	post.c			\
-	ps2kbd.c		\
-	ps2mouse.c		\
-	rfb.c			\
-	rtc.c			\
-	smbiostbl.c		\
-	sockstream.c		\
-	task_switch.c		\
-	uart_emul.c		\
-	usb_emul.c		\
-	usb_mouse.c		\
-	virtio.c		\
-	vga.c			\
-	vmgenc.c		\
-	xmsr.c			\
-	spinup_ap.c		\
-	iov.c			\
 	block_if.c		\
 	devemu_virtio_block.c	\
 	devemu_virtio_console.c	\

@@ -27,14 +27,16 @@
  * SUCH DAMAGE.
  */
 
-#include "assym.s"
+#include "hyp_assym.h"
+
+/*#include "assym.s"*/
+
 #include <sys/syscall.h>
 #include <machine/armreg.h>
 #include <machine/asm.h>
 #include <machine/hypervisor.h>
 #include <arm/arm/gic_common.h>
 
-#include "hyp_assym.h"
 #include "hyp_macros.h"
 #include "hyp.h"
 
