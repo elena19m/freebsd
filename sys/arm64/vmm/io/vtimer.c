@@ -49,15 +49,7 @@
 
 extern struct timecounter arm_tmr_timecount;
 
-uint64_t cnthctl_el2_reg;
-
-static inline uint64_t
-vtimer_read_pct(void)
-{
-	uint64_t (*get_cntxct)(bool) = arm_tmr_timecount.tc_priv;
-
-	return (get_cntxct(true));
-}
+static uint64_t cnthctl_el2_reg;
 
 int
 vtimer_attach_to_vm(void *arg, int phys_ns_irq, int virt_irq)
@@ -168,7 +160,7 @@ vtimer_schedule_irq(struct vtimer_cpu *vtimer_cpu, struct hypctx *hypctx)
 	uint64_t cntpct_el0;
 	uint64_t diff;
 
-	cntpct_el0 = vtimer_read_pct();
+	cntpct_el0 = arm_tmr_timecount.tc_get_timecount(NULL);
 	if (vtimer_cpu->cntp_cval_el0 < cntpct_el0) {
 		/* Timer set in the past, trigger interrupt */
 		vtimer_inject_irq(hypctx);
@@ -212,7 +204,7 @@ vtimer_phys_ctl_read(void *vm, int vcpuid, uint64_t *rval, void *arg)
 	hyp = vm_get_cookie(vm);
 	vtimer_cpu = &hyp->ctx[vcpuid].vtimer_cpu;
 
-	cntpct_el0 = vtimer_read_pct();
+	cntpct_el0 = arm_tmr_timecount.tc_get_timecount(NULL);
 	if (vtimer_cpu->cntp_cval_el0 < cntpct_el0)
 		/* Timer condition met */
 		*rval = vtimer_cpu->cntp_ctl_el0 | CNTP_CTL_ISTATUS;
@@ -306,7 +298,6 @@ vtimer_phys_tval_read(void *vm, int vcpuid, uint64_t *rval, void *arg)
 	hyp = vm_get_cookie(vm);
 	vtimer_cpu = &hyp->ctx[vcpuid].vtimer_cpu;
 
-	cntpct_el0 = vtimer_read_pct();
 	if (!(vtimer_cpu->cntp_ctl_el0 & CNTP_CTL_ENABLE)) {
 		/*
 		 * ARMv8 Architecture Manual, p. D7-2702: the result of reading
@@ -316,7 +307,7 @@ vtimer_phys_tval_read(void *vm, int vcpuid, uint64_t *rval, void *arg)
 		 */
 		*rval = (uint32_t)RES1;
 	} else {
-		cntpct_el0 = vtimer_read_pct();
+		cntpct_el0 = arm_tmr_timecount.tc_get_timecount(NULL);
 		*rval = vtimer_cpu->cntp_cval_el0 - cntpct_el0;
 	}
 
@@ -337,7 +328,7 @@ vtimer_phys_tval_write(void *vm, int vcpuid, uint64_t wval, void *arg)
 	hypctx = &hyp->ctx[vcpuid];
 	vtimer_cpu = &hypctx->vtimer_cpu;
 
-	cntpct_el0 = vtimer_read_pct();
+	cntpct_el0 = arm_tmr_timecount.tc_get_timecount(NULL);
 	vtimer_cpu->cntp_cval_el0 = (int32_t)wval + cntpct_el0;
 
 	if (vtimer_enabled(vtimer_cpu->cntp_ctl_el0)) {
