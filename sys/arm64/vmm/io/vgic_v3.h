@@ -194,11 +194,6 @@ int 	vgic_v3_redist_read(void *vm, int vcpuid, uint64_t fault_ipa,
 int	vgic_v3_redist_write(void *vm, int vcpuid, uint64_t fault_ipa,
 			     uint64_t val, int size, void *arg);
 
-struct vgic_v3_softc {
-	device_t 	gic_v3_dev;
-	device_t 	vgic_v3_dev;
-};
-
 DECLARE_CLASS(arm_vgic_driver);
 
 #endif /* !_VMM_VGIC_V3_H_ */

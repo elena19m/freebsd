@@ -96,9 +96,6 @@ struct vgic_v3_ro_regs {
 };
 static struct vgic_v3_ro_regs ro_regs;
 
-/* TODO: Do not manage the softc directly and use the device's softc */
-static struct vgic_v3_softc softc;
-
 void
 vgic_v3_cpuinit(void *arg, bool last_vcpu)
 {
@@ -562,52 +559,6 @@ out:
 	mtx_unlock_spin(&cpu_if->lr_mtx);
 }
 
-static int
-arm_vgic_detach(device_t dev)
-{
-	printf("\n[arm64.c:arm_vgic_detach] dev nameunit = %s\n", device_get_nameunit(dev));
-
-	if (softc.vgic_v3_dev == NULL) {
-		printf("[arm64.c:arm_vgic_detach] softc.vgic_v3_dev is NULL, returning 0\n");
-		return (0);
-	}
-
-	softc.vgic_v3_dev = NULL;
-	softc.gic_v3_dev = NULL;
-
-	return (0);
-}
-
-static void vgic_v3_set_ro_regs(device_t dev)
-{
-	device_t gic;
-	struct gic_v3_softc *gic_sc;
-
-	gic = device_get_parent(dev);
-	gic_sc = device_get_softc(gic);
-
-	/* GICD_ICFGR0 configures SGIs and it is read-only. */
-	ro_regs.gicd_icfgr0 = gic_d_read(gic_sc, 4, GICD_ICFGR(0));
-
-	/*
-	 * Configure the GIC type register for the guest.
-	 *
-	 * ~GICD_TYPER_SECURITYEXTN: disable security extensions.
-	 * ~GICD_TYPER_DVIS: direct injection for virtual LPIs not supported.
-	 * ~GICD_TYPER_LPIS: LPIs not supported.
-	 */
-	ro_regs.gicd_typer = gic_d_read(gic_sc, 4, GICD_TYPER);
-	ro_regs.gicd_typer &= ~GICD_TYPER_SECURITYEXTN;
-	ro_regs.gicd_typer &= ~GICD_TYPER_DVIS;
-	ro_regs.gicd_typer &= ~GICD_TYPER_LPIS;
-
-	/*
-	 * XXX. Guest reads of GICD_PIDR2 should return the same ArchRev as
-	 * specified in the guest FDT.
-	 */
-	ro_regs.gicd_pidr2 = gic_d_read(gic_sc, 4, GICD_PIDR2);
-}
-
 void
 vgic_v3_init(uint64_t ich_vtr_el2)
 {
@@ -642,6 +593,42 @@ vgic_v3_init(uint64_t ich_vtr_el2)
 }
 
 static int
+arm_vgic_detach(device_t dev)
+{
+	return (0);
+}
+
+static void vgic_v3_set_ro_regs(device_t dev)
+{
+	device_t gic;
+	struct gic_v3_softc *gic_sc;
+
+	gic = device_get_parent(dev);
+	gic_sc = device_get_softc(gic);
+
+	/* GICD_ICFGR0 configures SGIs and it is read-only. */
+	ro_regs.gicd_icfgr0 = gic_d_read(gic_sc, 4, GICD_ICFGR(0));
+
+	/*
+	 * Configure the GIC type register for the guest.
+	 *
+	 * ~GICD_TYPER_SECURITYEXTN: disable security extensions.
+	 * ~GICD_TYPER_DVIS: direct injection for virtual LPIs not supported.
+	 * ~GICD_TYPER_LPIS: LPIs not supported.
+	 */
+	ro_regs.gicd_typer = gic_d_read(gic_sc, 4, GICD_TYPER);
+	ro_regs.gicd_typer &= ~GICD_TYPER_SECURITYEXTN;
+	ro_regs.gicd_typer &= ~GICD_TYPER_DVIS;
+	ro_regs.gicd_typer &= ~GICD_TYPER_LPIS;
+
+	/*
+	 * XXX. Guest reads of GICD_PIDR2 should return the same ArchRev as
+	 * specified in the guest FDT.
+	 */
+	ro_regs.gicd_pidr2 = gic_d_read(gic_sc, 4, GICD_PIDR2);
+}
+
+static int
 arm_vgic_attach(device_t dev)
 {
 	vgic_v3_set_ro_regs(dev);
@@ -652,32 +639,27 @@ arm_vgic_attach(device_t dev)
 static void
 arm_vgic_identify(driver_t *driver, device_t parent)
 {
-	device_t dev = NULL;
-	int order;
+	device_t dev;
 
-	if (softc.vgic_v3_dev == NULL) {
-		order = BUS_PASS_INTERRUPT + BUS_PASS_ORDER_MIDDLE;
-		dev = device_add_child_ordered(parent, order, VGIC_V3_DEVNAME, -1);
-		if (dev != NULL) {
-			softc.vgic_v3_dev = dev;
-			softc.gic_v3_dev = parent;
-		}
-	}
+	/*
+	 * After we create the VGIC device this function gets called with the
+	 * VGIC as the parent. Exit in that case to avoid an infinite loop.
+	 */
+	if (strcmp(device_get_name(parent), VGIC_V3_DEVNAME) == 0)
+		return;
+
+	dev = device_find_child(parent, VGIC_V3_DEVNAME, -1);
+	if (!dev)
+		/* Create the virtual GIC device */
+		dev = device_add_child(parent, VGIC_V3_DEVNAME, -1);
 }
 
 static int
 arm_vgic_probe(device_t dev)
 {
-	if (softc.vgic_v3_dev == NULL)
-		goto error_disable_virtualization;
-
 	device_set_desc(dev, VGIC_V3_DEVSTR);
-	return (BUS_PROBE_DEFAULT);
 
-error_disable_virtualization:
-	hypmode_enabled = 0;
-	eprintf("Virtualization has been disabled.\n");
-	return (ENXIO);
+	return (BUS_PROBE_DEFAULT);
 }
 
 static device_method_t arm_vgic_methods[] = {
@@ -690,7 +672,6 @@ static device_method_t arm_vgic_methods[] = {
 
 static devclass_t arm_vgic_devclass;
 
-DEFINE_CLASS_1(vgic, arm_vgic_driver, arm_vgic_methods,
-    sizeof(struct vgic_v3_softc), gic_v3_driver);
+DEFINE_CLASS_1(vgic, arm_vgic_driver, arm_vgic_methods, 0, gic_v3_driver);
 
 DRIVER_MODULE(vgic, gic, arm_vgic_driver, arm_vgic_devclass, 0, 0);
