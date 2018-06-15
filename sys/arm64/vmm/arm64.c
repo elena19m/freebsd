@@ -368,7 +368,6 @@ arm64_print_hyp_regs(struct vm_exit *vme)
 	printf("hpfar_el2: 0x%016lx\n", vme->u.hyp.hpfar_el2);
 }
 
-/* 'u.hyp' member will be replaced by 'u.inst_emul' */
 static void
 arm64_gen_inst_emul_data(uint32_t esr_iss, struct vm_exit *vme_ret)
 {
@@ -376,7 +375,10 @@ arm64_gen_inst_emul_data(uint32_t esr_iss, struct vm_exit *vme_ret)
 	uint32_t esr_sas, reg_num;
 	uint64_t page_off;
 
-	/* Get bits [47:12] of the IPA from HPFAR_EL2. */
+	/*
+	 * Get bits [47:12] of the IPA from HPFAR_EL2.
+	 * At this point the 'u.hyp' member will be replaced by 'u.inst_emul'.
+	 */
 	vme_ret->u.inst_emul.gpa = \
 	    (vme_ret->u.hyp.hpfar_el2) >> HPFAR_EL2_FIPA_SHIFT;
 	/* The IPA is the base address of a 4KB page, make bits [11:0] zero. */
