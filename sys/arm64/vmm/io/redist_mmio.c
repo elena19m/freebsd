@@ -314,34 +314,46 @@ redist_mmio_init(struct hypctx *hypctx)
 	struct hyp *hyp = hypctx->hyp;
 	struct vgic_v3_redist *redist = &hypctx->vgic_redist;
 
-	KASSERT(hyp->vgic_mmio_regions != NULL, ("vgic_mmio_regions not allocated"));
+	KASSERT(hyp->vgic_mmio_regions != NULL,
+	    ("vgic_mmio_regions not allocated"));
 
-#define	init_mmio_region(addr, frame, num, regbits, shortname)		\
-	hyp->vgic_mmio_regions[VGIC_ ##addr] = (struct vgic_mmio_region){ \
+#define	init_mmio_region(name, addr, frame, size, accessor)		\
+	hyp->vgic_mmio_regions[name] = (struct vgic_mmio_region) { 	\
 		.start 	= redist->start + frame + addr,			\
-		.end 	= redist->start + frame + addr + num * (regbits / 8), \
-		.read 	= redist_ ##shortname ##_read,			\
-		.write 	= redist_ ##shortname ##_write,			\
-	}
-	init_mmio_region(GICR_CTLR, GICR_FRAME_RD, 1, 32, ctlr);
-	init_mmio_region(GICR_TYPER, GICR_FRAME_RD, 1, 64, typer);
-	init_mmio_region(GICR_WAKER, GICR_FRAME_RD, 1, 32, waker);
-	init_mmio_region(GICR_PIDR2, GICR_FRAME_RD, 1, 32, pidr2);
-	init_mmio_region(GICR_IGROUPR0, GICR_FRAME_SGI, 1, 32, igroupr0);
-	init_mmio_region(GICR_ISENABLER0, GICR_FRAME_SGI, 1, 32, isenabler0);
-	init_mmio_region(GICR_ICENABLER0, GICR_FRAME_SGI, 1, 32, icenabler0);
+		.end 	= redist->start + frame + addr + size,		\
+		.read 	= accessor ##_read,				\
+		.write 	= accessor ##_write,				\
+	};
 
-#define	init_mmio_region_base(addr, frame, num, regbits, shortname)	\
-	hyp->vgic_mmio_regions[VGIC_ ##addr] = (struct vgic_mmio_region){ \
-		.start 	= redist->start + frame + addr ##_BASE,		\
-		.end 	= redist->start + frame + addr ##_BASE + num * (regbits / 8), \
-		.read 	= redist_ ##shortname ##_read,			\
-		.write 	= redist_ ##shortname ##_write,			\
-	}
-	init_mmio_region_base(GICR_IPRIORITYR, GICR_FRAME_SGI,
-	    VGIC_PRV_I_NUM / 4, 32, ipriorityr);
-	init_mmio_region_base(GICR_ICFGR0, GICR_FRAME_SGI, 1, 32, icfgr0);
-	init_mmio_region_base(GICR_ICFGR1, GICR_FRAME_SGI, 1, 32, icfgr1);
+	init_mmio_region(VGIC_GICR_CTLR, GICR_CTLR, GICR_FRAME_RD,
+	    sizeof(redist->gicr_ctlr), redist_ctlr);
+
+	init_mmio_region(VGIC_GICR_TYPER, GICR_TYPER, GICR_FRAME_RD,
+	    sizeof(redist->gicr_typer), redist_typer);
+
+	init_mmio_region(VGIC_GICR_WAKER, GICR_WAKER, GICR_FRAME_RD,
+	    4, redist_waker);
+
+	init_mmio_region(VGIC_GICR_PIDR2, GICR_PIDR2, GICR_FRAME_RD,
+	    4, redist_pidr2);
+
+	init_mmio_region(VGIC_GICR_IGROUPR0, GICR_IGROUPR0, GICR_FRAME_SGI,
+	    sizeof(redist->gicr_igroupr0), redist_igroupr0);
+
+	init_mmio_region(VGIC_GICR_ISENABLER0, GICR_ISENABLER0, GICR_FRAME_SGI,
+	    sizeof(redist->gicr_ixenabler0), redist_isenabler0);
+
+	init_mmio_region(VGIC_GICR_ICENABLER0, GICR_ICENABLER0, GICR_FRAME_SGI,
+	    sizeof(redist->gicr_ixenabler0), redist_icenabler0);
+
+	init_mmio_region(VGIC_GICR_IPRIORITYR, GICR_IPRIORITYR_BASE, GICR_FRAME_SGI,
+	    sizeof(redist->gicr_ipriorityr), redist_ipriorityr);
+
+	init_mmio_region(VGIC_GICR_ICFGR0, GICR_ICFGR0_BASE, GICR_FRAME_SGI,
+	    sizeof(redist->gicr_icfgr0), redist_icfgr0);
+
+	init_mmio_region(VGIC_GICR_ICFGR1, GICR_ICFGR1_BASE, GICR_FRAME_SGI,
+	    sizeof(redist->gicr_icfgr1), redist_icfgr1);
 }
 
 void

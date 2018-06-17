@@ -433,69 +433,74 @@ dist_pidr2_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 	return (0);
 }
 
+#define	alloc_registers(regs, num, size)				\
+do {									\
+	size = n * sizeof(*regs);					\
+	regs = malloc(size, M_DIST_MMIO, M_WAITOK | M_ZERO);		\
+} while (0)
+
 #define	div_round_up(n, div)	(((n) + (div) - 1) / (div))
 
 void
 dist_mmio_init(struct hyp *hyp)
 {
 	struct vgic_v3_dist *dist = &hyp->vgic_dist;
-	size_t n;
+	size_t n, region_size;
 
-	KASSERT(hyp->vgic_mmio_regions != NULL, ("vgic_mio_regions not allocated"));
+	KASSERT(hyp->vgic_mmio_regions != NULL,
+	    ("vgic_mmio_regions not allocated"));
 
-#define	init_mmio_region(addr, num, regbits, shortname)			\
-	hyp->vgic_mmio_regions[VGIC_ ##addr] = (struct vgic_mmio_region){ \
+#define	init_mmio_region(name, addr, size, accessor)			\
+	hyp->vgic_mmio_regions[name] = (struct vgic_mmio_region){ 	\
 		.start 	= dist->start + addr,				\
-		.end 	= dist->start + addr + num * (regbits >> 3),	\
-		.read 	= dist_ ##shortname ##_read,			\
-		.write 	= dist_ ##shortname ##_write,			\
+		.end 	= dist->start + addr + size,			\
+		.read 	= accessor ##_read,				\
+		.write 	= accessor ##_write,				\
 	}
-	init_mmio_region(GICD_CTLR, 1, 32, ctlr);
-	init_mmio_region(GICD_TYPER, 1, 32, typer);
+
+	init_mmio_region(VGIC_GICD_CTLR, GICD_CTLR, sizeof(dist->gicd_ctlr),
+	    dist_ctlr);
+	init_mmio_region(VGIC_GICD_TYPER, GICD_TYPER, sizeof(dist->gicd_typer),
+	    dist_typer);
 
 	n = div_round_up(dist->nirqs, 32);
-	dist->gicd_igroupr = malloc(n * sizeof(*dist->gicd_igroupr),
-	    M_DIST_MMIO, M_WAITOK | M_ZERO);
-#define	init_mmio_region_base(addr, num, regbits, shortname)		\
-	hyp->vgic_mmio_regions[VGIC_ ##addr] = (struct vgic_mmio_region){ \
-		.start 	= dist->start + addr ##_BASE,			\
-		.end 	= dist->start + addr ##_BASE + num * (regbits >> 3), \
-		.read 	= dist_ ##shortname ##_read,			\
-		.write 	= dist_ ##shortname ##_write,			\
-	}
-	init_mmio_region_base(GICD_IGROUPR, 1, 32, igroupr);
+	alloc_registers(dist->gicd_igroupr, n, region_size);
+	init_mmio_region(VGIC_GICD_IGROUPR, GICD_IGROUPR_BASE,
+	    region_size, dist_igroupr);
 
 
 	/* ARM GIC Architecture Specification, page 8-471. */
 	n = (dist->gicd_typer & GICD_TYPER_ITLINESNUM_MASK) + 1;
-	dist->gicd_ixenabler = malloc(n * sizeof(*dist->gicd_ixenabler),
-	    M_DIST_MMIO, M_WAITOK | M_ZERO);
-	init_mmio_region_base(GICD_ISENABLER, n, 32, isenabler);
-	init_mmio_region_base(GICD_ICENABLER, n, 32, icenabler);
+	alloc_registers(dist->gicd_ixenabler, n , region_size);
+	init_mmio_region(VGIC_GICD_ISENABLER, GICD_ISENABLER_BASE,
+	    region_size, dist_isenabler);
+	init_mmio_region(VGIC_GICD_ICENABLER, GICD_ICENABLER_BASE,
+	    region_size, dist_icenabler);
 
 	/* ARM GIC Architecture Specification, page 8-483. */
 	n = 8 * ((dist->gicd_typer & GICD_TYPER_ITLINESNUM_MASK) + 1);
-	dist->gicd_ipriorityr = malloc(n * sizeof(*dist->gicd_ipriorityr),
-	    M_DIST_MMIO, M_WAITOK | M_ZERO);
-	init_mmio_region_base(GICD_IPRIORITYR, n, 32, ipriorityr);
+	alloc_registers(dist->gicd_ipriorityr, n, region_size);
+	init_mmio_region(VGIC_GICD_IPRIORITYR, GICD_IPRIORITYR_BASE,
+	    region_size, dist_ipriorityr);
 
 	n = div_round_up(dist->nirqs, 16);
-	dist->gicd_icfgr = malloc(n * sizeof(*dist->gicd_icfgr),
-	    M_DIST_MMIO, M_WAITOK | M_ZERO);
-	init_mmio_region_base(GICD_ICFGR, n, 32, icfgr);
+	alloc_registers(dist->gicd_icfgr, n, region_size);
+	init_mmio_region(VGIC_GICD_ICFGR, GICD_ICFGR_BASE,
+	    region_size, dist_icfgr);
 
 	n = div_round_up(dist->nirqs, 32);
-	dist->gicd_igroupr = malloc(n * sizeof(*dist->gicd_igroupr),
-	    M_DIST_MMIO, M_WAITOK | M_ZERO);
-	init_mmio_region_base(GICD_IGROUPR, n, 32, igroupr);
+	alloc_registers(dist->gicd_igroupr, n, region_size);
+	init_mmio_region(VGIC_GICD_IGROUPR, GICD_IGROUPR_BASE,
+	    region_size, dist_igroupr);
 
 	/* ARM GIC Architecture Specification, page 8-485. */
 	n = 32 * (dist->gicd_typer & GICD_TYPER_ITLINESNUM_MASK + 1) - 1;
-	dist->gicd_irouter = malloc(n * sizeof(*dist->gicd_irouter),
-	    M_DIST_MMIO, M_WAITOK | M_ZERO);
-	init_mmio_region_base(GICD_IROUTER, n, 64, irouter);
+	alloc_registers(dist->gicd_irouter, n, region_size);
+	init_mmio_region(VGIC_GICD_IROUTER, GICD_IROUTER_BASE,
+	    region_size, dist_irouter);
 
-	init_mmio_region(GICD_PIDR2, 1, 32, pidr2);
+	init_mmio_region(VGIC_GICD_PIDR2, GICD_PIDR2, sizeof(dist->gicd_pidr2),
+	    dist_pidr2);
 }
 
 void
