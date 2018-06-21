@@ -105,8 +105,6 @@ out:
 			vtophys(hyp->stage2_map->pm_l0));
 }
 
-extern volatile int ticks;
-
 static int
 arm_init(int ipinum)
 {

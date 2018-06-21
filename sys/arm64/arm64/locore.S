@@ -271,7 +271,7 @@ drop_to_el1:
 	msr	sctlr_el2, x2
 	isb
 
-	/* Configure the Hypervisor */
+	/* Enable the HVC Instruction and Make EL1 aarch64 */
 	ldr	x2, hcr
 	msr	hcr_el2, x2
 
