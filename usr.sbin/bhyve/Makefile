@@ -103,6 +103,8 @@ CFLAGS+= -DWITHOUT_CAPSICUM
 
 CFLAGS+= -DBHYVE_SNAPSHOT
 .endif
+.PATH:	${BHYVE_SYSDIR}/sys/${BHYVE_ARCH}/vmm
+SRCS+=	vmm_instruction_emul.c
 
 .include "${BHYVE_SRCTOP}/${BHYVE_ARCH}/Makefile.inc"
 .include "${BHYVE_SRCTOP}/${BHYVE_BUS}/Makefile.inc"
