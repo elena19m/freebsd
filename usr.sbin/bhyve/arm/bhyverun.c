@@ -95,12 +95,12 @@ usage(int code)
 {
 
         fprintf(stderr,
-                "Usage: %s [-b] [-c vcpus][-p pincpu][-m <mmio>]"
+                "Usage: %s [-b] [-c vcpus][-p pincpu][-s <devemu>]"
 		" <vmname>\n"
 		"       -b: use bvmconsole\n"
 		"       -c: # cpus (default 1)\n"
 		"       -p: pin vcpu 'n' to host cpu 'pincpu + n'\n"
-		"       -m: mmio config\n"
+		"       -s: device emulation config\n"
 		"       -h: help\n",
 		progname);
 
@@ -371,8 +371,10 @@ main(int argc, char *argv[])
 	init_mem();
 	devemu_irq_init(ctx);
 
-	if (init_devemu(ctx) != 0)
+	if (init_devemu(ctx) != 0) {
+		fprintf(stderr, "Failed to initialize device emulation\n");
 		exit(1);
+	}
 
 	if (bvmcons)
 		init_bvmcons();
