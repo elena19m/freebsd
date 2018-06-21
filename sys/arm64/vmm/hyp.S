@@ -27,9 +27,8 @@
  * SUCH DAMAGE.
  */
 
-#include "hyp_assym.h"
 
-/*#include "assym.s"*/
+#include "assym.inc"
 
 #include <sys/syscall.h>
 #include <machine/armreg.h>
@@ -39,6 +38,7 @@
 
 #include "hyp_macros.h"
 #include "hyp.h"
+#include "hyp_assym.h"
 
 	.text
 
