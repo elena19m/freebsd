@@ -41,6 +41,8 @@
 #include <vmmapi.h>
 
 #include "bhyverun.h"
+#include "devemu.h"
+#include "devemu_irq.h"
 #include "mem.h"
 #include "mevent.h"
 
@@ -90,10 +92,12 @@ usage(int code)
 {
 
         fprintf(stderr,
-                "Usage: %s [-bh] [-c vcpus] [-p pincpu] <vmname>\n"
+                "Usage: %s [-bh] [-c vcpus] [-p pincpu] [s <devemu>] "
+		"<vmname>\n"
 		"       -b: use bvmconsole\n"
 		"       -c: # cpus (default 1)\n"
 		"       -p: pin vcpu 'n' to host cpu 'pincpu + n'\n"
+		"       -s: device emulation config\n"
 		"       -h: help\n",
 		progname);
 
@@ -306,7 +310,7 @@ main(int argc, char *argv[])
 	progname = basename(argv[0]);
 	guest_ncpus = 1;
 
-	while ((c = getopt(argc, argv, "bhp:c:")) != -1) {
+	while ((c = getopt(argc, argv, "bhp:c:s:")) != -1) {
 		switch (c) {
 		case 'b':
 			bvmcons = true;
@@ -316,6 +320,10 @@ main(int argc, char *argv[])
 			break;
                 case 'c':
 			guest_ncpus = atoi(optarg);
+			break;
+		case 's':
+			if (devemu_parse_opts(optarg) != 0)
+				exit(1);
 			break;
 		case 'h':
 			usage(0);
@@ -345,6 +353,12 @@ main(int argc, char *argv[])
 	}
 
 	init_mem();
+	devemu_irq_init(ctx);
+
+	if (init_devemu(ctx) != 0) {
+		fprintf(stderr, "Failed to initialize device emulation\n");
+		exit(1);
+	}
 
 	if (bvmcons)
 		init_bvmcons();
