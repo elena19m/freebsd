@@ -43,22 +43,22 @@
 #include <vmmapi.h>
 
 #include "bhyverun.h"
-#include "mem.h"
-#include "mevent.h"
 #include "devemu.h"
 #include "devemu_irq.h"
+#include "mem.h"
+#include "mevent.h"
 #include "reset.h"
 
-#define GUEST_NIO_PORT		0x488	/* guest upcalls via i/o port */
+#define	GUEST_NIO_PORT	0x488	/* guest upcalls via i/o port */
 
-#define	VMEXIT_SWITCH		0	/* force vcpu switch in mux mode */
-#define	VMEXIT_CONTINUE		1	/* continue from next instruction */
-#define	VMEXIT_RESTART		2	/* restart current instruction */
-#define	VMEXIT_ABORT		3	/* abort the vm run loop */
-#define	VMEXIT_RESET		4	/* guest machine has reset */
+#define	VMEXIT_SWITCH	0	/* force vcpu switch in mux mode */
+#define	VMEXIT_CONTINUE	1	/* continue from next instruction */
+#define	VMEXIT_RESTART	2	/* restart current instruction */
+#define	VMEXIT_ABORT	3	/* abort the vm run loop */
+#define	VMEXIT_RESET	4	/* guest machine has reset */
 
-#define MB		(1024UL * 1024)
-#define GB		(1024UL * MB)
+#define	MB		(1024UL * 1024)
+#define	GB		(1024UL * MB)
 
 typedef int (*vmexit_handler_t)(struct vmctx *, struct vm_exit *, int *vcpu);
 
@@ -87,7 +87,7 @@ struct bhyvestats {
 struct mt_vmm_info {
 	pthread_t	mt_thr;
 	struct vmctx	*mt_ctx;
-	int		mt_vcpu;	
+	int		mt_vcpu;
 } mt_vmm_info[VM_MAXCPU];
 
 static void
@@ -225,7 +225,8 @@ vmexit_inst_emul(struct vmctx *ctx, struct vm_exit *vmexit, int *pvcpu)
 		if (err == RESET_MAGIC)
 			return (VMEXIT_RESET);
 
-		fprintf(stderr, "Failed to emulate instruction at 0x%llx\n", vmexit->pc);
+		fprintf(stderr, "Failed to emulate instruction at 0x%llx\n",
+			vmexit->pc);
 		return (VMEXIT_ABORT);
 	}
 	return (VMEXIT_CONTINUE);
