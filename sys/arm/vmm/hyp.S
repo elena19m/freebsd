@@ -24,7 +24,6 @@
  * SUCH DAMAGE.
  */
 
-#include "assym.s"
 #include <sys/syscall.h>
 #include <machine/asm.h>
 #include <machine/asmacros.h>
@@ -56,6 +55,7 @@ ENTRY(vmm_call_hyp)
 	hvc	#0
 	bx	lr
 END(vmm_call_hyp)
+
 /*
  * int hyp_enter_guest(struct *hyp_vmxctx);
  * - r0 pointer to the struct hyp_vmxctx
