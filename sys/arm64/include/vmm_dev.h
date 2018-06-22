@@ -107,6 +107,10 @@ struct vm_attach_vtimer {
 	int		virt_irq;
 };
 
+struct vm_irq {
+	uint32_t irq;
+};
+
 #define	VM_ACTIVE_CPUS		0
 #define	VM_SUSPENDED_CPUS	1
 
@@ -132,6 +136,10 @@ enum {
 	/* statistics */
 	IOCNUM_VM_STATS = 50, 
 	IOCNUM_VM_STAT_DESC = 51,
+
+	/* interrupt injection */
+	IOCNUM_ASSERT_IRQ = 80,
+	IOCNUM_DEASSERT_IRQ = 81,
 
 	/* vm_cpuset */
 	IOCNUM_ACTIVATE_CPU = 90,
@@ -166,6 +174,10 @@ enum {
 	_IOWR('v', IOCNUM_VM_STATS, struct vm_stats)
 #define	VM_STAT_DESC \
 	_IOWR('v', IOCNUM_VM_STAT_DESC, struct vm_stat_desc)
+#define VM_ASSERT_IRQ \
+	_IOW('v', IOCNUM_ASSERT_IRQ, struct vm_irq)
+#define VM_DEASSERT_IRQ \
+	_IOW('v', IOCNUM_DEASSERT_IRQ, struct vm_irq)
 #define	VM_GLA2GPA	\
 	_IOWR('v', IOCNUM_GLA2GPA, struct vm_gla2gpa)
 #define	VM_ACTIVATE_CPU	\

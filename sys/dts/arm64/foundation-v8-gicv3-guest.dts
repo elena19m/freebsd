@@ -57,4 +57,12 @@
 		interrupt-parrent = <&gic>;
 		clock-frequency = <100000000>;
 	};
+
+
+	virtio_blk@7000 {
+		compatible = "virtio,mmio";
+		reg = <0x7000 0x200>;
+		interrupt-parent=<&gic>;
+		interrupts = <24>;
+	};
 };
