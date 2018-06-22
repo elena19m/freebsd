@@ -106,6 +106,7 @@ vmmdev_ioctl(struct cdev *cdev, u_long cmd, caddr_t data, int fflag,
 	struct vm_activate_cpu *vac;
 	struct vm_attach_vgic *vav;
 	struct vm_attach_vtimer *vat;
+	struct vm_irq *vi;
 
 	sc = vmmdev_lookup2(cdev);
 	if (sc == NULL)
@@ -163,6 +164,14 @@ vmmdev_ioctl(struct cdev *cdev, u_long cmd, caddr_t data, int fflag,
 		}
 
 		state_changed = 2;
+		break;
+	case VM_ASSERT_IRQ:
+		vi =(struct vm_irq *)data;
+		error = vm_assert_irq(sc->vm, vi->irq);
+		break;
+	case VM_DEASSERT_IRQ:
+		vi = (struct vm_irq *)data;
+		error = vm_deassert_irq(sc->vm, vi->irq);
 		break;
 	default:
 		break;

@@ -808,6 +808,32 @@ vm_attach_vtimer(struct vm *vm, int phys_ns_irq, int virt_irq)
 	return (error);
 }
 
+int
+vm_assert_irq(struct vm *vm, uint32_t irq)
+{
+	struct virq vi;
+	int error;
+
+	vi.irq = irq;
+	vi.type = VIRQ_TYPE_VIRTIO;
+	error = vgic_v3_inject_irq(vm->cookie, &vi);
+
+	return (error);
+}
+
+int
+vm_deassert_irq(struct vm *vm, uint32_t irq)
+{
+	struct virq vi;
+	int error;
+
+	vi.irq = irq;
+	vi.type = VIRQ_TYPE_VIRTIO;
+	error = vgic_v3_deactivate_irq(vm->cookie, &vi, true);
+
+	return (error);
+}
+
 static int
 vm_handle_wfi(struct vm *vm, int vcpuid, struct vm_exit *vme, bool *retu)
 {

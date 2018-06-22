@@ -356,25 +356,21 @@ vm_attach_vtimer(struct vmctx *ctx, int phys_ns_irq, int virt_irq)
 int
 vm_assert_irq(struct vmctx *ctx, uint32_t irq)
 {
-	/*
 	struct vm_irq vi;
 
 	bzero(&vi, sizeof(vi));
 	vi.irq = irq;
+
 	return (ioctl(ctx->fd, VM_ASSERT_IRQ, &vi));
-	*/
-	return 0;
 }
 
 int
 vm_deassert_irq(struct vmctx *ctx, uint32_t irq)
 {
-	/*
 	struct vm_irq vi;
 
 	bzero(&vi, sizeof(vi));
 	vi.irq = irq;
+
 	return (ioctl(ctx->fd, VM_DEASSERT_IRQ, &vi));
-	*/
-	return 0;
 }

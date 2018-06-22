@@ -104,10 +104,10 @@ device		al_serdes		# Serializer/Deserializer
 device		al_udma			# Universal DMA
 
 # VirtIO support
-#device		virtio
+device		virtio
 #device		virtio_pci
-#device		virtio_mmio
-#device		virtio_blk
+device		virtio_mmio
+device		virtio_blk
 #device		vtnet
 
 # CPU frequency control

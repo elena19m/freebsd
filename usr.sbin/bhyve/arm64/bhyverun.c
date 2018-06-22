@@ -92,7 +92,7 @@ usage(int code)
 {
 
         fprintf(stderr,
-                "Usage: %s [-bh] [-c vcpus] [-p pincpu] [s <devemu>] "
+                "Usage: %s [-bh] [-c vcpus] [-p pincpu] [-s <devemu>] "
 		"<vmname>\n"
 		"       -b: use bvmconsole\n"
 		"       -c: # cpus (default 1)\n"
