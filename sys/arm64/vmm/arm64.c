@@ -170,7 +170,6 @@ arm_cleanup(void)
 {
 	register_t daif;
 
-	daif = intr_disable();
 	/*
 	 * vmm_cleanup() will disable the MMU. For the next few instructions,
 	 * before the hardware disables the MMU, one of the following is
@@ -185,6 +184,7 @@ arm_cleanup(void)
 	 * in the translation tables and vmm_cleanup() is called by its physical
 	 * address.
 	 */
+	daif = intr_disable();
 	vmm_call_hyp((void *)vtophys(vmm_cleanup), vtophys(hyp_stub_vectors));
 	intr_restore(daif);
 
