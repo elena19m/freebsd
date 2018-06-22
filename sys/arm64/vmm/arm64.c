@@ -111,6 +111,7 @@ arm_init(int ipinum)
 	char *stack_top;
 	size_t hyp_code_len;
 	uint64_t ich_vtr_el2, cnthctl_el2;
+	register_t daif;
 
 	if (!hypmode_enabled) {
 		printf("arm_init: Processor doesn't have support for virtualization.\n");
@@ -119,6 +120,7 @@ arm_init(int ipinum)
 
 	mtx_init(&vmid_generation_mtx, "vmid_generation_mtx", NULL, MTX_DEF);
 
+	daif = intr_disable();
 	/*
 	 * Install the temporary vectors which will be responsible for
 	 * initializing the VMM when we next trap into EL2.
@@ -158,12 +160,17 @@ arm_init(int ipinum)
 	cnthctl_el2 = vmm_call_hyp((void *)ktohyp(vmm_read_cnthctl_el2));
 	vtimer_init(cnthctl_el2);
 
+	intr_restore(daif);
+
 	return 0;
 }
 
 static int
 arm_cleanup(void)
 {
+	register_t daif;
+
+	daif = intr_disable();
 	/*
 	 * vmm_cleanup() will disable the MMU. For the next few instructions,
 	 * before the hardware disables the MMU, one of the following is
@@ -179,6 +186,7 @@ arm_cleanup(void)
 	 * address.
 	 */
 	vmm_call_hyp((void *)vtophys(vmm_cleanup), vtophys(hyp_stub_vectors));
+	intr_restore(daif);
 
 	hypmap_cleanup(hyp_pmap);
 	free(hyp_pmap, M_HYP);
