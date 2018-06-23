@@ -61,8 +61,8 @@
 
 	virtio_blk@7000 {
 		compatible = "virtio,mmio";
-		reg = <0x7000 0x200>;
+		reg = <0x0 0x7000 0x0 0x200>;
 		interrupt-parent=<&gic>;
-		interrupts = <24>;
+		interrupts = <1 8 4>;
 	};
 };
