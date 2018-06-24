@@ -106,9 +106,9 @@ vgic_v3_cpuinit(void *arg, bool last_vcpu)
 
 	vmpidr_el2 = hypctx->vmpidr_el2;
 	/*
-	 * Get affinity for the current CPU. The affinity from MPIDR_EL1
-	 * matches the affinity from GICR_TYPER and this is how the CPU finds
-	 * its corresponding Redistributor.
+	 * Get affinity for the current CPU. The guest CPU affinity is taken
+	 * from VMPIDR_EL2. The Redistributor corresponding to this CPU is
+	 * the Redistributor with the same affinity from GICR_TYPER.
 	 */
 	aff = (CPU_AFF3(vmpidr_el2) << 24) | (CPU_AFF2(vmpidr_el2) << 16) |
 	    (CPU_AFF1(vmpidr_el2) << 8) | CPU_AFF0(vmpidr_el2);
@@ -368,12 +368,12 @@ vgic_v3_get_priority(struct virq *virq, struct hypctx *hypctx)
 	off = n % 4;
 	mask = 0xff << off;
 	/*
-	 * When affinity routing is enabled, for SGIs and PPIs the
-	 * Redistributor registers are used, and for the SPIs the corresponding
-	 * Distributor registers. When affinity routing is not enabled, the
-	 * Distributor registers are used for all interrupts.
+	 * When affinity routing is enabled, the Redistributor is used for
+	 * SGIs and PPIs and the Distributor for SPIs. When affinity routing
+	 * is not enabled, the Distributor registers are used for all
+	 * interrupts.
 	 */
-	if ((dist->gicd_ctlr & GICD_CTLR_ARE_NS) && n <= 7)
+	if ((dist->gicd_ctlr & GICD_CTLR_ARE_NS) && (n <= 7))
 		priority = (redist->gicr_ipriorityr[n] & mask) >> off;
 	else
 		priority = (dist->gicd_ipriorityr[n] & mask) >> off;
@@ -509,6 +509,7 @@ vgic_v3_sync_hwstate(void *arg)
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	struct virq *virq;
 	struct virq invalid_virq, tmp;
+	uint8_t priority;
 	int group;
 	int i;
 	int error;
@@ -545,8 +546,11 @@ vgic_v3_sync_hwstate(void *arg)
 			/* No more pending interrupts */
 			break;
 
-		cpu_if->ich_lr_el2[i] = ICH_LR_EL2_STATE_PENDING | \
-		    ((uint64_t)group << ICH_LR_EL2_GROUP_SHIFT) | virq->irq;
+		priority = vgic_v3_get_priority(virq, hypctx);
+		cpu_if->ich_lr_el2[i] = ICH_LR_EL2_STATE_PENDING;
+		cpu_if->ich_lr_el2[i] |= (uint64_t)group << ICH_LR_EL2_GROUP_SHIFT;
+		cpu_if->ich_lr_el2[i] |= (uint64_t)priority << ICH_LR_EL2_PRIO_SHIFT;
+		cpu_if->ich_lr_el2[i] |= virq->irq;
 		/* Mark the scheduled pending interrupt as invalid */
 		*virq = invalid_virq;
 	}
@@ -560,8 +564,7 @@ out:
 }
 
 void
-vgic_v3_init(uint64_t ich_vtr_el2)
-{
+vgic_v3_init(uint64_t ich_vtr_el2) {
 	uint32_t pribits, prebits;
 
 	pribits = ICH_VTR_EL2_PRIBITS(ich_vtr_el2);
