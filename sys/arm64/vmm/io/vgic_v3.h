@@ -50,20 +50,17 @@
 #define	VGIC_ICH_AP1R_NUM_MAX	VGIC_ICH_AP0R_NUM_MAX
 
 /* Order matters, a lower value means a higher precedence */
-enum virq_type {
-	VIRQ_TYPE_MAXPRIO,
-	VIRQ_TYPE_CLK,
-	VIRQ_TYPE_MISC,
-	VIRQ_TYPE_INVALID,
-};
-
-struct virq {
-	unsigned int	irq;
-	enum virq_type	type;
+enum vgic_v3_irqtype {
+	VGIC_IRQ_MAXPRIO,
+	VGIC_IRQ_CLK,
+	VGIC_IRQ_VIRTIO,
+	VGIC_IRQ_MISC,
+	VGIC_IRQ_INVALID,
 };
 
 /* The names should always be in ascending order of memory address */
 enum vgic_mmio_region_name {
+	/* Distributor registers */
 	VGIC_GICD_CTLR,
 	VGIC_GICD_TYPER,
 	VGIC_GICD_IGROUPR,
@@ -73,7 +70,7 @@ enum vgic_mmio_region_name {
 	VGIC_GICD_ICFGR,
 	VGIC_GICD_IROUTER,
 	VGIC_GICD_PIDR2,
-
+	/* Redistributor registers */
 	VGIC_GICR_CTLR,
 	VGIC_GICR_TYPER,
 	VGIC_GICR_WAKER,
@@ -134,6 +131,7 @@ struct vgic_v3_redist {
 	uint32_t	gicr_icfgr0, gicr_icfgr1;
 };
 
+struct vgic_v3_irq;
 struct vgic_v3_cpu_if {
 	uint32_t	ich_eisr_el2;	/* End of Interrupt Status Register */
 	uint32_t	ich_elsr_el2;	/* Empty List register Status Register (ICH_ELRSR_EL2) */
@@ -165,7 +163,7 @@ struct vgic_v3_cpu_if {
 	uint32_t	ich_ap1r_el2[VGIC_ICH_AP1R_NUM_MAX];
 	size_t		ich_ap1r_num;
 
-	struct virq	*pending;
+	struct vgic_v3_irq *pending;
 	size_t		pending_size;
 	size_t		pending_num;
 };
@@ -183,8 +181,9 @@ void	redist_mmio_init(struct hypctx *hypctx);
 void	redist_mmio_destroy(struct hypctx *hypctx);
 
 int 	vgic_v3_vcpu_pending_irq(void *arg);
-int 	vgic_v3_inject_irq(void *arg, struct virq *virq);
-int 	vgic_v3_remove_irq(void *arg, struct virq *virq);
+int 	vgic_v3_inject_irq(void *arg, uint32_t irq,
+			   enum vgic_v3_irqtype irqtype);
+int 	vgic_v3_remove_irq(void *arg, uint32_t irq);
 int 	vgic_v3_dist_read(void *vm, int vcpuid, uint64_t fault_ipa,
 			  uint64_t *rval, int size, void *arg);
 int	vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa,
