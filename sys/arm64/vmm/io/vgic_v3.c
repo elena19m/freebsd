@@ -88,13 +88,23 @@ struct vgic_v3_virt_features {
 	size_t ich_ap0r_num;
 	size_t ich_ap1r_num;
 };
-static struct vgic_v3_virt_features virt_features;
 
 struct vgic_v3_ro_regs {
 	uint32_t gicd_icfgr0;
 	uint32_t gicd_pidr2;
 	uint32_t gicd_typer;
 };
+
+#define IRQSTATE_IN_BUF	16
+
+struct vgic_v3_irq {
+	uint32_t irq;
+	enum vgic_v3_irqtype irqtype;
+	/* Distributor/Redistributor interrupt configuration */
+	uint64_t dr_config;
+};
+
+static struct vgic_v3_virt_features virt_features;
 static struct vgic_v3_ro_regs ro_regs;
 
 void
@@ -255,15 +265,15 @@ vgic_v3_vcpu_pending_irq(void *arg)
 }
 
 static int
-vgic_v3_remove_pending_unsafe(struct virq *virq, struct vgic_v3_cpu_if *cpu_if)
+vgic_v3_remove_pending_unsafe(uint32_t irq, struct vgic_v3_cpu_if *cpu_if)
 {
 	size_t dest = 0;
 	size_t from = cpu_if->pending_num;
 
 	while (dest < cpu_if->pending_num) {
-		if (cpu_if->pending[dest].irq == virq->irq) {
+		if (cpu_if->pending[dest].irq == irq) {
 			for (from = dest + 1; from < cpu_if->pending_num; from++) {
-				if (cpu_if->pending[from].irq == virq->irq)
+				if (cpu_if->pending[from].irq == irq)
 					continue;
 				cpu_if->pending[dest++] = cpu_if->pending[from];
 			}
@@ -277,27 +287,26 @@ vgic_v3_remove_pending_unsafe(struct virq *virq, struct vgic_v3_cpu_if *cpu_if)
 }
 
 int
-vgic_v3_remove_irq(void *arg, struct virq *virq)
+vgic_v3_remove_irq(void *arg, uint32_t irq)
 {
         struct hypctx *hypctx = arg;
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
 	size_t i;
 
-	if (virq->irq >= dist->nirqs ||
-	    virq->type >= VIRQ_TYPE_INVALID) {
-		eprintf("Malformed virq\n");
+	if (irq >= dist->nirqs) {
+		eprintf("Malformed irq\n");
 		return (1);
 	}
 
 	mtx_lock_spin(&cpu_if->lr_mtx);
 
 	for (i = 0; i < cpu_if->ich_lr_num; i++)
-		if (ICH_LR_EL2_VINTID(cpu_if->ich_lr_el2[i]) == virq->irq &&
+		if (ICH_LR_EL2_VINTID(cpu_if->ich_lr_el2[i]) == irq &&
 		    lr_not_active(cpu_if->ich_lr_el2[i]))
 			cpu_if->ich_lr_el2[i] &= ~ICH_LR_EL2_STATE_MASK;
 
-	vgic_v3_remove_pending_unsafe(virq, cpu_if);
+	vgic_v3_remove_pending_unsafe(irq, cpu_if);
 
 	mtx_unlock_spin(&cpu_if->lr_mtx);
 
@@ -305,9 +314,10 @@ vgic_v3_remove_irq(void *arg, struct virq *virq)
 }
 
 static int
-vgic_v3_add_pending_unsafe(struct virq *virq, struct vgic_v3_cpu_if *cpu_if)
+vgic_v3_add_pending_unsafe(uint32_t irq, enum vgic_v3_irqtype irqtype,
+    struct vgic_v3_cpu_if *cpu_if)
 {
-	struct virq *new_pending, *old_pending;
+	struct vgic_v3_irq *new_pending, *old_pending, *vip;
 	size_t new_size;
 
 	if (cpu_if->pending_num == cpu_if->pending_size) {
@@ -319,7 +329,7 @@ vgic_v3_add_pending_unsafe(struct virq *virq, struct vgic_v3_cpu_if *cpu_if)
 		new_pending = malloc(new_size * sizeof(*cpu_if->pending),
 		    M_VGIC_V3, M_WAITOK | M_ZERO);
 		memcpy(new_pending, cpu_if->pending,
-		    cpu_if->pending_size * sizeof(*virq));
+		    cpu_if->pending_size * sizeof(*cpu_if->pending));
 
 		old_pending = cpu_if->pending;
 		cpu_if->pending = new_pending;
@@ -327,39 +337,41 @@ vgic_v3_add_pending_unsafe(struct virq *virq, struct vgic_v3_cpu_if *cpu_if)
 		free(old_pending, M_VGIC_V3);
 	}
 
-	memcpy(&cpu_if->pending[cpu_if->pending_num], virq, sizeof(*virq));
+	vip = &cpu_if->pending[cpu_if->pending_num];
+	vip->irq = irq;
+	vip->irqtype = irqtype;
+
 	cpu_if->pending_num++;
 
 	return (0);
 }
 
 int
-vgic_v3_inject_irq(void *arg, struct virq *virq)
+vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 {
         struct hypctx *hypctx = arg;
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
 	int error;
 
-	KASSERT(virq->irq > GIC_LAST_SGI, ("SGI interrupts not implemented"));
+	KASSERT(irq > GIC_LAST_SGI, ("SGI interrupts not implemented"));
 
-	if (virq->irq >= dist->nirqs ||
-	    virq->type >= VIRQ_TYPE_INVALID) {
-		eprintf("Malformed IRQ %u.\n", virq->irq);
+	if (irq >= dist->nirqs || irqtype >= VGIC_IRQ_INVALID) {
+		eprintf("Malformed IRQ %u.\n", irq);
 		return (1);
 	}
 
 	mtx_lock_spin(&cpu_if->lr_mtx);
-	error = vgic_v3_add_pending_unsafe(virq, cpu_if);
+	error = vgic_v3_add_pending_unsafe(irq, irqtype, cpu_if);
 	if (error)
-		eprintf("Unable to mark IRQ %u as pending.\n", virq->irq);
+		eprintf("Unable to mark IRQ %u as pending.\n", irq);
 	mtx_unlock_spin(&cpu_if->lr_mtx);
 
 	return (error);
 }
 
 static uint8_t
-vgic_v3_get_priority(struct virq *virq, struct hypctx *hypctx)
+vgic_v3_get_priority(uint32_t irq, struct hypctx *hypctx)
 {
 	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
 	struct vgic_v3_redist *redist = &hypctx->vgic_redist;
@@ -367,7 +379,7 @@ vgic_v3_get_priority(struct virq *virq, struct hypctx *hypctx)
 	uint32_t off, mask;
 	uint8_t priority;
 
-	n = virq->irq / 4;
+	n = irq / 4;
 	off = n % 4;
 	mask = 0xff << off;
 	/*
@@ -385,21 +397,21 @@ vgic_v3_get_priority(struct virq *virq, struct hypctx *hypctx)
 }
 
 static bool
-vgic_v3_int_target(struct virq *virq, struct hypctx *hypctx)
+vgic_v3_int_target(uint32_t irq, struct hypctx *hypctx)
 {
 	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
 	struct vgic_v3_redist *redist = &hypctx->vgic_redist;
 	uint64_t irouter;
 	uint64_t aff;
 
-	if (virq->irq <= GIC_LAST_PPI)
+	if (irq <= GIC_LAST_PPI)
 		return (true);
 
 	/* XXX Affinity routing disabled not implemented */
 	if (!(dist->gicd_ctlr & GICD_CTLR_ARE_NS))
 		return (true);
 
-	irouter = dist->gicd_irouter[virq->irq];
+	irouter = dist->gicd_irouter[irq];
 	/* Check if 1-of-N routing is active */
 	if (irouter & GICD_IROUTER_IRM) {
 		/* Check if the VCPU is participating */
@@ -422,7 +434,7 @@ vgic_v3_int_target(struct virq *virq, struct hypctx *hypctx)
 }
 
 static bool
-vgic_v3_int_enabled(struct virq *virq, struct hypctx *hypctx, int *group)
+vgic_v3_int_enabled(uint32_t irq, struct hypctx *hypctx, int *group)
 {
 	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
 	struct vgic_v3_redist *redist = &hypctx->vgic_redist;
@@ -430,9 +442,9 @@ vgic_v3_int_enabled(struct virq *virq, struct hypctx *hypctx, int *group)
 	uint32_t irq_off, irq_mask;
 	int n;
 
-	irq_off = virq->irq % 32;
+	irq_off = irq % 32;
 	irq_mask = 1 << irq_off;
-	n = virq->irq / 32;
+	n = irq / 32;
 
 	/* XXX GIC{R, D}_IGROUPMODR set the secure/non-secure bit */
 	if (n == 0)
@@ -457,8 +469,8 @@ vgic_v3_int_enabled(struct virq *virq, struct hypctx *hypctx, int *group)
 			return (false);
 	}
 
-	/* Check that the interrupt ID hasn't been disabled */
-	if (virq->irq <= GIC_LAST_PPI) {
+	/* Check that the interrupt hasn't been disabled */
+	if (irq <= GIC_LAST_PPI) {
 		if (!(redist->gicr_ixenabler0 & irq_mask))
 			return (false);
 	} else {
@@ -469,10 +481,11 @@ vgic_v3_int_enabled(struct virq *virq, struct hypctx *hypctx, int *group)
 	return (true);
 }
 
-static struct virq *
+static struct vgic_v3_irq *
 vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
     struct hypctx *hypctx, int *group)
 {
+	uint32_t irq;
 	int i, max_idx;
 	uint8_t priority, max_priority;
 	uint8_t vpmr;
@@ -483,17 +496,18 @@ vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
 	max_idx = -1;
 	max_priority = 0xff;
 	for (i = 0; i < cpu_if->pending_num; i++) {
+		irq = cpu_if->pending[i].irq;
 		/* Check that the interrupt hasn't been already scheduled */
-		if (cpu_if->pending[i].irq == PENDING_INVALID)
+		if (irq == PENDING_INVALID)
 			continue;
 
-		if (!vgic_v3_int_enabled(&cpu_if->pending[i], hypctx, group))
+		if (!vgic_v3_int_enabled(irq, hypctx, group))
 			continue;
 
-		if (!vgic_v3_int_target(&cpu_if->pending[i], hypctx))
+		if (!vgic_v3_int_target(irq, hypctx))
 			continue;
 
-		priority = vgic_v3_get_priority(&cpu_if->pending[i], hypctx);
+		priority = vgic_v3_get_priority(irq, hypctx);
 		if (priority >= vpmr)
 			continue;
 
@@ -504,7 +518,7 @@ vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
 			max_idx = i;
 			max_priority = priority;
 		} else if (priority == max_priority &&
-		    cpu_if->pending[i].type < cpu_if->pending[max_idx].type) {
+		    cpu_if->pending[i].irqtype < cpu_if->pending[max_idx].irqtype) {
 			max_idx = i;
 			max_priority = priority;
 		}
@@ -520,8 +534,8 @@ vgic_v3_sync_hwstate(void *arg)
 {
 	struct hypctx *hypctx = arg;
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
-	struct virq *virq;
-	struct virq invalid_virq, tmp;
+	struct vgic_v3_irq *vip;
+	uint32_t irq;
 	uint8_t priority;
 	int group;
 	int i;
@@ -532,18 +546,15 @@ vgic_v3_sync_hwstate(void *arg)
 	if (cpu_if->pending_num == 0)
 		goto out;
 
-	invalid_virq.irq = PENDING_INVALID;
-	invalid_virq.type = VIRQ_TYPE_INVALID;
-
 	/*
 	 * Add all interrupts from the list registers that are not active to
-	 * pending buffer to be rescheduled in the next step.
+	 * the pending buffer to be rescheduled in the next step.
 	 */
 	for (i = 0; i < cpu_if->ich_lr_num; i++)
 		if (lr_pending(cpu_if->ich_lr_el2[i])) {
-			tmp.irq = cpu_if->ich_lr_el2[i] & ICH_LR_EL2_VINTID_MASK;
-			tmp.type = VIRQ_TYPE_MAXPRIO;
-			error = vgic_v3_add_pending_unsafe(&tmp, cpu_if);
+			irq = cpu_if->ich_lr_el2[i] & ICH_LR_EL2_VINTID_MASK;
+			error = vgic_v3_add_pending_unsafe(irq,
+			    VGIC_IRQ_MAXPRIO, cpu_if);
 			if (error)
 				/* Pending list full, stop it */
 				break;
@@ -554,23 +565,23 @@ vgic_v3_sync_hwstate(void *arg)
 		if (!lr_inactive(cpu_if->ich_lr_el2[i]))
 			continue;
 
-		virq = vgic_v3_highest_priority_pending(cpu_if, hypctx, &group);
-		if (virq == NULL)
+		vip = vgic_v3_highest_priority_pending(cpu_if, hypctx, &group);
+		if (vip == NULL)
 			/* No more pending interrupts */
 			break;
 
-		priority = vgic_v3_get_priority(virq, hypctx);
+		priority = vgic_v3_get_priority(vip->irq, hypctx);
 
 		cpu_if->ich_lr_el2[i] = ICH_LR_EL2_STATE_PENDING;
 		cpu_if->ich_lr_el2[i] |= (uint64_t)group << ICH_LR_EL2_GROUP_SHIFT;
 		cpu_if->ich_lr_el2[i] |= (uint64_t)priority << ICH_LR_EL2_PRIO_SHIFT;
-		cpu_if->ich_lr_el2[i] |= virq->irq;
+		cpu_if->ich_lr_el2[i] |= vip->irq;
 
 		/* Mark the scheduled pending interrupt as invalid */
-		*virq = invalid_virq;
+		vip->irq = PENDING_INVALID;
 	}
 	/* Remove all scheduled interrupts */
-	vgic_v3_remove_pending_unsafe(&invalid_virq, cpu_if);
+	vgic_v3_remove_pending_unsafe(PENDING_INVALID, cpu_if);
 
 	/* TODO Enable maintenance interrupts if interrupts are still pending */
 

@@ -81,17 +81,12 @@ vtimer_detach_from_vm(void *arg)
 	}
 }
 
-static void
+static inline void
 vtimer_inject_irq(struct hypctx *hypctx)
 {
-	struct hyp *hyp;
-	struct virq virq;
+	struct hyp *hyp = hypctx->hyp;
 
-	hyp = hypctx->hyp;
-
-	virq.irq = hyp->vtimer.phys_ns_irq;
-	virq.type = VIRQ_TYPE_CLK;
-	vgic_v3_inject_irq(hypctx, &virq);
+	vgic_v3_inject_irq(hypctx, hyp->vtimer.phys_ns_irq, VGIC_IRQ_CLK);
 }
 
 static void
@@ -176,9 +171,10 @@ static void
 vtimer_remove_irq(struct hypctx *hypctx)
 {
 	struct vtimer_cpu *vtimer_cpu;
-	struct virq virq;
+	uint32_t irq;
 
 	vtimer_cpu = &hypctx->vtimer_cpu;
+	irq = hypctx->hyp->vtimer.phys_ns_irq;
 
 	callout_drain(&vtimer_cpu->callout);
 	/*
@@ -187,9 +183,7 @@ vtimer_remove_irq(struct hypctx *hypctx)
 	 * the CNTP_CTL_EL0.IMASK bit instead of reading the IAR register.
 	 * Masking the interrupt doesn't remove it from the list registers.
 	 */
-	virq.irq = hypctx->hyp->vtimer.phys_ns_irq;
-	virq.type = VIRQ_TYPE_CLK;
-	vgic_v3_remove_irq(hypctx, &virq);
+	vgic_v3_remove_irq(hypctx, irq);
 }
 
 int
