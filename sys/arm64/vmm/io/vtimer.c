@@ -173,7 +173,7 @@ vtimer_schedule_irq(struct vtimer_cpu *vtimer_cpu, struct hypctx *hypctx)
 }
 
 static void
-vtimer_deactivate_irq(struct hypctx *hypctx)
+vtimer_remove_irq(struct hypctx *hypctx)
 {
 	struct vtimer_cpu *vtimer_cpu;
 	struct virq virq;
@@ -183,14 +183,13 @@ vtimer_deactivate_irq(struct hypctx *hypctx)
 	callout_drain(&vtimer_cpu->callout);
 	/*
 	 * The interrupt needs to be deactivated here regardless of the callout
-	 * function having been executed. The timer interrupt can be controlled
-	 * by using the CNTP_CTL_EL0.IMASK bit instead of reading the IAR
-	 * register which has the effect that disabling the timer interrupt
-	 * doesn't remove it from the list registers.
+	 * function having been executed. The timer interrupt can be masked with
+	 * the CNTP_CTL_EL0.IMASK bit instead of reading the IAR register.
+	 * Masking the interrupt doesn't remove it from the list registers.
 	 */
 	virq.irq = hypctx->hyp->vtimer.phys_ns_irq;
 	virq.type = VIRQ_TYPE_CLK;
-	vgic_v3_deactivate_irq(hypctx, &virq, true);
+	vgic_v3_remove_irq(hypctx, &virq);
 }
 
 int
@@ -242,7 +241,7 @@ vtimer_phys_ctl_write(void *vm, int vcpuid, uint64_t wval, void *arg)
 	if (timer_toggled_on)
 		vtimer_schedule_irq(vtimer_cpu, hypctx);
 	else if (timer_toggled_off)
-		vtimer_deactivate_irq(hypctx);
+		vtimer_remove_irq(hypctx);
 
 	*retu = false;
 	return (0);
@@ -279,7 +278,7 @@ vtimer_phys_cval_write(void *vm, int vcpuid, uint64_t wval, void *arg)
 	vtimer_cpu->cntp_cval_el0 = wval;
 
 	if (vtimer_enabled(vtimer_cpu->cntp_ctl_el0)) {
-		vtimer_deactivate_irq(hypctx);
+		vtimer_remove_irq(hypctx);
 		vtimer_schedule_irq(vtimer_cpu, hypctx);
 	}
 
@@ -332,7 +331,7 @@ vtimer_phys_tval_write(void *vm, int vcpuid, uint64_t wval, void *arg)
 	vtimer_cpu->cntp_cval_el0 = (int32_t)wval + cntpct_el0;
 
 	if (vtimer_enabled(vtimer_cpu->cntp_ctl_el0)) {
-		vtimer_deactivate_irq(hypctx);
+		vtimer_remove_irq(hypctx);
 		vtimer_schedule_irq(vtimer_cpu, hypctx);
 	}
 

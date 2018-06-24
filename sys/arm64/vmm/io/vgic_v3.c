@@ -76,6 +76,7 @@
     (ICH_LR_EL2_STATE(lr) == ICH_LR_EL2_STATE_PENDING)
 #define	lr_inactive(lr)	\
     (ICH_LR_EL2_STATE(lr) == ICH_LR_EL2_STATE_INACTIVE)
+#define	lr_not_active(lr) (lr_pending(lr) || lr_inactive(lr))
 
 MALLOC_DEFINE(M_VGIC_V3, "ARM VMM VGIC V3", "ARM VMM VGIC V3");
 
@@ -276,7 +277,7 @@ vgic_v3_remove_pending_unsafe(struct virq *virq, struct vgic_v3_cpu_if *cpu_if)
 }
 
 int
-vgic_v3_deactivate_irq(void *arg, struct virq *virq, bool ignore_state)
+vgic_v3_remove_irq(void *arg, struct virq *virq)
 {
         struct hypctx *hypctx = arg;
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
@@ -293,7 +294,7 @@ vgic_v3_deactivate_irq(void *arg, struct virq *virq, bool ignore_state)
 
 	for (i = 0; i < cpu_if->ich_lr_num; i++)
 		if (ICH_LR_EL2_VINTID(cpu_if->ich_lr_el2[i]) == virq->irq &&
-		    (ignore_state || lr_pending(cpu_if->ich_lr_el2[i])))
+		    lr_not_active(cpu_if->ich_lr_el2[i]))
 			cpu_if->ich_lr_el2[i] &= ~ICH_LR_EL2_STATE_MASK;
 
 	vgic_v3_remove_pending_unsafe(virq, cpu_if);
