@@ -340,6 +340,8 @@ vgic_v3_inject_irq(void *arg, struct virq *virq)
 	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
 	int error;
 
+	KASSERT(virq->irq > GIC_LAST_SGI, ("SGI interrupts not implemented"));
+
 	if (virq->irq >= dist->nirqs ||
 	    virq->type >= VIRQ_TYPE_INVALID) {
 		eprintf("Malformed IRQ %u.\n", virq->irq);
