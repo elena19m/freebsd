@@ -163,9 +163,9 @@ struct vgic_v3_cpu_if {
 	uint32_t	ich_ap1r_el2[VGIC_ICH_AP1R_NUM_MAX];
 	size_t		ich_ap1r_num;
 
-	struct vgic_v3_irq *pending;
-	size_t		pending_size;
-	size_t		pending_num;
+	struct vgic_v3_irq *irqbuf;
+	size_t		irqbuf_size;
+	size_t		irqbuf_num;
 };
 
 int 	vgic_v3_attach_to_vm(void *arg, uint64_t dist_start, size_t dist_size,

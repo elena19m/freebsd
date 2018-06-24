@@ -175,10 +175,10 @@ vgic_v3_cpuinit(void *arg, bool last_vcpu)
 	cpu_if->ich_ap0r_num = virt_features.ich_ap0r_num;
 	cpu_if->ich_ap1r_num = virt_features.ich_ap1r_num;
 
-	cpu_if->pending = malloc(PENDING_SIZE_MIN * sizeof(*cpu_if->pending),
+	cpu_if->irqbuf = malloc(PENDING_SIZE_MIN * sizeof(*cpu_if->irqbuf),
 	    M_VGIC_V3, M_WAITOK | M_ZERO);
-	cpu_if->pending_size = PENDING_SIZE_MIN;
-	cpu_if->pending_num = 0;
+	cpu_if->irqbuf_size = PENDING_SIZE_MIN;
+	cpu_if->irqbuf_num = 0;
 }
 
 void
@@ -261,23 +261,23 @@ vgic_v3_vcpu_pending_irq(void *arg)
 	struct hypctx *hypctx = arg;
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 
-	return (cpu_if->pending_num);
+	return (cpu_if->irqbuf_num);
 }
 
 static int
 vgic_v3_remove_pending_unsafe(uint32_t irq, struct vgic_v3_cpu_if *cpu_if)
 {
 	size_t dest = 0;
-	size_t from = cpu_if->pending_num;
+	size_t from = cpu_if->irqbuf_num;
 
-	while (dest < cpu_if->pending_num) {
-		if (cpu_if->pending[dest].irq == irq) {
-			for (from = dest + 1; from < cpu_if->pending_num; from++) {
-				if (cpu_if->pending[from].irq == irq)
+	while (dest < cpu_if->irqbuf_num) {
+		if (cpu_if->irqbuf[dest].irq == irq) {
+			for (from = dest + 1; from < cpu_if->irqbuf_num; from++) {
+				if (cpu_if->irqbuf[from].irq == irq)
 					continue;
-				cpu_if->pending[dest++] = cpu_if->pending[from];
+				cpu_if->irqbuf[dest++] = cpu_if->irqbuf[from];
 			}
-			cpu_if->pending_num = dest;
+			cpu_if->irqbuf_num = dest;
 		} else {
 			dest++;
 		}
@@ -317,31 +317,31 @@ static int
 vgic_v3_add_pending_unsafe(uint32_t irq, enum vgic_v3_irqtype irqtype,
     struct vgic_v3_cpu_if *cpu_if)
 {
-	struct vgic_v3_irq *new_pending, *old_pending, *vip;
+	struct vgic_v3_irq *new_irqbuf, *old_irqbuf, *vip;
 	size_t new_size;
 
-	if (cpu_if->pending_num == cpu_if->pending_size) {
+	if (cpu_if->irqbuf_num == cpu_if->irqbuf_size) {
 		/* Double the size of the pending list */
-		new_size = cpu_if->pending_size << 1;
+		new_size = cpu_if->irqbuf_size << 1;
 		if (new_size > PENDING_SIZE_MAX)
 			return (1);
 
-		new_pending = malloc(new_size * sizeof(*cpu_if->pending),
+		new_irqbuf = malloc(new_size * sizeof(*cpu_if->irqbuf),
 		    M_VGIC_V3, M_WAITOK | M_ZERO);
-		memcpy(new_pending, cpu_if->pending,
-		    cpu_if->pending_size * sizeof(*cpu_if->pending));
+		memcpy(new_irqbuf, cpu_if->irqbuf,
+		    cpu_if->irqbuf_size * sizeof(*cpu_if->irqbuf));
 
-		old_pending = cpu_if->pending;
-		cpu_if->pending = new_pending;
-		cpu_if->pending_size = new_size;
-		free(old_pending, M_VGIC_V3);
+		old_irqbuf = cpu_if->irqbuf;
+		cpu_if->irqbuf = new_irqbuf;
+		cpu_if->irqbuf_size = new_size;
+		free(old_irqbuf, M_VGIC_V3);
 	}
 
-	vip = &cpu_if->pending[cpu_if->pending_num];
+	vip = &cpu_if->irqbuf[cpu_if->irqbuf_num];
 	vip->irq = irq;
 	vip->irqtype = irqtype;
 
-	cpu_if->pending_num++;
+	cpu_if->irqbuf_num++;
 
 	return (0);
 }
@@ -495,8 +495,8 @@ vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
 
 	max_idx = -1;
 	max_priority = 0xff;
-	for (i = 0; i < cpu_if->pending_num; i++) {
-		irq = cpu_if->pending[i].irq;
+	for (i = 0; i < cpu_if->irqbuf_num; i++) {
+		irq = cpu_if->irqbuf[i].irq;
 		/* Check that the interrupt hasn't been already scheduled */
 		if (irq == PENDING_INVALID)
 			continue;
@@ -518,7 +518,7 @@ vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
 			max_idx = i;
 			max_priority = priority;
 		} else if (priority == max_priority &&
-		    cpu_if->pending[i].irqtype < cpu_if->pending[max_idx].irqtype) {
+		    cpu_if->irqbuf[i].irqtype < cpu_if->irqbuf[max_idx].irqtype) {
 			max_idx = i;
 			max_priority = priority;
 		}
@@ -526,7 +526,7 @@ vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
 
 	if (max_idx == -1)
 		return (NULL);
-	return (&cpu_if->pending[max_idx]);
+	return (&cpu_if->irqbuf[max_idx]);
 }
 
 void
@@ -543,7 +543,7 @@ vgic_v3_sync_hwstate(void *arg)
 
 	mtx_lock_spin(&cpu_if->lr_mtx);
 
-	if (cpu_if->pending_num == 0)
+	if (cpu_if->irqbuf_num == 0)
 		goto out;
 
 	/*
