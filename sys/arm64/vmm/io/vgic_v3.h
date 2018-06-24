@@ -184,7 +184,7 @@ void	redist_mmio_destroy(struct hypctx *hypctx);
 
 int 	vgic_v3_vcpu_pending_irq(void *arg);
 int 	vgic_v3_inject_irq(void *arg, struct virq *virq);
-int 	vgic_v3_deactivate_irq(void *arg, struct virq *virq, bool ignore_state);
+int 	vgic_v3_remove_irq(void *arg, struct virq *virq);
 int 	vgic_v3_dist_read(void *vm, int vcpuid, uint64_t fault_ipa,
 			  uint64_t *rval, int size, void *arg);
 int	vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa,
