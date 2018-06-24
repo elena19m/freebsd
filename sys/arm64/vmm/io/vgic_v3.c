@@ -389,17 +389,22 @@ vgic_v3_int_target(struct virq *virq, struct hypctx *hypctx)
 	uint64_t irouter;
 	uint64_t aff;
 
-	if (!(dist->gicd_ctlr & GICD_CTLR_ARE_NS))
-		/* XXX Affinity routing disabled not implemented */
-		return (true);
-
 	if (virq->irq <= GIC_LAST_PPI)
 		return (true);
 
-	irouter = dist->gicd_irouter[virq->irq];
-	if (irouter & GICD_IROUTER_IRM)
-		/* VCPU is a participating node in 1 of N routing */
+	/* XXX Affinity routing disabled not implemented */
+	if (!(dist->gicd_ctlr & GICD_CTLR_ARE_NS))
 		return (true);
+
+	irouter = dist->gicd_irouter[virq->irq];
+	/* Check if 1-of-N routing is active */
+	if (irouter & GICD_IROUTER_IRM) {
+		/* Check if the VCPU is participating */
+		if (redist->gicr_ctlr & GICR_CTLR_DPG1NS)
+			return (false);
+		else
+			return (true);
+	}
 
 	aff = redist->gicr_typer >> GICR_TYPER_AFF_SHIFT;
 	/* Affinity in format for comparison with irouter */
@@ -426,12 +431,17 @@ vgic_v3_int_enabled(struct virq *virq, struct hypctx *hypctx, int *group)
 	irq_mask = 1 << irq_off;
 	n = virq->irq / 32;
 
+	/* XXX GIC{R, D}_IGROUPMODR set the secure/non-secure bit */
 	if (n == 0)
 		*group = (redist->gicr_igroupr0 & irq_mask) ? 1 : 0;
 	else
 		*group = (dist->gicd_igroupr[n] & irq_mask) ? 1 : 0;
 
-	/* Check that the interrupt group hasn't been disabled */
+	/*
+	 * Check that the interrupt group hasn't been disabled:
+	 * - in the Distributor
+	 * - in the CPU interface
+	 */
 	if (*group == 1) {
 		if (!(dist->gicd_ctlr & GICD_CTLR_G1A))
 			return (false);
@@ -547,10 +557,12 @@ vgic_v3_sync_hwstate(void *arg)
 			break;
 
 		priority = vgic_v3_get_priority(virq, hypctx);
+
 		cpu_if->ich_lr_el2[i] = ICH_LR_EL2_STATE_PENDING;
 		cpu_if->ich_lr_el2[i] |= (uint64_t)group << ICH_LR_EL2_GROUP_SHIFT;
 		cpu_if->ich_lr_el2[i] |= (uint64_t)priority << ICH_LR_EL2_PRIO_SHIFT;
 		cpu_if->ich_lr_el2[i] |= virq->irq;
+
 		/* Mark the scheduled pending interrupt as invalid */
 		*virq = invalid_virq;
 	}
