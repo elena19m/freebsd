@@ -213,7 +213,7 @@ struct vring_used {
 #define	VIRTIO_DEV_RANDOM	0x1005
 
 #define	VIRTIO_MMIO_MAGIC_NUM	0x74726976
-#define	VIRTIO_MMIO_VERSION_NUM	0x2
+#define	VIRTIO_MMIO_VERSION_NUM	0x1
 
 /*
  * Bits in VTCFG_R_STATUS.  Guests need not actually set any of these,
