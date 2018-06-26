@@ -538,6 +538,10 @@ arm_tmr_attach(device_t dev)
 	sc->physical |= virt_enabled();
 #endif
 
+#ifdef __arm__
+	sc->physical = (sc->res[GT_VIRT] == NULL);
+	sc->physical |= (hypmode_enabled[0] == 0);
+#endif
 	arm_tmr_sc = sc;
 
 	/* Setup secure, non-secure and virtual IRQs handler */
