@@ -146,7 +146,7 @@ vi_vq_init(struct virtio_softc *vs, uint32_t pfn)
 
 	vq = &vs->vs_queues[vs->vs_curq];
 	vq->vq_pfn = pfn;
-	phys = (uint64_t)pfn << VRING_PFN;
+	phys = (uint64_t)pfn * vs->vs_guest_page_size;
 	size = vring_size(vq->vq_qsize, vs->vs_align);
 	base = paddr_guest2host(vs->vs_di->di_vmctx, phys, size);
 
@@ -617,7 +617,10 @@ vi_devemu_write(struct vmctx *ctx, int vcpu, struct devemu_inst *di,
 			(*vc->vc_apply_features)(DEV_SOFTC(vs),
 			    vs->vs_negotiated_caps);
 		break;
-	/* TODO: add VIRTIO_MMIO_GUEST_PAGE_SIZE */
+	case VIRTIO_MMIO_GUEST_PAGE_SIZE:
+		devemu_set_cfgreg(di, offset, value);
+		vs->vs_guest_page_size = value;
+		break;
 	case VIRTIO_MMIO_QUEUE_SEL:
 		CFG_RW_DBG(VIRTIO_MMIO_QUEUE_SEL, value);
 		devemu_set_cfgreg(di, offset, value);

@@ -308,6 +308,7 @@ struct virtio_softc {
 	int	vs_curq;		/* current queue */
 	int	irq;			/* interrupt */
 	uint8_t	vs_status;		/* value from last status write */
+	uint32_t vs_guest_page_size;	/* size of guest page in bytes */
 };
 
 #define	VS_LOCK(vs)							\
