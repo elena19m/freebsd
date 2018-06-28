@@ -309,19 +309,31 @@ main(int argc, char *argv[])
 	uint64_t memory_base_address, mem_size;
 
 	bvmcons = false;
+	memory_base_address = VM_GUEST_BASE_IPA;
+	mem_size = 128 * MB;
 	progname = basename(argv[0]);
 	guest_ncpus = 1;
 
-	while ((c = getopt(argc, argv, "bhp:c:s:")) != -1) {
+	while ((c = getopt(argc, argv, "bhp:c:s:e:m:")) != -1) {
 		switch (c) {
 		case 'b':
 			bvmcons = true;
+			break;
+		case 'e':
+			memory_base_address = strtoul(optarg, NULL, 0);
 			break;
 		case 'p':
 			pincpu = atoi(optarg);
 			break;
                 case 'c':
 			guest_ncpus = atoi(optarg);
+			break;
+		case 'm':
+			error = vm_parse_memsize(optarg, &mem_size);
+			if (error) {
+				fprintf(stderr, "Invalid memsize '%s'\n", optarg);
+				exit(1);
+			}
 			break;
 		case 's':
 			if (devemu_parse_opts(optarg) != 0)
@@ -354,8 +366,6 @@ main(int argc, char *argv[])
 		exit(1);
 	}
 
-	mem_size = 128 * MB;
-	memory_base_address = VM_GUEST_BASE_IPA;
 	error = vm_setup_memory(ctx, memory_base_address, mem_size, VM_MMAP_ALL);
 	if (error != 0) {
 		fprintf(stderr, "Unable to setup memory (%d)\n", error);
