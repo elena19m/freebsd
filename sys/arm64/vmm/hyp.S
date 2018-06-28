@@ -28,8 +28,6 @@
  */
 
 
-#include "assym.inc"
-
 #include <sys/syscall.h>
 #include <machine/armreg.h>
 #include <machine/asm.h>

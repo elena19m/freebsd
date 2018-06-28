@@ -811,12 +811,11 @@ vm_attach_vtimer(struct vm *vm, int phys_ns_irq, int virt_irq)
 int
 vm_assert_irq(struct vm *vm, uint32_t irq)
 {
-	struct virq vi;
+	struct hyp *hyp = (struct hyp *)vm->cookie;
 	int error;
 
-	vi.irq = irq;
-	vi.type = VIRQ_TYPE_VIRTIO;
-	error = vgic_v3_inject_irq(vm->cookie, &vi);
+	/* TODO: this is crap, send the vcpuid as an argument to vm_assert_irq */
+	error = vgic_v3_inject_irq(&hyp->ctx[0], irq, VGIC_IRQ_VIRTIO);
 
 	return (error);
 }
@@ -824,12 +823,9 @@ vm_assert_irq(struct vm *vm, uint32_t irq)
 int
 vm_deassert_irq(struct vm *vm, uint32_t irq)
 {
-	struct virq vi;
 	int error;
 
-	vi.irq = irq;
-	vi.type = VIRQ_TYPE_VIRTIO;
-	error = vgic_v3_deactivate_irq(vm->cookie, &vi, true);
+	error = vgic_v3_remove_irq(vm->cookie, irq);
 
 	return (error);
 }
