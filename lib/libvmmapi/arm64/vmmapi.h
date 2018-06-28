@@ -46,6 +46,7 @@ enum vm_mmap_style {
 int	vm_create(const char *name);
 struct vmctx *vm_open(const char *name);
 void	vm_destroy(struct vmctx *ctx);
+int	vm_parse_memsize(const char *optarg, size_t *memsize);
 int	vm_get_memory_seg(struct vmctx *ctx, uint64_t gpa, size_t *ret_len);
 int	vm_setup_memory(struct vmctx *ctx, uint64_t membase, size_t len, enum vm_mmap_style s);
 void	*vm_map_ipa(struct vmctx *ctx, uint64_t gaddr, size_t len);

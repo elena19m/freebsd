@@ -176,6 +176,7 @@ guest_setreg(enum vm_reg_name vmreg, uint64_t v)
 		perror("vm_set_register");
 }
 
+#if 0
 static int
 parse_memsize(const char *optarg, size_t *ret_memsize)
 {
@@ -196,6 +197,7 @@ parse_memsize(const char *optarg, size_t *ret_memsize)
 
 	return (error);
 }
+#endif
 
 static void
 usage(int code)
@@ -248,7 +250,7 @@ main(int argc, char** argv)
 			memory_base_address = strtoul(optarg, NULL, 0);
 			break;
 		case 'm':
-			error = parse_memsize(optarg, &mem_size);
+			error = vm_parse_memsize(optarg, &mem_size);
 			if (error) {
 				fprintf(stderr, "Invalid memsize '%s'\n", optarg);
 				exit(1);
