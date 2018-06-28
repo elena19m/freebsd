@@ -27,7 +27,6 @@
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <sys/time.h>
-#include <machine/vmm.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,6 +38,8 @@
 #include <pthread.h>
 #include <pthread_np.h>
 #include <vmmapi.h>
+
+#include <machine/vmm.h>
 
 #include "bhyverun.h"
 #include "devemu.h"
@@ -305,6 +306,7 @@ main(int argc, char *argv[])
 	int max_vcpus;
 	struct vmctx *ctx;
 	uint64_t pc;
+	uint64_t memory_base_address, mem_size;
 
 	bvmcons = false;
 	progname = basename(argv[0]);
@@ -349,6 +351,14 @@ main(int argc, char *argv[])
 	if (guest_ncpus > max_vcpus) {
 		fprintf(stderr, "%d vCPUs requested but only %d available\n",
 			guest_ncpus, max_vcpus);
+		exit(1);
+	}
+
+	mem_size = 128 * MB;
+	memory_base_address = VM_GUEST_BASE_IPA;
+	error = vm_setup_memory(ctx, memory_base_address, mem_size, VM_MMAP_ALL);
+	if (error != 0) {
+		fprintf(stderr, "Unable to setup memory (%d)\n", error);
 		exit(1);
 	}
 
