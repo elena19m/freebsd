@@ -143,21 +143,20 @@ setup_memory_segment(struct vmctx *ctx, uint64_t gpa, size_t len, char **addr)
 int
 vm_setup_memory(struct vmctx *ctx, uint64_t membase, size_t memsize, enum vm_mmap_style vms)
 {
-	char **addr;
 	int error;
 
 	/* XXX VM_MMAP_SPARSE not implemented yet */
-	assert(vms == VM_MMAP_NONE || vms == VM_MMAP_ALL);
-	ctx->vms = vms;
+	assert(vms == VM_MMAP_ALL);
 
+	ctx->vms = vms;
 	ctx->mem_base = membase;
 
 	assert(memsize <= ctx->mem_limit);
 	ctx->mem_size = memsize;
 
 	if (ctx->mem_size > 0) {
-		addr = (vms == VM_MMAP_ALL) ? &ctx->mem_addr : NULL;
-		error = setup_memory_segment(ctx, ctx->mem_base, ctx->mem_size, addr);
+		error = setup_memory_segment(ctx, ctx->mem_base, ctx->mem_size,
+		    &ctx->mem_addr);
 		if (error)
 			return (error);
 	}
