@@ -3,3 +3,5 @@
 
 SRCS=	vmmapi.c
 INCS=	vmmapi.h
+
+LIBADD=	util
