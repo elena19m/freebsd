@@ -96,6 +96,7 @@
 #define	 GICR_CTLR_UWP		(1 << 31)
 #define	 GICR_CTLR_LPI_ENABLE	(1 << 0)
 #define	 GICR_CTLR_DPG1NS	(1 << 25)
+#define	 GICR_CTLR_DPG0		(1 << 24)
 
 #define	GICR_PIDR2		GICD_PIDR2
 

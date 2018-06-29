@@ -403,6 +403,8 @@ vgic_v3_int_target(uint32_t irq, struct hypctx *hypctx)
 	struct vgic_v3_redist *redist = &hypctx->vgic_redist;
 	uint64_t irouter;
 	uint64_t aff;
+	uint32_t irq_off, irq_mask;
+	int n, group;
 
 	if (irq <= GIC_LAST_PPI)
 		return (true);
@@ -411,14 +413,25 @@ vgic_v3_int_target(uint32_t irq, struct hypctx *hypctx)
 	if (!(dist->gicd_ctlr & GICD_CTLR_ARE_NS))
 		return (true);
 
+	irq_off = irq % 32;
+	irq_mask = 1 << irq_off;
+	n = irq / 32;
+
+	if (n == 0)
+		group = (redist->gicr_igroupr0 & irq_mask) ? 1 : 0;
+	else
+		group = (dist->gicd_igroupr[n] & irq_mask) ? 1 : 0;
+
 	irouter = dist->gicd_irouter[irq];
 	/* Check if 1-of-N routing is active */
 	if (irouter & GICD_IROUTER_IRM) {
 		/* Check if the VCPU is participating */
-		if (redist->gicr_ctlr & GICR_CTLR_DPG1NS)
-			return (false);
-		else
-			return (true);
+		switch (group) {
+		case (0):
+			return (redist->gicr_ctlr & GICR_CTLR_DPG0 ? true : false);
+		case (1):
+			return (redist->gicr_ctlr & GICR_CTLR_DPG1NS ? true : false);
+		}
 	}
 
 	aff = redist->gicr_typer >> GICR_TYPER_AFF_SHIFT;
