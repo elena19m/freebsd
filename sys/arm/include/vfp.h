@@ -149,6 +149,8 @@ struct vfp_state {
 };
 
 #ifdef _KERNEL
+#include <sys/ucontext.h>
+
 void	get_vfpcontext(struct thread *, mcontext_vfp_t *);
 void	set_vfpcontext(struct thread *, mcontext_vfp_t *);
 void    vfp_init(void);
