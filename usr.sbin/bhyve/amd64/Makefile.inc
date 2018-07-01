@@ -38,7 +38,7 @@ SRCS+=	\
 	xmsr.c			\
 	spinup_ap.c
 
-LIBADD+=	z
+LIBADD+=	z util sbuf cam
 
 .if ${MK_OPENSSL} == "no"
 CFLAGS+=-DNO_OPENSSL

@@ -11,8 +11,6 @@ SRCS+=				\
 .PATH:	${BHYVE_SYSDIR}/sys/${BHYVE_ARCH}/vmm
 MK_MAN=no
 
-LIBADD=
-
 BHYVE_BUS=	mmio
 
 CFLAGS+= 	-I${BHYVE_SYSDIR}/sys/dev/virtio/mmio
