@@ -86,7 +86,7 @@ vmm_mem_alloc(size_t size)
 		 */
 		m = vm_page_alloc(NULL, 0, flags);
 		if (m == NULL)
-			VM_WAIT;
+			vm_wait(NULL);
 		else
 			break;
 	}
@@ -116,9 +116,8 @@ vmm_mem_free(vm_paddr_t base, size_t length)
 		panic("vmm_mem_free: invalid length %zu", length);
 
 	m = PHYS_TO_VM_PAGE(base);
-	m->wire_count--;
+	vm_page_unwire_noq(m);
 	vm_page_free(m);
-	atomic_subtract_int(&vm_cnt.v_wire_count, 1);
 
 	update_pages_allocated(-1);
 }
