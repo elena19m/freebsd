@@ -1,5 +1,5 @@
-SRCS+=	hyp_assym.h
-DPSRCS=	hyp_genassym.c
+DPSRCS+=	hyp_assym.h
+DPSRCS+=	hyp_genassym.c
 
 CFLAGS+= -I${.CURDIR}/../../arm/vmm -I${.CURDIR}/../../arm/include
 
