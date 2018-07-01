@@ -50,9 +50,7 @@ extern struct timecounter arm_tmr_timecount;
 static uint64_t
 ptimer_read(void)
 {
-	uint64_t (*get_cntxct)(bool) = arm_tmr_timecount.tc_priv;
-
-	return get_cntxct(true);
+	return arm_tmr_timecount.tc_get_timecount(NULL);
 }
 
 static bool
