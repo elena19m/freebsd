@@ -443,7 +443,8 @@ vgic_attach_to_vm(void *arg, uint64_t distributor_paddr, uint64_t cpu_int_paddr)
 	    (lpae_vm_vaddr_t)cpu_int_paddr,
 	    (lpae_vm_paddr_t)virtual_cpu_int_paddr,
 	    virtual_cpu_int_size,
-	    VM_PROT_READ | VM_PROT_WRITE);
+	    VM_PROT_READ | VM_PROT_WRITE,
+	    true);
 
 	return (0);
 }
@@ -999,7 +1000,8 @@ vgic_hyp_init(void)
 	    (lpae_vm_vaddr_t)virtual_int_ctrl_vaddr,
 	    (lpae_vm_paddr_t)virtual_int_ctrl_paddr,
 	    virtual_int_ctrl_size,
-	    VM_PROT_READ | VM_PROT_WRITE);
+	    VM_PROT_READ | VM_PROT_WRITE,
+	    true);
 
 	return (0);
 }

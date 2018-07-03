@@ -37,7 +37,8 @@ int lpae_vmmmap_set(void *arg,
 	    uint64_t virt_start,
 	    uint64_t phys_start,
 	    size_t len,
-	    int prot);
+	    int prot,
+	    bool phys_cont_mem);
 uint64_t lpae_vmmmap_get(void *arg,
 	    uint64_t ipa);
 void lpae_vmcleanup(void *arg);
