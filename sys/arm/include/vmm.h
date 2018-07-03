@@ -112,7 +112,7 @@ typedef int	(*vmi_run_func_t)(void *vmi, int vcpu, register_t rip,
 typedef void	(*vmi_cleanup_func_t)(void *vmi);
 typedef int	(*vmi_mmap_set_func_t)(void *vmi, uint64_t gpa,
 				       uint64_t hpa, size_t length,
-				       int prot);
+				       int prot, bool phys_cont_mem);
 typedef uint64_t (*vmi_mmap_get_func_t)(void *vmi, uint64_t ipa);
 
 typedef int	(*vmi_get_register_t)(void *vmi, int vcpu, int num,

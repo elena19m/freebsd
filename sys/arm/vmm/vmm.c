@@ -116,9 +116,9 @@ static struct vmm_ops *ops;
 #define	VMRUN(vmi, vcpu, pc, pmap, rptr, sptr) \
 	(ops != NULL ? (*ops->vmrun)(vmi, vcpu, pc, pmap, rptr, sptr) : ENXIO)
 #define	VMCLEANUP(vmi)	(ops != NULL ? (*ops->vmcleanup)(vmi) : NULL)
-#define	VMMMAP_SET(vmi, gpa, hpa, len, prot)				\
-    	(ops != NULL ? 							\
-    	(*ops->vmmapset)(vmi, gpa, hpa, len, prot) : ENXIO)
+#define	VMMMAP_SET(vmi, gpa, hpa, len, prot, phys_mem_cont)		\
+	(ops != NULL ? 							\
+	(*ops->vmmapset)(vmi, gpa, hpa, len, prot, phys_mem_cont) : ENXIO)
 #define	VMMMAP_GET(vmi, gpa) \
 	(ops != NULL ? (*ops->vmmapget)(vmi, gpa) : ENXIO)
 #define	VMGETREG(vmi, vcpu, num, retval)		\
@@ -267,7 +267,7 @@ vm_create(const char *name, struct vm **retvm)
 
 	/* TEMP - PL804 timer mapping */
 	VMMMAP_SET(vm->cookie, 0x1c110000, 0x1c110000, PAGE_SIZE,
-				   VM_PROT_ALL);
+				   VM_PROT_ALL, true);
 
 	for (i = 0; i < VM_MAXCPU; i++) {
 		vcpu_init(vm, i);
@@ -658,7 +658,7 @@ vm_malloc(struct vm *vm, uint64_t gpa, size_t len)
 		}
 
 		error = VMMMAP_SET(vm->cookie, gpa + seg->len, hpa, PAGE_SIZE,
-				   VM_PROT_ALL);
+				   VM_PROT_ALL, false);
 		if (error)
 			break;
 
@@ -687,7 +687,8 @@ int vm_passthru_memory(struct vm *vm, uint64_t addr, uint64_t size)
 	    (lpae_vm_vaddr_t)addr,
 	    (lpae_vm_paddr_t)addr,
 	    size,
-	    VM_PROT_READ | VM_PROT_WRITE);
+	    VM_PROT_READ | VM_PROT_WRITE,
+	    true);
 
 	return (0);
 }

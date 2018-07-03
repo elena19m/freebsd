@@ -117,7 +117,8 @@ arm_init(int ipinum)
 	    (lpae_vm_vaddr_t)stack,
 	    (lpae_vm_paddr_t)vtophys(stack),
 	    PAGE_SIZE,
-	    VM_PROT_READ | VM_PROT_WRITE);
+	    VM_PROT_READ | VM_PROT_WRITE,
+	    false);
 
 	/*
 	 * Create two mappings:
@@ -128,13 +129,15 @@ arm_init(int ipinum)
 	    (lpae_vm_vaddr_t)hyp_code_start,
 	    (lpae_vm_paddr_t)vtophys(hyp_code_start),
 	    PAGE_SIZE,
-	    VM_PROT_READ | VM_PROT_WRITE);
+	    VM_PROT_READ | VM_PROT_WRITE,
+	    false);
 
 	lpae_vmmmap_set(NULL,
 	    (lpae_vm_vaddr_t)vtophys(hyp_code_start),
 	    (lpae_vm_paddr_t)vtophys(hyp_code_start),
 	    PAGE_SIZE,
-	    VM_PROT_READ | VM_PROT_WRITE);
+	    VM_PROT_READ | VM_PROT_WRITE,
+	    false);
 
 	/*
 	 * Install the temporary vector from which
@@ -225,7 +228,8 @@ arm_vminit(struct vm *vm, pmap_t pmap)
 	    (lpae_vm_vaddr_t)hyp,
 	    (lpae_vm_paddr_t)vtophys(hyp),
 	    sizeof(struct hyp),
-	    VM_PROT_READ | VM_PROT_WRITE);
+	    VM_PROT_READ | VM_PROT_WRITE,
+	    false);
 
 	vtimer_init(hyp);
 
@@ -513,7 +517,8 @@ arm_vmcleanup(void *arg)
 	    (lpae_vm_vaddr_t)hyp,
 	    (lpae_vm_paddr_t)vtophys(hyp),
 	    sizeof(struct hyp),
-	    VM_PROT_NONE);
+	    VM_PROT_NONE,
+	    false);
 
 	lpae_vmcleanup(&(hyp->l1pd[0]));
 	free(hyp, M_HYP);

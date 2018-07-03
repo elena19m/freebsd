@@ -210,7 +210,8 @@ int lpae_vmmmap_set(void *arg,
 		    uint64_t virt_start,
 		    uint64_t phys_start,
 		    size_t len,
-		    int prot)
+		    int prot,
+		    bool phys_cont_mem)
 {
 	size_t n;
 	struct hyp *vm_hyp;
@@ -226,7 +227,10 @@ int lpae_vmmmap_set(void *arg,
 			break;
 		len -= n;
 		virt_start += n;
-		phys_start += n;
+		if (phys_cont_mem == false)
+			phys_start = vtophys(virt_start);
+		else
+			phys_start += n;
 		printf("%s n: %d %d\n", __func__, n, len);
 	}
 
