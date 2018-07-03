@@ -155,7 +155,7 @@ vtimer_schedule_irq(struct vtimer_cpu *vtimer_cpu, struct hypctx *hypctx)
 	uint64_t cntpct_el0;
 	uint64_t diff;
 
-	cntpct_el0 = arm_tmr_timecount.tc_get_timecount(NULL);
+	cntpct_el0 = READ_SPECIALREG(cntpct_el0);
 	if (vtimer_cpu->cntp_cval_el0 < cntpct_el0) {
 		/* Timer set in the past, trigger interrupt */
 		vtimer_inject_irq(hypctx);
@@ -197,7 +197,7 @@ vtimer_phys_ctl_read(void *vm, int vcpuid, uint64_t *rval, void *arg)
 	hyp = vm_get_cookie(vm);
 	vtimer_cpu = &hyp->ctx[vcpuid].vtimer_cpu;
 
-	cntpct_el0 = arm_tmr_timecount.tc_get_timecount(NULL);
+	cntpct_el0 = READ_SPECIALREG(cntpct_el0);
 	if (vtimer_cpu->cntp_cval_el0 < cntpct_el0)
 		/* Timer condition met */
 		*rval = vtimer_cpu->cntp_ctl_el0 | CNTP_CTL_ISTATUS;
@@ -300,7 +300,7 @@ vtimer_phys_tval_read(void *vm, int vcpuid, uint64_t *rval, void *arg)
 		 */
 		*rval = (uint32_t)RES1;
 	} else {
-		cntpct_el0 = arm_tmr_timecount.tc_get_timecount(NULL);
+		cntpct_el0 = READ_SPECIALREG(cntpct_el0);
 		*rval = vtimer_cpu->cntp_cval_el0 - cntpct_el0;
 	}
 
@@ -321,7 +321,7 @@ vtimer_phys_tval_write(void *vm, int vcpuid, uint64_t wval, void *arg)
 	hypctx = &hyp->ctx[vcpuid];
 	vtimer_cpu = &hypctx->vtimer_cpu;
 
-	cntpct_el0 = arm_tmr_timecount.tc_get_timecount(NULL);
+	cntpct_el0 = READ_SPECIALREG(cntpct_el0);
 	vtimer_cpu->cntp_cval_el0 = (int32_t)wval + cntpct_el0;
 
 	if (vtimer_enabled(vtimer_cpu->cntp_ctl_el0)) {
