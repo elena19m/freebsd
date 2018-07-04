@@ -77,14 +77,6 @@ struct vtimer_cpu
 	struct callout	callout;
 	uint64_t	tmr_freq;
 	uint32_t	cntkctl_el1;
-	/*
-	 * Emulated registers:
-	 *
-	 * CNTP_CTL_EL0:  Counter-timer Physical Timer Control Register
-	 * CNTP_CVAL_EL0: Counter-timer Physical Timer CompareValue Register
-	 */
-	uint64_t	cntp_cval_el0;
-	uint32_t	cntp_ctl_el0;
 };
 
 int	vtimer_attach_to_vm(void *arg, int phys_ns_irq, uint64_t tmr_freq);
