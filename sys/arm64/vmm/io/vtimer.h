@@ -75,6 +75,7 @@ struct vtimer
 struct vtimer_cpu
 {
 	struct callout	callout;
+	uint64_t	tmr_freq;
 	uint32_t	cntkctl_el1;
 	/*
 	 * Emulated registers:
@@ -86,7 +87,7 @@ struct vtimer_cpu
 	uint32_t	cntp_ctl_el0;
 };
 
-int	vtimer_attach_to_vm(void *arg, int phys_ns_irq, int virt_irq);
+int	vtimer_attach_to_vm(void *arg, int phys_ns_irq, uint64_t tmr_freq);
 void	vtimer_detach_from_vm(void *arg);
 int 	vtimer_init(uint64_t cnthctl_el2);
 void 	vtimer_vminit(void *arg);

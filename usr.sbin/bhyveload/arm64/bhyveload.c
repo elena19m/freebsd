@@ -395,7 +395,7 @@ main(int argc, char** argv)
 		exit(1);
 	}
 
-	error = vm_attach_vtimer(ctx, 30, 27);
+	error = vm_attach_vtimer(ctx, 30, 100000000);
 	if (error) {
 		fprintf(stderr, "Error attaching vtimer to the virtual machine\n");
 		exit(1);

@@ -104,7 +104,7 @@ struct vm_attach_vgic {
 
 struct vm_attach_vtimer {
 	int		phys_ns_irq;
-	int		virt_irq;
+	uint64_t	tmr_freq;
 };
 
 struct vm_irq {

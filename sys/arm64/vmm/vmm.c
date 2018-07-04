@@ -799,11 +799,11 @@ vm_attach_vgic(struct vm *vm, uint64_t dist_start, size_t dist_size,
 }
 
 int
-vm_attach_vtimer(struct vm *vm, int phys_ns_irq, int virt_irq)
+vm_attach_vtimer(struct vm *vm, int phys_ns_irq, uint64_t tmr_freq)
 {
 	int error;
 
-	error = vtimer_attach_to_vm(vm->cookie, phys_ns_irq, virt_irq);
+	error = vtimer_attach_to_vm(vm->cookie, phys_ns_irq, tmr_freq);
 
 	return (error);
 }

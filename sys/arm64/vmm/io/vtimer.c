@@ -27,16 +27,17 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
 #include <sys/types.h>
 #include <sys/systm.h>
 #include <sys/time.h>
 #include <sys/timeet.h>
 #include <sys/timetc.h>
-#include <sys/taskqueue.h>
+#include <sys/bus.h>
 
+#include <machine/bus.h>
 #include <machine/vmm.h>
 #include <machine/armreg.h>
+
 #include <arm64/vmm/arm64.h>
 
 #include "vgic_v3.h"
@@ -47,21 +48,19 @@
 #define vtimer_enabled(ctl)	\
     (!((ctl) & CNTP_CTL_IMASK) && ((ctl) & CNTP_CTL_ENABLE))
 
-extern struct timecounter arm_tmr_timecount;
-
 static uint64_t cnthctl_el2_reg;
 
 int
-vtimer_attach_to_vm(void *arg, int phys_ns_irq, int virt_irq)
+vtimer_attach_to_vm(void *arg, int phys_ns_irq, uint64_t tmr_freq)
 {
-	struct hyp *hyp;
-	struct vtimer *vtimer;
-
-	hyp = (struct hyp *)arg;
-	vtimer = &hyp->vtimer;
+	struct hyp *hyp = arg;
+	struct vtimer *vtimer = &hyp->vtimer;
+	int i;
 
 	vtimer->phys_ns_irq = phys_ns_irq;
 	vtimer->attached = true;
+	for (i = 0; i < VM_MAXCPU; i++)
+		hyp->ctx[i].vtimer_cpu.tmr_freq = tmr_freq;
 
 	return (0);
 }
@@ -161,7 +160,7 @@ vtimer_schedule_irq(struct vtimer_cpu *vtimer_cpu, struct hypctx *hypctx)
 		vtimer_inject_irq(hypctx);
 	} else {
 		diff = vtimer_cpu->cntp_cval_el0 - cntpct_el0;
-		time = diff * SBT_1S / arm_tmr_timecount.tc_frequency;
+		time = diff * SBT_1S / vtimer_cpu->tmr_freq;
 		callout_reset_sbt(&vtimer_cpu->callout, time, 0,
 		    vtimer_inject_irq_callout_func, hypctx, 0);
 	}
