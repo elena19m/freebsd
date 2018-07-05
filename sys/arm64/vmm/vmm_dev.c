@@ -213,8 +213,7 @@ vmmdev_ioctl(struct cdev *cdev, u_long cmd, caddr_t data, int fflag,
 		break;
 	case VM_ATTACH_VTIMER:
 		vat = (struct vm_attach_vtimer *)data;
-		error = vm_attach_vtimer(sc->vm, vat->phys_ns_irq,
-				vat->tmr_freq);
+		error = vm_attach_vtimer(sc->vm, vat->phys_ns_irq);
 		break;
 	default:
 		error = ENOTTY;
