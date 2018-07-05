@@ -370,13 +370,12 @@ vm_attach_vgic(struct vmctx *ctx, uint64_t dist_start, size_t dist_size,
 }
 
 int
-vm_attach_vtimer(struct vmctx *ctx, int phys_ns_irq, uint64_t tmr_freq)
+vm_attach_vtimer(struct vmctx *ctx, int phys_ns_irq)
 {
 	struct vm_attach_vtimer vat;
 
 	bzero(&vat, sizeof(vat));
 	vat.phys_ns_irq = phys_ns_irq;
-	vat.tmr_freq = tmr_freq;
 
 	return (ioctl(ctx->fd, VM_ATTACH_VTIMER, &vat));
 }

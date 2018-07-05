@@ -49,18 +49,16 @@
     (!((ctl) & CNTP_CTL_IMASK) && ((ctl) & CNTP_CTL_ENABLE))
 
 static uint64_t cnthctl_el2_reg;
+static uint32_t tmr_frq;
 
 int
-vtimer_attach_to_vm(void *arg, int phys_ns_irq, uint64_t tmr_freq)
+vtimer_attach_to_vm(void *arg, int phys_ns_irq)
 {
 	struct hyp *hyp = arg;
 	struct vtimer *vtimer = &hyp->vtimer;
-	int i;
 
 	vtimer->phys_ns_irq = phys_ns_irq;
 	vtimer->attached = true;
-	for (i = 0; i < VM_MAXCPU; i++)
-		hyp->ctx[i].vtimer_cpu.tmr_freq = tmr_freq;
 
 	return (0);
 }
@@ -101,6 +99,12 @@ int
 vtimer_init(uint64_t cnthctl_el2)
 {
 	cnthctl_el2_reg = cnthctl_el2;
+	/*
+	 * The guest *MUST* use the same timer frequency as the host. The
+	 * register CNTFRQ_EL0 is accessible to the guest and a different value
+	 * in the guest dts file might have unforseen consequences.
+	 */
+	tmr_frq = READ_SPECIALREG(cntfrq_el0);
 
 	return (0);
 }
@@ -160,7 +164,7 @@ vtimer_schedule_irq(struct vtimer_cpu *vtimer_cpu, struct hypctx *hypctx)
 		vtimer_inject_irq(hypctx);
 	} else {
 		diff = vtimer_cpu->cntp_cval_el0 - cntpct_el0;
-		time = diff * SBT_1S / vtimer_cpu->tmr_freq;
+		time = diff * SBT_1S / tmr_frq;
 		callout_reset_sbt(&vtimer_cpu->callout, time, 0,
 		    vtimer_inject_irq_callout_func, hypctx, 0);
 	}
@@ -184,6 +188,15 @@ vtimer_remove_irq(struct hypctx *hypctx)
 	 */
 	vgic_v3_remove_irq(hypctx, irq);
 }
+
+/*
+ * Timer emulation functions.
+ *
+ * The guest dts is configured to use the physical timer because the Generic
+ * Timer can only trap physical timer accesses. This is why we always read the
+ * physical counter value when programming the time for the timer interrupt in
+ * the guest.
+ */
 
 int
 vtimer_phys_ctl_read(void *vm, int vcpuid, uint64_t *rval, void *arg)
