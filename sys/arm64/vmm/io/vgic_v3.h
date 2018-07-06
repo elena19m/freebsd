@@ -96,7 +96,7 @@ struct vm_exit;
 struct hyp;
 
 struct vgic_v3_dist {
-	struct mtx dist_lock;
+	struct mtx 	dist_mtx;
 
 	uint64_t 	start;
 	size_t   	end;

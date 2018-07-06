@@ -214,8 +214,6 @@ arm_vminit(struct vm *vm)
 	hypmap_init(hyp->stage2_map, PT_STAGE2);
 	arm64_set_vttbr(hyp);
 
-	mtx_init(&hyp->vgic_dist.dist_lock, "Distributor Lock", "", MTX_SPIN);
-
 	vtimer_vminit(hyp);
 	vgic_v3_vminit(hyp);
 
