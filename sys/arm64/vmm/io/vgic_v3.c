@@ -112,35 +112,29 @@ struct vgic_v3_irq {
  * 55:48 Interrupt priority.
  * 31:0  Interrupt virtual ID.
  */
-#define	IRQBUF_SET_GROUP(vvi, group)				\
-do {								\
-	vvi.dr_config &= ~(1 << ICH_LR_EL2_GROUP_SHIFT);	\
-	vvi.dr_config |= ((group) << ICH_LR_EL2_GROUP_SHIFT);	\
+#define	IRQBUF_IRQ_SET_GROUP(vip, group)				\
+do {									\
+	(vip)->dr_config &= ~(1UL << ICH_LR_EL2_GROUP_SHIFT);		\
+	(vip)->dr_config |= ((uint64_t)(group) << ICH_LR_EL2_GROUP_SHIFT);\
 } while (0)
 
-#define	IRQBUF_SET_PRIO(vvi, prio)				\
-do {								\
-	vvi.dr_config &= ~ICH_LR_EL2_PRIO_MASK; 		\
-	vvi.dr_config |= ((prio) << ICH_LR_EL2_PRIO_SHIFT);	\
+#define	IRQBUF_IRQ_SET_PRIO(vip, prio)					\
+do {									\
+	(vip)->dr_config &= ~ICH_LR_EL2_PRIO_MASK; 			\
+	(vip)->dr_config |= ((uint64_t)(prio) << ICH_LR_EL2_PRIO_SHIFT);\
 } while (0)
 
-#define	IRQBUF_SET_VINTID(vvi, vintid)				\
-do {								\
-	vvi.dr_config &= ~ICH_LR_EL2_VINTID_MASK; 		\
-	vvi.dr_config |= (vintid);				\
-} while (0)
-
-#define	IRQBUF_SET_STATE(vvi, state)				\
-do {								\
-	vvi.dr_config &= ~ICH_LR_EL2_STATE_MASK; 		\
-	vvi.dr_config |= ((state) << ICH_LR_EL2_STATE_SHIFT);	\
+#define	IRQBUF_IRQ_SET_VINTID(vip, vintid)				\
+do {									\
+	(vip)->dr_config &= ~ICH_LR_EL2_VINTID_MASK; 			\
+	(vip)->dr_config |= (vintid);					\
 } while (0)
 
 #define	IRQBUF_IRQ_EN_SHIFT	(59)
-#define	IRQBUF_IRQ_SET_EN(vvi, en)				\
-do {								\
-	vvi.dr_config &= ~(1 << IRQBUF_IRQ_EN_SHIFT); 		\
-	vvi.dr_config |= ((en) << IRQBUF_IRQ_EN_SHIFT);		\
+#define	IRQBUF_IRQ_SET_EN(vip, en)					\
+do {									\
+	(vip)->dr_config &= ~(1UL << IRQBUF_IRQ_EN_SHIFT); 		\
+	(vip)->dr_config |= ((uint64_t)(en) << IRQBUF_IRQ_EN_SHIFT);	\
 } while (0)
 
 static struct vgic_v3_virt_features virt_features;
@@ -305,7 +299,7 @@ vgic_v3_vcpu_pending_irq(void *arg)
 	return (cpu_if->irqbuf_num);
 }
 
-/* Removes ALL instances of interrupt with number 'irq' */
+/* Removes ALL instances of interrupt with ID 'irq' */
 static int
 vgic_v3_irqbuf_remove_unsafe(uint32_t irq, struct vgic_v3_cpu_if *cpu_if)
 {
@@ -386,61 +380,6 @@ vgic_v3_irqbuf_add_unsafe(uint32_t irq, enum vgic_v3_irqtype irqtype,
 	return (0);
 }
 
-int
-vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
-{
-        struct hypctx *hypctx = arg;
-	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
-	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
-	int error;
-
-	KASSERT(irq > GIC_LAST_SGI, ("SGI interrupts not implemented"));
-
-	if (irq >= dist->nirqs || irqtype >= VGIC_IRQ_INVALID) {
-		eprintf("Malformed IRQ %u.\n", irq);
-		return (1);
-	}
-
-	mtx_lock_spin(&cpu_if->lr_mtx);
-	error = vgic_v3_irqbuf_add_unsafe(irq, irqtype, cpu_if);
-	if (error)
-		eprintf("Unable to mark IRQ %u as pending.\n", irq);
-	mtx_unlock_spin(&cpu_if->lr_mtx);
-
-	/*
-	mtx_lock_spin(&dist->dist_mtx);
-	mtx_unlock_spin(&dist->dist_mtx);
-	*/
-
-	return (error);
-}
-
-static uint8_t
-vgic_v3_get_priority(uint32_t irq, struct hypctx *hypctx)
-{
-	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
-	struct vgic_v3_redist *redist = &hypctx->vgic_redist;
-	size_t n;
-	uint32_t off, mask;
-	uint8_t priority;
-
-	n = irq / 4;
-	off = n % 4;
-	mask = 0xff << off;
-	/*
-	 * When affinity routing is enabled, the Redistributor is used for
-	 * SGIs and PPIs and the Distributor for SPIs. When affinity routing
-	 * is not enabled, the Distributor registers are used for all
-	 * interrupts.
-	 */
-	if ((dist->gicd_ctlr & GICD_CTLR_ARE_NS) && (n <= 7))
-		priority = (redist->gicr_ipriorityr[n] & mask) >> off;
-	else
-		priority = (dist->gicd_ipriorityr[n] & mask) >> off;
-
-	return (priority);
-}
-
 static bool
 vgic_v3_int_target(uint32_t irq, struct hypctx *hypctx)
 {
@@ -491,6 +430,32 @@ vgic_v3_int_target(uint32_t irq, struct hypctx *hypctx)
 		return (false);
 }
 
+static uint8_t
+vgic_v3_get_priority(uint32_t irq, struct hypctx *hypctx)
+{
+	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
+	struct vgic_v3_redist *redist = &hypctx->vgic_redist;
+	size_t n;
+	uint32_t off, mask;
+	uint8_t priority;
+
+	n = irq / 4;
+	off = n % 4;
+	mask = 0xff << off;
+	/*
+	 * When affinity routing is enabled, the Redistributor is used for
+	 * SGIs and PPIs and the Distributor for SPIs. When affinity routing
+	 * is not enabled, the Distributor registers are used for all
+	 * interrupts.
+	 */
+	if ((dist->gicd_ctlr & GICD_CTLR_ARE_NS) && (n <= 7))
+		priority = (redist->gicr_ipriorityr[n] & mask) >> off;
+	else
+		priority = (dist->gicd_ipriorityr[n] & mask) >> off;
+
+	return (priority);
+}
+
 static bool
 vgic_v3_int_enabled(uint32_t irq, struct hypctx *hypctx, int *group)
 {
@@ -505,7 +470,7 @@ vgic_v3_int_enabled(uint32_t irq, struct hypctx *hypctx, int *group)
 	n = irq / 32;
 
 	/* XXX GIC{R, D}_IGROUPMODR set the secure/non-secure bit */
-	if (n == 0)
+	if (irq <= GIC_LAST_PPI)
 		*group = (redist->gicr_igroupr0 & irq_mask) ? 1 : 0;
 	else
 		*group = (dist->gicd_igroupr[n] & irq_mask) ? 1 : 0;
@@ -527,7 +492,6 @@ vgic_v3_int_enabled(uint32_t irq, struct hypctx *hypctx, int *group)
 			return (false);
 	}
 
-	/* Check that the interrupt hasn't been disabled */
 	if (irq <= GIC_LAST_PPI) {
 		if (!(redist->gicr_ixenabler0 & irq_mask))
 			return (false);
@@ -538,6 +502,53 @@ vgic_v3_int_enabled(uint32_t irq, struct hypctx *hypctx, int *group)
 
 	return (true);
 }
+
+int
+vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
+{
+        struct hypctx *hypctx = arg;
+	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
+	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
+	struct vgic_v3_irq *vip;
+	int group;
+	int error;
+	uint8_t priority;
+	bool enabled;
+
+	KASSERT(irq > GIC_LAST_SGI, ("SGI interrupts not implemented"));
+
+	if (irq >= dist->nirqs || irqtype >= VGIC_IRQ_INVALID) {
+		eprintf("Malformed IRQ %u.\n", irq);
+		return (1);
+	}
+
+	mtx_lock_spin(&dist->dist_mtx);
+
+	enabled = vgic_v3_int_enabled(irq, hypctx, &group);
+	priority = vgic_v3_get_priority(irq, hypctx);
+	if (enabled)
+		enabled = vgic_v3_int_target(irq, hypctx);
+
+	mtx_lock_spin(&cpu_if->lr_mtx);
+	error = vgic_v3_irqbuf_add_unsafe(irq, irqtype, cpu_if);
+	if (error) {
+		eprintf("Error adding IRQ %u to the IRQ buffer.\n", irq);
+		goto out_unlock;
+	}
+
+	vip = &cpu_if->irqbuf[cpu_if->irqbuf_num - 1];
+
+	IRQBUF_IRQ_SET_GROUP(vip, group);
+	IRQBUF_IRQ_SET_EN(vip, enabled);
+	IRQBUF_IRQ_SET_PRIO(vip, priority);
+
+out_unlock:
+	mtx_unlock_spin(&cpu_if->lr_mtx);
+	mtx_unlock_spin(&dist->dist_mtx);
+
+	return (error);
+}
+
 
 static struct vgic_v3_irq *
 vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
@@ -599,6 +610,11 @@ vgic_v3_sync_hwstate(void *arg)
 	int i;
 	int error;
 
+	/*
+	 * The function is called before resuming the guest. All Distributor
+	 * writes have been emulated, do not protect Distributor reads with a
+	 * mutex.
+	 */
 	mtx_lock_spin(&cpu_if->lr_mtx);
 
 	if (cpu_if->irqbuf_num == 0)
