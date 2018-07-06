@@ -264,8 +264,9 @@ vgic_v3_vcpu_pending_irq(void *arg)
 	return (cpu_if->irqbuf_num);
 }
 
+/* Removes ALL instances of interrupt with number 'irq' */
 static int
-vgic_v3_remove_pending_unsafe(uint32_t irq, struct vgic_v3_cpu_if *cpu_if)
+vgic_v3_irqbuf_remove_unsafe(uint32_t irq, struct vgic_v3_cpu_if *cpu_if)
 {
 	size_t dest = 0;
 	size_t from = cpu_if->irqbuf_num;
@@ -306,7 +307,7 @@ vgic_v3_remove_irq(void *arg, uint32_t irq)
 		    lr_not_active(cpu_if->ich_lr_el2[i]))
 			cpu_if->ich_lr_el2[i] &= ~ICH_LR_EL2_STATE_MASK;
 
-	vgic_v3_remove_pending_unsafe(irq, cpu_if);
+	vgic_v3_irqbuf_remove_unsafe(irq, cpu_if);
 
 	mtx_unlock_spin(&cpu_if->lr_mtx);
 
@@ -314,7 +315,7 @@ vgic_v3_remove_irq(void *arg, uint32_t irq)
 }
 
 static int
-vgic_v3_add_pending_unsafe(uint32_t irq, enum vgic_v3_irqtype irqtype,
+vgic_v3_irqbuf_add_unsafe(uint32_t irq, enum vgic_v3_irqtype irqtype,
     struct vgic_v3_cpu_if *cpu_if)
 {
 	struct vgic_v3_irq *new_irqbuf, *old_irqbuf, *vip;
@@ -362,7 +363,7 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 	}
 
 	mtx_lock_spin(&cpu_if->lr_mtx);
-	error = vgic_v3_add_pending_unsafe(irq, irqtype, cpu_if);
+	error = vgic_v3_irqbuf_add_unsafe(irq, irqtype, cpu_if);
 	if (error)
 		eprintf("Unable to mark IRQ %u as pending.\n", irq);
 	mtx_unlock_spin(&cpu_if->lr_mtx);
@@ -566,7 +567,7 @@ vgic_v3_sync_hwstate(void *arg)
 	for (i = 0; i < cpu_if->ich_lr_num; i++)
 		if (lr_pending(cpu_if->ich_lr_el2[i])) {
 			irq = cpu_if->ich_lr_el2[i] & ICH_LR_EL2_VINTID_MASK;
-			error = vgic_v3_add_pending_unsafe(irq,
+			error = vgic_v3_irqbuf_add_unsafe(irq,
 			    VGIC_IRQ_MAXPRIO, cpu_if);
 			if (error)
 				/* Pending list full, stop it */
@@ -594,7 +595,7 @@ vgic_v3_sync_hwstate(void *arg)
 		vip->irq = PENDING_INVALID;
 	}
 	/* Remove all scheduled interrupts */
-	vgic_v3_remove_pending_unsafe(PENDING_INVALID, cpu_if);
+	vgic_v3_irqbuf_remove_unsafe(PENDING_INVALID, cpu_if);
 
 	/* TODO Enable maintenance interrupts if interrupts are still pending */
 
