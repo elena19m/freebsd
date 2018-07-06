@@ -103,6 +103,45 @@ struct vgic_v3_irq {
 	/* Distributor/Redistributor interrupt configuration */
 	uint64_t dr_config;
 };
+/*
+ * The dr_config field has the following bit assignments:
+ *
+ * 63:62 Interrupt state
+ * 60    Interrupt group.
+ * 59    Interrupt enabled/disabled.
+ * 55:48 Interrupt priority.
+ * 31:0  Interrupt virtual ID.
+ */
+#define	IRQBUF_SET_GROUP(vvi, group)				\
+do {								\
+	vvi.dr_config &= ~(1 << ICH_LR_EL2_GROUP_SHIFT);	\
+	vvi.dr_config |= ((group) << ICH_LR_EL2_GROUP_SHIFT);	\
+} while (0)
+
+#define	IRQBUF_SET_PRIO(vvi, prio)				\
+do {								\
+	vvi.dr_config &= ~ICH_LR_EL2_PRIO_MASK; 		\
+	vvi.dr_config |= ((prio) << ICH_LR_EL2_PRIO_SHIFT);	\
+} while (0)
+
+#define	IRQBUF_SET_VINTID(vvi, vintid)				\
+do {								\
+	vvi.dr_config &= ~ICH_LR_EL2_VINTID_MASK; 		\
+	vvi.dr_config |= (vintid);				\
+} while (0)
+
+#define	IRQBUF_SET_STATE(vvi, state)				\
+do {								\
+	vvi.dr_config &= ~ICH_LR_EL2_STATE_MASK; 		\
+	vvi.dr_config |= ((state) << ICH_LR_EL2_STATE_SHIFT);	\
+} while (0)
+
+#define	IRQBUF_IRQ_EN_SHIFT	(59)
+#define	IRQBUF_IRQ_SET_EN(vvi, en)				\
+do {								\
+	vvi.dr_config &= ~(1 << IRQBUF_IRQ_EN_SHIFT); 		\
+	vvi.dr_config |= ((en) << IRQBUF_IRQ_EN_SHIFT);		\
+} while (0)
 
 static struct vgic_v3_virt_features virt_features;
 static struct vgic_v3_ro_regs ro_regs;
@@ -203,6 +242,8 @@ vgic_v3_vminit(void *arg)
 	dist->gicd_typer = ro_regs.gicd_typer;
 	dist->nirqs = GICD_TYPER_I_NUM(dist->gicd_typer);
 	dist->gicd_pidr2 = ro_regs.gicd_pidr2;
+
+	mtx_init(&dist->dist_mtx, "VGICv3 Distributor lock", NULL, MTX_SPIN);
 }
 
 int
@@ -301,14 +342,12 @@ vgic_v3_remove_irq(void *arg, uint32_t irq)
 	}
 
 	mtx_lock_spin(&cpu_if->lr_mtx);
-
 	for (i = 0; i < cpu_if->ich_lr_num; i++)
 		if (ICH_LR_EL2_VINTID(cpu_if->ich_lr_el2[i]) == irq &&
 		    lr_not_active(cpu_if->ich_lr_el2[i]))
 			cpu_if->ich_lr_el2[i] &= ~ICH_LR_EL2_STATE_MASK;
 
 	vgic_v3_irqbuf_remove_unsafe(irq, cpu_if);
-
 	mtx_unlock_spin(&cpu_if->lr_mtx);
 
 	return (0);
@@ -367,6 +406,11 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 	if (error)
 		eprintf("Unable to mark IRQ %u as pending.\n", irq);
 	mtx_unlock_spin(&cpu_if->lr_mtx);
+
+	/*
+	mtx_lock_spin(&dist->dist_mtx);
+	mtx_unlock_spin(&dist->dist_mtx);
+	*/
 
 	return (error);
 }
