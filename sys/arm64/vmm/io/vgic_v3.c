@@ -613,6 +613,7 @@ vgic_v3_sync_hwstate(void *arg)
 	struct hypctx *hypctx = arg;
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	struct vgic_v3_irq *vip;
+	uint64_t *lrp;
 	uint32_t irq;
 	uint8_t priority;
 	int group;
@@ -635,13 +636,27 @@ vgic_v3_sync_hwstate(void *arg)
 	 */
 	for (i = 0; i < cpu_if->ich_lr_num; i++)
 		if (lr_pending(cpu_if->ich_lr_el2[i])) {
-			irq = cpu_if->ich_lr_el2[i] & ICH_LR_EL2_VINTID_MASK;
-			error = vgic_v3_irqbuf_add_unsafe(irq,
-			    VGIC_IRQ_MAXPRIO, cpu_if);
+			lrp = &cpu_if->ich_lr_el2[i];
+			irq = *lrp & ICH_LR_EL2_VINTID_MASK;
+
+			error = vgic_v3_irqbuf_add_unsafe(irq, VGIC_IRQ_MAXPRIO, cpu_if);
 			if (error)
 				/* Pending list full, stop it */
 				break;
-			cpu_if->ich_lr_el2[i] &= ~ICH_LR_EL2_STATE_MASK;
+
+			vip = &cpu_if->irqbuf[cpu_if->irqbuf_num - 1];
+			vip->priority = \
+			    (uint8_t)((*lrp & ICH_LR_EL2_PRIO_MASK) >> ICH_LR_EL2_PRIO_SHIFT);
+			vip->group = (uint8_t)((*lrp >> ICH_LR_EL2_GROUP_SHIFT) & 0x1);
+			/*
+			 * Interrupts from the LR regs are always enabled.
+			 * Distributor emulation will remove then if they become
+			 * disabled.
+			 */
+			vip->enabled = 1;
+
+			/* Mark it as inactive */
+			*lrp &= ~ICH_LR_EL2_STATE_MASK;
 		}
 
 	for (i = 0; i < cpu_if->ich_lr_num; i++) {
@@ -660,8 +675,6 @@ vgic_v3_sync_hwstate(void *arg)
 		cpu_if->ich_lr_el2[i] |= (uint64_t)group << ICH_LR_EL2_GROUP_SHIFT;
 		cpu_if->ich_lr_el2[i] |= (uint64_t)priority << ICH_LR_EL2_PRIO_SHIFT;
 		cpu_if->ich_lr_el2[i] |= vip->irq;
-
-		printf("irq = %u, priority = %u\n", vip->irq, vip->priority);
 
 		/* Mark the scheduled pending interrupt as invalid */
 		vip->irq = PENDING_INVALID;
