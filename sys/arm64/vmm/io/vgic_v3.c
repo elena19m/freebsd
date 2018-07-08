@@ -584,7 +584,8 @@ vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
 		if (!vgic_v3_int_target(irq, hypctx))
 			continue;
 
-		priority = vgic_v3_get_priority(irq, hypctx);
+		//priority = vgic_v3_get_priority(irq, hypctx);
+		priority = cpu_if->irqbuf[i].priority;
 		if (priority >= vpmr)
 			continue;
 
@@ -652,12 +653,15 @@ vgic_v3_sync_hwstate(void *arg)
 			/* No more pending interrupts */
 			break;
 
-		priority = vgic_v3_get_priority(vip->irq, hypctx);
+		//priority = vgic_v3_get_priority(vip->irq, hypctx);
+		priority = vip->priority;
 
 		cpu_if->ich_lr_el2[i] = ICH_LR_EL2_STATE_PENDING;
 		cpu_if->ich_lr_el2[i] |= (uint64_t)group << ICH_LR_EL2_GROUP_SHIFT;
 		cpu_if->ich_lr_el2[i] |= (uint64_t)priority << ICH_LR_EL2_PRIO_SHIFT;
 		cpu_if->ich_lr_el2[i] |= vip->irq;
+
+		printf("irq = %u, priority = %u\n", vip->irq, vip->priority);
 
 		/* Mark the scheduled pending interrupt as invalid */
 		vip->irq = PENDING_INVALID;

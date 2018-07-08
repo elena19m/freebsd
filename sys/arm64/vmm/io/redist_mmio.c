@@ -191,15 +191,43 @@ redist_ipriorityr_access(struct hyp *hyp, int vcpuid, uint64_t fault_ipa,
 	struct vgic_v3_redist *redist = &hyp->ctx[vcpuid].vgic_redist;
 	size_t regsize, n;
 	size_t off;
+	uint32_t irq, old_regval;
+	uint8_t new_prio;
 
 	off = fault_ipa - hyp->vgic_mmio_regions[VGIC_GICR_IPRIORITYR].start;
 	regsize = sizeof(*redist->gicr_ipriorityr);
 	n = off / regsize;
 
-	if (dir == READ)
+	if (dir == READ) {
 		*val = redist->gicr_ipriorityr[n];
-	else
+	} else {
+		old_regval = redist->gicr_ipriorityr[n];
+		if ((old_regval & 0xff) != (*val & 0xff)) {
+			irq = n * 4 + 0;
+			new_prio = (uint8_t)(*val);
+			vgic_v3_irq_set_priority(irq, new_prio, hyp, vcpuid);
+		}
+
+		if (((old_regval >> 8) & 0xff) != ((*val >> 8) & 0xff)) {
+			irq = n * 4 + 1;
+			new_prio = (uint8_t)(*val >> 8);
+			vgic_v3_irq_set_priority(irq, new_prio, hyp, vcpuid);
+		}
+
+		if (((old_regval >> 16) & 0xff) != ((*val >> 16) & 0xff)) {
+			irq = n * 4 + 2;
+			new_prio = (uint8_t)(*val >> 16);
+			vgic_v3_irq_set_priority(irq, new_prio, hyp, vcpuid);
+		}
+
+		if (((old_regval >> 24) & 0xff) != ((*val >> 24) & 0xff)) {
+			irq = n * 4 + 2;
+			new_prio = (uint8_t)(*val >> 24);
+			vgic_v3_irq_set_priority(irq, new_prio, hyp, vcpuid);
+		}
+
 		redist->gicr_ipriorityr[n] = *val;
+	}
 
 	*retu = false;
 	return (0);
