@@ -549,6 +549,44 @@ out_unlock:
 	return (error);
 }
 
+static void
+vgic_v3_irq_set_priority_local(uint32_t irq, uint8_t priority,
+    struct vgic_v3_cpu_if *cpu_if)
+{
+	int i;
+
+	mtx_lock_spin(&cpu_if->lr_mtx);
+
+	for (i = 0; i < cpu_if->irqbuf_num; i++)
+		if (cpu_if->irqbuf[i].irq == irq)
+			IRQBUF_IRQ_SET_PRIO(&cpu_if->irqbuf[i], priority);
+
+	for (i = 0; i < cpu_if->ich_lr_num; i++)
+		if (lr_pending(cpu_if->ich_lr_el2[i]))
+			cpu_if->ich_lr_el2[i] |= \
+			    (uint64_t)priority << ICH_LR_EL2_PRIO_SHIFT;
+
+	mtx_unlock_spin(&cpu_if->lr_mtx);
+}
+
+void
+vgic_v3_irq_set_priority(uint32_t irq, uint8_t priority,
+    struct hyp *hyp, int vcpuid)
+{
+	struct vgic_v3_cpu_if *cpu_if;
+	int i;
+
+	if (irq <= GIC_LAST_PPI) {
+		cpu_if = &hyp->ctx[vcpuid].vgic_cpu_if;
+		vgic_v3_irq_set_priority_local(irq, priority, cpu_if);
+	} else {
+		/* TODO: IRQ is SPI, update irqbuf for all VCPUs */
+		for (i = 0; i < 1; i++) {
+			cpu_if = &hyp->ctx[i].vgic_cpu_if;
+			vgic_v3_irq_set_priority_local(irq, priority, cpu_if);
+		}
+	}
+}
 
 static struct vgic_v3_irq *
 vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
