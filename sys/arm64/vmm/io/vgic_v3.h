@@ -184,14 +184,6 @@ int 	vgic_v3_vcpu_pending_irq(void *arg);
 int 	vgic_v3_inject_irq(void *arg, uint32_t irq,
 			   enum vgic_v3_irqtype irqtype);
 int 	vgic_v3_remove_irq(void *arg, uint32_t irq);
-int 	vgic_v3_dist_read(void *vm, int vcpuid, uint64_t fault_ipa,
-			  uint64_t *rval, int size, void *arg);
-int	vgic_v3_dist_write(void *vm, int vcpuid, uint64_t fault_ipa,
-			   uint64_t val, int size, void *arg);
-int 	vgic_v3_redist_read(void *vm, int vcpuid, uint64_t fault_ipa,
-			    uint64_t *rval, int size, void *arg);
-int	vgic_v3_redist_write(void *vm, int vcpuid, uint64_t fault_ipa,
-			     uint64_t val, int size, void *arg);
 
 DECLARE_CLASS(arm_vgic_driver);
 
