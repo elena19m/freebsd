@@ -99,43 +99,12 @@ struct vgic_v3_ro_regs {
 
 struct vgic_v3_irq {
 	uint32_t irq;
+	uint32_t vintid;
 	enum vgic_v3_irqtype irqtype;
-	/* Distributor/Redistributor interrupt configuration */
-	uint64_t dr_config;
+	uint8_t group;
+	uint8_t enabled;
+	uint8_t priority;
 };
-/*
- * The dr_config field has the following bit assignments:
- *
- * 63:62 Interrupt state
- * 60    Interrupt group.
- * 59    Interrupt enabled/disabled.
- * 55:48 Interrupt priority.
- * 31:0  Interrupt virtual ID.
- */
-#define	IRQBUF_IRQ_SET_GROUP(vip, group)				\
-do {									\
-	(vip)->dr_config &= ~(1UL << ICH_LR_EL2_GROUP_SHIFT);		\
-	(vip)->dr_config |= ((uint64_t)(group) << ICH_LR_EL2_GROUP_SHIFT);\
-} while (0)
-
-#define	IRQBUF_IRQ_SET_PRIO(vip, prio)					\
-do {									\
-	(vip)->dr_config &= ~ICH_LR_EL2_PRIO_MASK; 			\
-	(vip)->dr_config |= ((uint64_t)(prio) << ICH_LR_EL2_PRIO_SHIFT);\
-} while (0)
-
-#define	IRQBUF_IRQ_SET_VINTID(vip, vintid)				\
-do {									\
-	(vip)->dr_config &= ~ICH_LR_EL2_VINTID_MASK; 			\
-	(vip)->dr_config |= (vintid);					\
-} while (0)
-
-#define	IRQBUF_IRQ_EN_SHIFT	(59)
-#define	IRQBUF_IRQ_SET_EN(vip, en)					\
-do {									\
-	(vip)->dr_config &= ~(1UL << IRQBUF_IRQ_EN_SHIFT); 		\
-	(vip)->dr_config |= ((uint64_t)(en) << IRQBUF_IRQ_EN_SHIFT);	\
-} while (0)
 
 static struct vgic_v3_virt_features virt_features;
 static struct vgic_v3_ro_regs ro_regs;
@@ -537,10 +506,9 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 	}
 
 	vip = &cpu_if->irqbuf[cpu_if->irqbuf_num - 1];
-
-	IRQBUF_IRQ_SET_GROUP(vip, group);
-	IRQBUF_IRQ_SET_EN(vip, enabled);
-	IRQBUF_IRQ_SET_PRIO(vip, priority);
+	vip->group = group;
+	vip->enabled = enabled;
+	vip->priority = priority;
 
 out_unlock:
 	mtx_unlock_spin(&cpu_if->lr_mtx);
@@ -559,7 +527,7 @@ vgic_v3_irq_set_priority_local(uint32_t irq, uint8_t priority,
 
 	for (i = 0; i < cpu_if->irqbuf_num; i++)
 		if (cpu_if->irqbuf[i].irq == irq)
-			IRQBUF_IRQ_SET_PRIO(&cpu_if->irqbuf[i], priority);
+			cpu_if->irqbuf[i].priority = priority;
 
 	for (i = 0; i < cpu_if->ich_lr_num; i++)
 		if (lr_pending(cpu_if->ich_lr_el2[i]))
