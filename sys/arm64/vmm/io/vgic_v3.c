@@ -530,9 +530,11 @@ vgic_v3_irq_set_priority_local(uint32_t irq, uint8_t priority,
 			cpu_if->irqbuf[i].priority = priority;
 
 	for (i = 0; i < cpu_if->ich_lr_num; i++)
-		if (lr_pending(cpu_if->ich_lr_el2[i]))
+		if (lr_pending(cpu_if->ich_lr_el2[i])) {
+			cpu_if->ich_lr_el2[i] &= ~ICH_LR_EL2_PRIO_MASK;
 			cpu_if->ich_lr_el2[i] |= \
 			    (uint64_t)priority << ICH_LR_EL2_PRIO_SHIFT;
+		}
 
 	mtx_unlock_spin(&cpu_if->lr_mtx);
 }
