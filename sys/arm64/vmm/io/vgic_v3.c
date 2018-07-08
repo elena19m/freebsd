@@ -616,8 +616,9 @@ vgic_v3_sync_hwstate(void *arg)
 	uint64_t *lrp;
 	uint32_t irq;
 	uint8_t priority;
+	int lr_free;
 	int group;
-	int i;
+	int i, irqbuf_idx;
 	int error;
 
 	/*
@@ -629,6 +630,35 @@ vgic_v3_sync_hwstate(void *arg)
 
 	if (cpu_if->irqbuf_num == 0)
 		goto out;
+
+	lr_free = 0;
+	for (i = 0; i < cpu_if->ich_lr_num; i++)
+		if (lr_inactive(cpu_if->ich_lr_el2[i]))
+			lr_free++;
+
+	/* All buffered interrupts can fit in the LR registers */
+	irqbuf_idx = 0;
+	if (cpu_if->irqbuf_num <= lr_free) {
+		for (i = 0; i < cpu_if->ich_lr_num; i++) {
+			/* Find an empty LR register */
+			if (!lr_inactive(cpu_if->ich_lr_el2[i]))
+				continue;
+
+			vip = &cpu_if->irqbuf[irqbuf_idx];
+			if (!vip->enabled)
+				continue;
+
+			/* Copy the IRQ in the LR register */
+			cpu_if->ich_lr_el2[i] = ICH_LR_EL2_STATE_PENDING;
+			cpu_if->ich_lr_el2[i] |= \
+			    (uint64_t)vip->group << ICH_LR_EL2_GROUP_SHIFT;
+			cpu_if->ich_lr_el2[i] |= \
+			    (uint64_t)vip->priority << ICH_LR_EL2_PRIO_SHIFT;
+			cpu_if->ich_lr_el2[i] |= vip->irq;
+		}
+		cpu_if->irqbuf_num = 0;
+		goto out;
+	}
 
 	/*
 	 * Add all interrupts from the list registers that are not active to
