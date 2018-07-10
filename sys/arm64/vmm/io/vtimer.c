@@ -186,7 +186,7 @@ vtimer_remove_irq(struct hypctx *hypctx)
 	 * the CNTP_CTL_EL0.IMASK bit instead of reading the IAR register.
 	 * Masking the interrupt doesn't remove it from the list registers.
 	 */
-	vgic_v3_remove_irq(hypctx, irq);
+	vgic_v3_remove_irq(hypctx, irq, true);
 }
 
 /*

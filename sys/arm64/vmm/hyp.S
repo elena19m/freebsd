@@ -229,7 +229,7 @@ hyp_vectors:
 	/* Save registers before modifying so we can restore them */
 	str	x1, [sp, #-16]!
 
-	/* Check for host hypervisor call */
+	/* Test if the exception happened when the host was running */
 	mrs	x1, vttbr_el2
 	cmp	x1, #VTTBR_HOST
 	beq	1f
@@ -286,7 +286,7 @@ ENTRY(handle_el1_sync)
 	ldr	x1, [sp], #16
 
 	cmp 	x0, #HYP_GET_VECTOR_TABLE
-	beq	2f
+	beq 	2f
 	b	call_function
 2:
 	/* Return the vector table base address */
@@ -412,7 +412,7 @@ END(vmm_read_ich_vtr_el2)
 ENTRY(vmm_read_cnthctl_el2)
 	read_reg cnthctl_el2
 	eret
-END(vmm_read_ich_vtr_el2)
+END(vmm_read_cnthctl_el2)
 
 
 hyp_code_end:

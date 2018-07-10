@@ -116,6 +116,7 @@ vgic_v3_cpuinit(void *arg, bool last_vcpu)
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	struct vgic_v3_redist *redist = &hypctx->vgic_redist;
 	uint64_t aff, vmpidr_el2;
+	int i;
 
 	vmpidr_el2 = hypctx->vmpidr_el2;
 	/*
@@ -174,6 +175,9 @@ vgic_v3_cpuinit(void *arg, bool last_vcpu)
 	cpu_if->ich_vmcr_el2 |= ICH_VMCR_EL2_VENG0 | ICH_VMCR_EL2_VENG1;
 
 	cpu_if->ich_lr_num = virt_features.ich_lr_num;
+	for (i = 0; i < cpu_if->ich_lr_num; i++)
+		cpu_if->ich_lr_el2[i] = 0UL;
+
 	cpu_if->ich_ap0r_num = virt_features.ich_ap0r_num;
 	cpu_if->ich_ap1r_num = virt_features.ich_ap1r_num;
 
@@ -292,7 +296,7 @@ vgic_v3_irqbuf_remove_unsafe(uint32_t irq, struct vgic_v3_cpu_if *cpu_if)
 }
 
 int
-vgic_v3_remove_irq(void *arg, uint32_t irq)
+vgic_v3_remove_irq(void *arg, uint32_t irq, bool ignore_state)
 {
         struct hypctx *hypctx = arg;
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
@@ -307,7 +311,7 @@ vgic_v3_remove_irq(void *arg, uint32_t irq)
 	mtx_lock_spin(&cpu_if->lr_mtx);
 	for (i = 0; i < cpu_if->ich_lr_num; i++)
 		if (ICH_LR_EL2_VINTID(cpu_if->ich_lr_el2[i]) == irq &&
-		    lr_not_active(cpu_if->ich_lr_el2[i]))
+		    (lr_not_active(cpu_if->ich_lr_el2[i]) || ignore_state))
 			cpu_if->ich_lr_el2[i] &= ~ICH_LR_EL2_STATE_MASK;
 
 	vgic_v3_irqbuf_remove_unsafe(irq, cpu_if);
@@ -324,7 +328,7 @@ vgic_v3_irqbuf_add_unsafe(uint32_t irq, enum vgic_v3_irqtype irqtype,
 	size_t new_size;
 
 	if (cpu_if->irqbuf_num == cpu_if->irqbuf_size) {
-		/* Double the size of the pending list */
+		/* Double the size of the buffered interrupts list */
 		new_size = cpu_if->irqbuf_size << 1;
 		if (new_size > PENDING_SIZE_MAX)
 			return (1);
@@ -663,9 +667,8 @@ vgic_v3_sync_hwstate(void *arg)
 	int error;
 
 	/*
-	 * The function is called before resuming the guest. All Distributor
-	 * writes have been emulated, do not protect Distributor reads with a
-	 * mutex.
+	 * All Distributor writes have been executed at this point, do not
+	 * protect reads with a  mutex.
 	 */
 	mtx_lock_spin(&cpu_if->lr_mtx);
 
@@ -685,9 +688,16 @@ vgic_v3_sync_hwstate(void *arg)
 			if (!lr_inactive(cpu_if->ich_lr_el2[i]))
 				continue;
 
-			vip = &cpu_if->irqbuf[irqbuf_idx];
-			if (!vip->enabled)
-				continue;
+			/* Find the first enabled buffered interrupt */
+			for (; irqbuf_idx < cpu_if->irqbuf_num; irqbuf_idx++) {
+				vip = &cpu_if->irqbuf[irqbuf_idx];
+				if (vip->enabled)
+					break;
+			}
+
+			/* All buffered interrupts have been scheduled */
+			if (irqbuf_idx == cpu_if->irqbuf_num)
+				break;
 
 			/* Copy the IRQ in the LR register */
 			cpu_if->ich_lr_el2[i] = ICH_LR_EL2_STATE_PENDING;
@@ -696,8 +706,17 @@ vgic_v3_sync_hwstate(void *arg)
 			cpu_if->ich_lr_el2[i] |= \
 			    (uint64_t)vip->priority << ICH_LR_EL2_PRIO_SHIFT;
 			cpu_if->ich_lr_el2[i] |= vip->irq;
+
+			/* Mark the buffered interrupt as scheduled... */
+			vip->irq = PENDING_INVALID;
+			/* ... and proceed to the next buffered interrupt */
+			irqbuf_idx++;
+			if (irqbuf_idx == cpu_if->irqbuf_num)
+				break;
 		}
-		cpu_if->irqbuf_num = 0;
+		/* Remove all scheduled interrupts */
+		vgic_v3_irqbuf_remove_unsafe(PENDING_INVALID, cpu_if);
+
 		goto out;
 	}
 
