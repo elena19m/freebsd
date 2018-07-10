@@ -115,13 +115,37 @@ redist_igroupr0_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 	return (0);
 }
 
+static void
+redist_update_int_group(uint32_t new_igroupr, uint32_t old_igroupr, uint32_t irq,
+    struct hyp *hyp, int vcpuid)
+{
+	uint32_t irq_mask;
+	int i;
+	uint8_t group;
+
+	irq_mask = 0x1;
+	for (i = 0; i < 32; i++) {
+		if ((old_igroupr & irq_mask) != (new_igroupr & irq_mask)) {
+			group = (uint8_t)((new_igroupr >> i) & 0x1);
+			vgic_v3_irq_set_group(irq, group, hyp, vcpuid);
+		}
+		irq++;
+		irq_mask <<= 1;
+	}
+}
+
+
 static int
 redist_igroupr0_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
     int size, void *arg)
 {
+	struct hyp *hyp = vm_get_cookie(vm);
+	struct vgic_v3_redist *redist = &hyp->ctx[vcpuid].vgic_redist;
 	bool *retu = arg;
 
-	redist_simple_write(wval, gicr_igroupr0, vm, vcpuid);
+	redist_update_int_group((uint32_t)wval, redist->gicr_igroupr0, 0,
+	    hyp, vcpuid);
+	redist->gicr_igroupr0 = (uint32_t)wval;
 
 	*retu = false;
 	return (0);

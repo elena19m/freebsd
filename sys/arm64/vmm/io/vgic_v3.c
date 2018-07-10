@@ -518,7 +518,7 @@ out_unlock:
 }
 
 static void
-vgic_v3_irq_set_priority_local(uint32_t irq, uint8_t priority,
+vgic_v3_irq_set_priority_vcpu(uint32_t irq, uint8_t priority,
     struct vgic_v3_cpu_if *cpu_if)
 {
 	int i;
@@ -548,12 +548,53 @@ vgic_v3_irq_set_priority(uint32_t irq, uint8_t priority,
 
 	if (irq <= GIC_LAST_PPI) {
 		cpu_if = &hyp->ctx[vcpuid].vgic_cpu_if;
-		vgic_v3_irq_set_priority_local(irq, priority, cpu_if);
+		vgic_v3_irq_set_priority_vcpu(irq, priority, cpu_if);
 	} else {
 		/* TODO: IRQ is SPI, update irqbuf for all VCPUs */
 		for (i = 0; i < 1; i++) {
 			cpu_if = &hyp->ctx[i].vgic_cpu_if;
-			vgic_v3_irq_set_priority_local(irq, priority, cpu_if);
+			vgic_v3_irq_set_priority_vcpu(irq, priority, cpu_if);
+		}
+	}
+}
+
+static void
+vgic_v3_irq_set_group_vcpu(uint32_t irq, uint8_t group,
+    struct vgic_v3_cpu_if *cpu_if)
+{
+	int i;
+
+	mtx_lock_spin(&cpu_if->lr_mtx);
+
+	for (i = 0; i < cpu_if->irqbuf_num; i++)
+		if (cpu_if->irqbuf[i].irq == irq)
+			cpu_if->irqbuf[i].group = group;
+
+	for (i = 0; i < cpu_if->ich_lr_num; i++)
+		if (lr_pending(cpu_if->ich_lr_el2[i])) {
+			cpu_if->ich_lr_el2[i] &= ~(1UL << ICH_LR_EL2_GROUP_SHIFT);
+			cpu_if->ich_lr_el2[i] |= \
+			    (uint64_t)group << ICH_LR_EL2_GROUP_SHIFT;
+		}
+
+	mtx_unlock_spin(&cpu_if->lr_mtx);
+}
+
+void
+vgic_v3_irq_set_group(uint32_t irq, uint8_t group,
+    struct hyp *hyp, int vcpuid)
+{
+	struct vgic_v3_cpu_if *cpu_if;
+	int i;
+
+	if (irq <= GIC_LAST_PPI) {
+		cpu_if = &hyp->ctx[vcpuid].vgic_cpu_if;
+		vgic_v3_irq_set_group_vcpu(irq, group, cpu_if);
+	} else {
+		/* TODO: Update irqbuf for all VCPUs, not just VCPU 0 */
+		for (i = 0; i < 1; i++) {
+			cpu_if = &hyp->ctx[i].vgic_cpu_if;
+			vgic_v3_irq_set_group_vcpu(irq, group, cpu_if);
 		}
 	}
 }

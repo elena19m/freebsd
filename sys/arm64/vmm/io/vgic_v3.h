@@ -186,6 +186,8 @@ int 	vgic_v3_inject_irq(void *arg, uint32_t irq,
 int 	vgic_v3_remove_irq(void *arg, uint32_t irq);
 void	vgic_v3_irq_set_priority(uint32_t irq, uint8_t priority,
 				 struct hyp *hyp, int vcpuid);
+void	vgic_v3_irq_set_group(uint32_t irq, uint8_t group,
+				 struct hyp *hyp, int vcpuid);
 
 DECLARE_CLASS(arm_vgic_driver);
 

@@ -75,6 +75,25 @@ dist_typer_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 	return (0);
 }
 
+static void
+dist_update_int_group(uint32_t new_igroupr, uint32_t old_igroupr, uint32_t irq,
+    struct hyp *hyp, int vcpuid)
+{
+	uint32_t irq_mask;
+	int i;
+	uint8_t group;
+
+	irq_mask = 0x1;
+	for (i = 0; i < 32; i++) {
+		if ((old_igroupr & irq_mask) != (new_igroupr & irq_mask)) {
+			group = (uint8_t)((new_igroupr >> i) & 0x1);
+			vgic_v3_irq_set_group(irq, group, hyp, vcpuid);
+		}
+		irq++;
+		irq_mask <<= 1;
+	}
+}
+
 static int
 dist_igroupr_access(struct hyp *hyp, int vcpuid, uint64_t fault_ipa,
     uint64_t *val, bool *retu, enum access_type dir)
@@ -96,10 +115,12 @@ dist_igroupr_access(struct hyp *hyp, int vcpuid, uint64_t fault_ipa,
 		regp = &dist->gicd_igroupr[n];
 
 	mtx_lock_spin(&dist->dist_mtx);
-	if (dir == READ)
+	if (dir == READ) {
 		*val = *regp;
-	else
+	} else {
+		dist_update_int_group(*val, *regp, n * 32, hyp, vcpuid);
 		*regp = *val;
+	}
 	mtx_unlock_spin(&dist->dist_mtx);
 
 	*retu = false;
@@ -225,6 +246,26 @@ dist_icenabler_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 	return (error);
 }
 
+static void
+dist_update_int_priority(uint32_t new_ipriorityr, uint32_t old_ipriorityr,
+    uint32_t irq, struct hyp *hyp, int vcpuid)
+{
+	uint32_t irq_mask;
+	int i;
+	uint8_t new_prio;
+
+	irq_mask = 0xff;
+	for (i = 0; i < 4; i++) {
+		if ((old_ipriorityr & irq_mask) != (new_ipriorityr & irq_mask)) {
+			new_prio = (uint8_t)((new_ipriorityr >> (i * 8)) & 0xff);
+			vgic_v3_irq_set_priority(irq, new_prio, hyp, vcpuid);
+		}
+		irq++;
+		irq_mask <<= 8;
+	}
+}
+
+/* TODO: Registers are byte accessible. */
 static int
 dist_ipriorityr_access(struct hyp *hyp, int vcpuid, uint64_t fault_ipa,
     uint64_t *val, bool *retu, enum access_type dir)
@@ -232,8 +273,6 @@ dist_ipriorityr_access(struct hyp *hyp, int vcpuid, uint64_t fault_ipa,
 	struct vgic_v3_dist *dist = &hyp->vgic_dist;
 	size_t regsize, n;
 	size_t off;
-	uint32_t irq, old_regval;
-	uint8_t new_prio;
 
 	off = fault_ipa - hyp->vgic_mmio_regions[VGIC_GICD_IPRIORITYR].start;
 	regsize = sizeof(*dist->gicd_ipriorityr);
@@ -251,34 +290,11 @@ dist_ipriorityr_access(struct hyp *hyp, int vcpuid, uint64_t fault_ipa,
 	}
 
 	mtx_lock_spin(&dist->dist_mtx);
-	if (dir == READ)
+	if (dir == READ) {
 		*val = dist->gicd_ipriorityr[n];
-	else {
-		old_regval = dist->gicd_ipriorityr[n];
-		if ((old_regval & 0xff) != (*val & 0xff)) {
-			irq = n * 4 + 0;
-			new_prio = (uint8_t)(*val);
-			vgic_v3_irq_set_priority(irq, new_prio, hyp, vcpuid);
-		}
-
-		if (((old_regval >> 8) & 0xff) != ((*val >> 8) & 0xff)) {
-			irq = n * 4 + 1;
-			new_prio = (uint8_t)(*val >> 8);
-			vgic_v3_irq_set_priority(irq, new_prio, hyp, vcpuid);
-		}
-
-		if (((old_regval >> 16) & 0xff) != ((*val >> 16) & 0xff)) {
-			irq = n * 4 + 2;
-			new_prio = (uint8_t)(*val >> 16);
-			vgic_v3_irq_set_priority(irq, new_prio, hyp, vcpuid);
-		}
-
-		if (((old_regval >> 24) & 0xff) != ((*val >> 24) & 0xff)) {
-			irq = n * 4 + 2;
-			new_prio = (uint8_t)(*val >> 24);
-			vgic_v3_irq_set_priority(irq, new_prio, hyp, vcpuid);
-		}
-
+	} else {
+		dist_update_int_priority(*val, dist->gicd_ipriorityr[n],
+		    n * 4, hyp, vcpuid);
 		dist->gicd_ipriorityr[n] = *val;
 	}
 	mtx_unlock_spin(&dist->dist_mtx);
