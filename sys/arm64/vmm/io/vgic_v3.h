@@ -183,7 +183,7 @@ void	redist_mmio_destroy(struct hypctx *hypctx);
 int 	vgic_v3_vcpu_pending_irq(void *arg);
 int 	vgic_v3_inject_irq(void *arg, uint32_t irq,
 			   enum vgic_v3_irqtype irqtype);
-int 	vgic_v3_remove_irq(void *arg, uint32_t irq);
+int 	vgic_v3_remove_irq(void *arg, uint32_t irq, bool ignore_state);
 void	vgic_v3_irq_set_priority(uint32_t irq, uint8_t priority,
 				 struct hyp *hyp, int vcpuid);
 void	vgic_v3_irq_set_group(uint32_t irq, uint8_t group,

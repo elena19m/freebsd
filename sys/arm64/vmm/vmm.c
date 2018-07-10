@@ -825,7 +825,7 @@ vm_deassert_irq(struct vm *vm, uint32_t irq)
 {
 	int error;
 
-	error = vgic_v3_remove_irq(vm->cookie, irq);
+	error = vgic_v3_remove_irq(vm->cookie, irq, false);
 
 	return (error);
 }
