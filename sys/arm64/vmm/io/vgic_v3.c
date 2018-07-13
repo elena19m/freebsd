@@ -78,17 +78,6 @@
     (ICH_LR_EL2_STATE(lr) == ICH_LR_EL2_STATE_INACTIVE)
 #define	lr_not_active(lr) (lr_pending(lr) || lr_inactive(lr))
 
-#define	get_int_group(irq, dist, redist)				\
-({									\
- 	uint32_t irq_mask = 1 << irq;					\
-	int group;							\
- 	if (irq <= GIC_LAST_PPI)					\
-		group = (redist->gicr_igroupr0 & irq_mask) ? 1 : 0;	\
-	else								\
-		group = (dist->gicd_igroupr[n] & irq_mask) ? 1 : 0;	\
-	group;								\
-})
-
 MALLOC_DEFINE(M_VGIC_V3, "ARM VMM VGIC V3", "ARM VMM VGIC V3");
 
 extern uint64_t hypmode_enabled;
@@ -439,7 +428,7 @@ vgic_v3_get_priority(uint32_t irq, struct hypctx *hypctx)
 }
 
 static bool
-vgic_v3_int_enabled(uint32_t irq, struct hypctx *hypctx, int *group)
+vgic_v3_int_enabled(uint32_t irq, int group, struct hypctx *hypctx)
 {
 	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
 	struct vgic_v3_redist *redist = &hypctx->vgic_redist;
@@ -451,12 +440,6 @@ vgic_v3_int_enabled(uint32_t irq, struct hypctx *hypctx, int *group)
 	irq_mask = 1 << irq_off;
 	n = irq / 32;
 
-	/* XXX GIC{R, D}_IGROUPMODR set the secure/non-secure bit */
-	if (irq <= GIC_LAST_PPI)
-		*group = (redist->gicr_igroupr0 & irq_mask) ? 1 : 0;
-	else
-		*group = (dist->gicd_igroupr[n] & irq_mask) ? 1 : 0;
-
 	/*
 	 * Check that the interrupt group hasn't been disabled:
 	 * - in the Distributor
@@ -467,7 +450,7 @@ vgic_v3_int_enabled(uint32_t irq, struct hypctx *hypctx, int *group)
 	 * TODO: Mark Group {0, 1} interrupts as disabled when GICD_CTLR is
 	 * written
 	 * */
-	if (*group == 1) {
+	if (group == 1) {
 		if (!(dist->gicd_ctlr & GICD_CTLR_G1A))
 			return (false);
 		if (!(cpu_if->ich_vmcr_el2 & ICH_VMCR_EL2_VENG1))
@@ -490,6 +473,30 @@ vgic_v3_int_enabled(uint32_t irq, struct hypctx *hypctx, int *group)
 	return (true);
 }
 
+static inline int
+vgic_v3_get_int_group(unsigned int irq, struct hypctx *hypctx)
+{
+	struct vgic_v3_dist *dist;
+	struct vgic_v3_redist *redist;
+ 	uint32_t irq_mask;
+	int n;
+	int group;
+
+	irq_mask = 1 << irq;
+	n = irq / 32;
+
+ 	if (irq <= GIC_LAST_PPI) {
+		redist = &hypctx->vgic_redist;
+		group = (redist->gicr_igroupr0 & irq_mask) ? 1 : 0;
+	} else {
+		dist = &hypctx->hyp->vgic_dist;
+		group = (dist->gicd_igroupr[n] & irq_mask) ? 1 : 0;
+	}
+
+	return group;
+}
+
+
 int
 vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 {
@@ -511,7 +518,9 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 
 	mtx_lock_spin(&dist->dist_mtx);
 
-	enabled = vgic_v3_int_enabled(irq, hypctx, &group);
+	/* XXX GIC{R, D}_IGROUPMODR set the secure/non-secure bit */
+	group  = vgic_v3_get_int_group(irq, hypctx);
+	enabled = vgic_v3_int_enabled(irq, group, hypctx);
 	if (!enabled) {
 		eprintf("IRQ %u NOT ENABLED!\n", irq);
 		if (irq <= GIC_LAST_PPI)
@@ -653,7 +662,8 @@ vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
 		if (irq == PENDING_INVALID)
 			continue;
 
-		if (!vgic_v3_int_enabled(irq, hypctx, group))
+		*group = vgic_v3_get_int_group(irq, hypctx);
+		if (!vgic_v3_int_enabled(irq, *group, hypctx))
 			continue;
 
 		if (!vgic_v3_int_target(irq, hypctx))
@@ -743,6 +753,7 @@ vgic_v3_sync_hwstate(void *arg)
 	 * All Distributor writes have been executed at this point, do not
 	 * protect reads with a  mutex.
 	 */
+
 	mtx_lock_spin(&cpu_if->lr_mtx);
 
 	/* Exit early if there are no buffered interrupts */
