@@ -644,10 +644,10 @@ vgic_v3_irq_set_group(uint32_t irq, uint8_t group,
 
 static struct vgic_v3_irq *
 vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
-    struct hypctx *hypctx, int *group)
+    struct hypctx *hypctx)
 {
 	uint32_t irq;
-	int i, max_idx;
+	int i, max_idx, group;
 	uint8_t priority, max_priority;
 	uint8_t vpmr;
 
@@ -662,8 +662,8 @@ vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
 		if (irq == PENDING_INVALID)
 			continue;
 
-		*group = vgic_v3_get_int_group(irq, hypctx);
-		if (!vgic_v3_int_enabled(irq, *group, hypctx))
+		group = vgic_v3_get_int_group(irq, hypctx);
+		if (!vgic_v3_int_enabled(irq, group, hypctx))
 			continue;
 
 		if (!vgic_v3_int_target(irq, hypctx))
@@ -743,9 +743,7 @@ vgic_v3_sync_hwstate(void *arg)
 	struct vgic_v3_irq *vip;
 	uint64_t *lrp;
 	uint32_t irq;
-	uint8_t priority;
 	int lr_free;
-	int group;
 	int i;
 	int error;
 
@@ -808,17 +806,16 @@ vgic_v3_sync_hwstate(void *arg)
 		if (!lr_inactive(cpu_if->ich_lr_el2[i]))
 			continue;
 
-		vip = vgic_v3_highest_priority_pending(cpu_if, hypctx, &group);
+		vip = vgic_v3_highest_priority_pending(cpu_if, hypctx);
 		if (vip == NULL)
 			/* No more pending interrupts */
 			break;
 
-		//priority = vgic_v3_get_priority(vip->irq, hypctx);
-		priority = vip->priority;
-
 		cpu_if->ich_lr_el2[i] = ICH_LR_EL2_STATE_PENDING;
-		cpu_if->ich_lr_el2[i] |= (uint64_t)group << ICH_LR_EL2_GROUP_SHIFT;
-		cpu_if->ich_lr_el2[i] |= (uint64_t)priority << ICH_LR_EL2_PRIO_SHIFT;
+		cpu_if->ich_lr_el2[i] |= \
+		    (uint64_t)vip->group << ICH_LR_EL2_GROUP_SHIFT;
+		cpu_if->ich_lr_el2[i] |= \
+		    (uint64_t)vip->priority << ICH_LR_EL2_PRIO_SHIFT;
 		cpu_if->ich_lr_el2[i] |= vip->irq;
 
 		/* Mark the scheduled pending interrupt as invalid */
