@@ -104,6 +104,14 @@ struct vgic_v3_irq {
 	uint8_t priority;
 };
 
+#define	vip_to_lr(vip, lr)						\
+do {									\
+	lr = ICH_LR_EL2_STATE_PENDING;					\
+	lr |= (uint64_t)vip->group << ICH_LR_EL2_GROUP_SHIFT;		\
+	lr |= (uint64_t)vip->priority << ICH_LR_EL2_PRIO_SHIFT;		\
+	lr |= vip->irq;							\
+} while (0)
+
 static struct vgic_v3_virt_features virt_features;
 static struct vgic_v3_ro_regs ro_regs;
 
@@ -521,6 +529,7 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 	/* XXX GIC{R, D}_IGROUPMODR set the secure/non-secure bit */
 	group  = vgic_v3_get_int_group(irq, hypctx);
 	enabled = vgic_v3_int_enabled(irq, group, hypctx);
+	/* TODO: deleteme */
 	if (!enabled) {
 		eprintf("IRQ %u NOT ENABLED!\n", irq);
 		if (irq <= GIC_LAST_PPI)
@@ -534,12 +543,13 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 			    dist->gicd_ixenabler[n] & (1 << off));
 		}
 	}
-	priority = vgic_v3_get_priority(irq, hypctx);
 	if (enabled) {
 		enabled = vgic_v3_int_target(irq, hypctx);
+		/* TODO: deleteme */
 		if (!enabled)
 			eprintf("IRQ %u NOT DIRECTED AT CURRENT CPU!\n", irq);
 	}
+	priority = vgic_v3_get_priority(irq, hypctx);
 
 	mtx_lock_spin(&cpu_if->lr_mtx);
 	error = vgic_v3_irqbuf_add_unsafe(irq, irqtype, cpu_if);
@@ -715,13 +725,8 @@ vgic_v3_move_irqbuf_to_lr(struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if)
 
 		vip = &cpu_if->irqbuf[irqbuf_idx];
 
-		/* Copy the IRQ in the LR register */
-		cpu_if->ich_lr_el2[i] = ICH_LR_EL2_STATE_PENDING;
-		cpu_if->ich_lr_el2[i] |= \
-		    (uint64_t)vip->group << ICH_LR_EL2_GROUP_SHIFT;
-		cpu_if->ich_lr_el2[i] |= \
-		    (uint64_t)vip->priority << ICH_LR_EL2_PRIO_SHIFT;
-		cpu_if->ich_lr_el2[i] |= vip->irq;
+		/* Copy the IRQ to the LR register */
+		vip_to_lr(vip, cpu_if->ich_lr_el2[i]);
 
 		/* Mark the buffered interrupt as scheduled... */
 		vip->irq = PENDING_INVALID;
@@ -810,13 +815,7 @@ vgic_v3_sync_hwstate(void *arg)
 		if (vip == NULL)
 			/* No more pending interrupts */
 			break;
-
-		cpu_if->ich_lr_el2[i] = ICH_LR_EL2_STATE_PENDING;
-		cpu_if->ich_lr_el2[i] |= \
-		    (uint64_t)vip->group << ICH_LR_EL2_GROUP_SHIFT;
-		cpu_if->ich_lr_el2[i] |= \
-		    (uint64_t)vip->priority << ICH_LR_EL2_PRIO_SHIFT;
-		cpu_if->ich_lr_el2[i] |= vip->irq;
+		vip_to_lr(vip, cpu_if->ich_lr_el2[i]);
 
 		/* Mark the scheduled pending interrupt as invalid */
 		vip->irq = PENDING_INVALID;
