@@ -666,6 +666,7 @@ vgic_v3_toggle_irq_group(int group, bool enable, struct hyp *hyp)
 	struct vgic_v3_redist *redist;
 	struct vgic_v3_cpu_if *cpu_if;
 	struct vgic_v3_irq *vip;
+	int i, j;
 
 	dist = &hyp->vgic_dist;
 	for (i = 0; i < VM_MAXCPU; i++) {
@@ -680,7 +681,8 @@ vgic_v3_toggle_irq_group(int group, bool enable, struct hyp *hyp)
 				continue;
 			if (!enable)
 				vip->enabled = 0;
-			else if (vgic_v3_intid_enabled(vip->irq, dist, redist))
+			if (enable &&
+			    vgic_v3_intid_enabled(vip->irq, dist, redist))
 				vip->enabled = 1;
 		}
 
