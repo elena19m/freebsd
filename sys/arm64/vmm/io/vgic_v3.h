@@ -187,7 +187,9 @@ int 	vgic_v3_remove_irq(void *arg, uint32_t irq, bool ignore_state);
 void	vgic_v3_irq_set_priority(uint32_t irq, uint8_t priority,
 				 struct hyp *hyp, int vcpuid);
 void	vgic_v3_irq_set_group(uint32_t irq, uint8_t group,
-				 struct hyp *hyp, int vcpuid);
+			      struct hyp *hyp, int vcpuid);
+void	vgic_v3_enable_irq_group(int group, struct hyp *hyp);
+void	vgic_v3_disable_irq_group(int group, struct hyp *hyp);
 
 DECLARE_CLASS(arm_vgic_driver);
 

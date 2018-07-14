@@ -436,17 +436,33 @@ vgic_v3_get_priority(uint32_t irq, struct hypctx *hypctx)
 }
 
 static bool
-vgic_v3_int_enabled(uint32_t irq, int group, struct hypctx *hypctx)
+vgic_v3_intid_enabled(uint32_t irq, struct vgic_v3_dist *dist,
+    struct vgic_v3_redist *redist)
 {
-	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
-	struct vgic_v3_redist *redist = &hypctx->vgic_redist;
-	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	uint32_t irq_off, irq_mask;
 	int n;
 
 	irq_off = irq % 32;
 	irq_mask = 1 << irq_off;
 	n = irq / 32;
+
+	if (irq <= GIC_LAST_PPI) {
+		if (!(redist->gicr_ixenabler0 & irq_mask))
+			return (false);
+	} else {
+		if (!(dist->gicd_ixenabler[n] & irq_mask))
+			return (false);
+	}
+
+	return (true);
+}
+
+static bool
+vgic_v3_int_enabled(uint32_t irq, int group, struct hypctx *hypctx)
+{
+	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
+	struct vgic_v3_redist *redist = &hypctx->vgic_redist;
+	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 
 	/*
 	 * Check that the interrupt group hasn't been disabled:
@@ -470,15 +486,7 @@ vgic_v3_int_enabled(uint32_t irq, int group, struct hypctx *hypctx)
 			return (false);
 	}
 
-	if (irq <= GIC_LAST_PPI) {
-		if (!(redist->gicr_ixenabler0 & irq_mask))
-			return (false);
-	} else {
-		if (!(dist->gicd_ixenabler[n] & irq_mask))
-			return (false);
-	}
-
-	return (true);
+	return (vgic_v3_intid_enabled(irq, dist, redist));
 }
 
 static inline int
@@ -634,8 +642,7 @@ vgic_v3_irq_set_group_vcpu(uint32_t irq, uint8_t group,
 }
 
 void
-vgic_v3_irq_set_group(uint32_t irq, uint8_t group,
-    struct hyp *hyp, int vcpuid)
+vgic_v3_irq_set_group(uint32_t irq, uint8_t group, struct hyp *hyp, int vcpuid)
 {
 	struct vgic_v3_cpu_if *cpu_if;
 	int i;
@@ -650,6 +657,37 @@ vgic_v3_irq_set_group(uint32_t irq, uint8_t group,
 			vgic_v3_irq_set_group_vcpu(irq, group, cpu_if);
 		}
 	}
+}
+
+void
+vgic_v3_enable_irq_group(int group, struct hyp *hyp)
+{
+	struct vgic_v3_dist *dist;
+	struct vgic_v3_redist *redist;
+	struct vgic_v3_cpu_if *cpu_if;
+	struct vgic_v3_irq *vip;
+
+	dist = &hyp->vgic_dist;
+	for (i = 0; i < VM_MAXCPU; i++) {
+		redist = &hyp->ctx[i].vgic_redist;
+		cpu_if = &hyp->ctx[i].vgic_cpu_if;
+
+		mtx_lock_spin(&cpu_if->lr_mtx);
+
+		for (j = 0; j < cpu_if->irqbuf_num; j++) {
+			vip = &cpu_if->irqbuf[j];
+			if (vip->group == group &&
+			    vgic_v3_intid_enabled(vip->irq, dist, redist))
+				vip->enabled = 1;
+		}
+
+		mtx_unlock_spin(&cpu_if->lr_mtx);
+	}
+}
+
+void
+vgic_v3_disable_irq_group(int group, struct hyp *hyp)
+{
 }
 
 static struct vgic_v3_irq *
