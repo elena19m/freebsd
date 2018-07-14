@@ -42,7 +42,21 @@ dist_ctlr_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 	bool *retu = arg;
 
 	mtx_lock_spin(&dist->dist_mtx);
+
+	if ((dist->gicd_ctlr & GICD_CTLR_G1A) != (wval & GICD_CTLR_G1A)) {
+		if (!(wval & GICD_CTLR_G1A))
+			vgic_v3_toggle_irq_group(1, false, hyp);
+		else
+			vgic_v3_toggle_irq_group(1, true, hyp);
+	}
+	if ((dist->gicd_ctlr & GICD_CTLR_G1) != (wval & GICD_CTLR_G1)) {
+		if (!(wval & GICD_CTLR_G1))
+			vgic_v3_toggle_irq_group(0, false, hyp);
+		else
+			vgic_v3_toggle_irq_group(0, true, hyp);
+	}
 	dist->gicd_ctlr = wval;
+
 	mtx_unlock_spin(&dist->dist_mtx);
 
 	*retu = false;
