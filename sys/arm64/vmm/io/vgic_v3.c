@@ -660,7 +660,7 @@ vgic_v3_irq_set_group(uint32_t irq, uint8_t group, struct hyp *hyp, int vcpuid)
 }
 
 void
-vgic_v3_enable_irq_group(int group, struct hyp *hyp)
+vgic_v3_toggle_irq_group(int group, bool enable, struct hyp *hyp)
 {
 	struct vgic_v3_dist *dist;
 	struct vgic_v3_redist *redist;
@@ -676,18 +676,16 @@ vgic_v3_enable_irq_group(int group, struct hyp *hyp)
 
 		for (j = 0; j < cpu_if->irqbuf_num; j++) {
 			vip = &cpu_if->irqbuf[j];
-			if (vip->group == group &&
-			    vgic_v3_intid_enabled(vip->irq, dist, redist))
+			if (vip->group != group)
+				continue;
+			if (!enable)
+				vip->enabled = 0;
+			else if (vgic_v3_intid_enabled(vip->irq, dist, redist))
 				vip->enabled = 1;
 		}
 
 		mtx_unlock_spin(&cpu_if->lr_mtx);
 	}
-}
-
-void
-vgic_v3_disable_irq_group(int group, struct hyp *hyp)
-{
 }
 
 static struct vgic_v3_irq *
