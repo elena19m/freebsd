@@ -45,15 +45,15 @@ dist_ctlr_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 
 	if ((dist->gicd_ctlr & GICD_CTLR_G1A) != (wval & GICD_CTLR_G1A)) {
 		if (!(wval & GICD_CTLR_G1A))
-			vgic_v3_toggle_irq_group(1, false, hyp);
+			vgic_v3_irq_toggle_group_enabled(1, false, hyp);
 		else
-			vgic_v3_toggle_irq_group(1, true, hyp);
+			vgic_v3_irq_toggle_group_enabled(1, true, hyp);
 	}
 	if ((dist->gicd_ctlr & GICD_CTLR_G1) != (wval & GICD_CTLR_G1)) {
 		if (!(wval & GICD_CTLR_G1))
-			vgic_v3_toggle_irq_group(0, false, hyp);
+			vgic_v3_irq_toggle_group_enabled(0, false, hyp);
 		else
-			vgic_v3_toggle_irq_group(0, true, hyp);
+			vgic_v3_irq_toggle_group_enabled(0, true, hyp);
 	}
 	dist->gicd_ctlr = wval;
 
@@ -167,6 +167,25 @@ dist_igroupr_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 	return (error);
 }
 
+static void
+dist_update_int_enabled(uint32_t new_ixenabler, uint32_t old_ixenabler,
+    uint32_t irq, struct hyp *hyp, int vcpuid)
+{
+	uint32_t irq_mask;
+	int error;
+	int i;
+	bool enabled;
+
+	for (i = 0, irq_mask = 0x1; i < 32; i++, irq++, irq_mask <<= 1)
+		if ((old_ixenabler & irq_mask) != (new_ixenabler & irq_mask)) {
+			enabled = ((new_ixenabler & irq_mask) != 0);
+			error = vgic_v3_irq_toggle_enabled(irq, enabled,
+			    hyp, vcpuid);
+			if (error)
+				eprintf("Warning: error while toggling IRQ %u\n", irq);
+		}
+}
+
 static int
 dist_ixenabler_access(struct hyp *hyp, int vcpuid, uint64_t fault_ipa,
     uint64_t *val, bool *retu, enum access_type dir,
@@ -175,6 +194,7 @@ dist_ixenabler_access(struct hyp *hyp, int vcpuid, uint64_t fault_ipa,
 	struct vgic_v3_dist *dist = &hyp->vgic_dist;
 	struct vgic_v3_redist *redist;
 	uint32_t *regp;
+	uint32_t old_ixenabler;
 	size_t off;
 	size_t regsize, n;
 
@@ -193,10 +213,13 @@ dist_ixenabler_access(struct hyp *hyp, int vcpuid, uint64_t fault_ipa,
 	if (dir == READ) {
 		*val = *regp;
 	} else {
+		old_ixenabler = *regp;
 		if (name == VGIC_GICD_ICENABLER)
 			*regp &= ~(*val);
 		else
 			*regp |= *val;
+		dist_update_int_enabled(*regp, old_ixenabler, n * 32,
+		    hyp, vcpuid);
 	}
 	mtx_unlock_spin(&dist->dist_mtx);
 
