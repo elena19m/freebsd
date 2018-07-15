@@ -151,62 +151,101 @@ redist_igroupr0_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 	return (0);
 }
 
+static void
+redist_update_int_enabled(uint32_t new_ixenabler, uint32_t old_ixenabler,
+    struct hyp *hyp, int vcpuid)
+{
+	uint32_t irq, irq_mask;
+	int error;
+	bool enabled;
+
+	for (irq = 0, irq_mask = 0x1; irq < 32; irq++, irq_mask <<= 1) {
+		if ((old_ixenabler & irq_mask) != (new_ixenabler & irq_mask)) {
+			enabled = ((new_ixenabler & irq_mask) != 0);
+			error = vgic_v3_irq_toggle_enabled(irq, enabled,
+			    hyp, vcpuid);
+			if (error)
+				eprintf("Warning: error while toggling IRQ %u\n", irq);
+		}
+	}
+}
+
+static int
+redist_ixenabler_access(void *vm, int vcpuid, uint64_t *val,
+    enum access_type dir, bool clear)
+{
+	struct hyp *hyp = vm_get_cookie(vm);
+	struct vgic_v3_redist *redist = &hyp->ctx[vcpuid].vgic_redist;
+	uint32_t old_ixenabler0, new_ixenabler0;
+
+	if (dir == READ) {
+		*val = redist->gicr_ixenabler0;
+	} else {
+		old_ixenabler0 = redist->gicr_ixenabler0;
+		if (clear)
+			new_ixenabler0 = old_ixenabler0 & ~(*val);
+		else
+			new_ixenabler0 = old_ixenabler0 | *val;
+		redist_update_int_enabled(new_ixenabler0, old_ixenabler0,
+		    hyp, vcpuid);
+		redist->gicr_ixenabler0 = new_ixenabler0;
+	}
+
+	return (0);
+}
+
 static int
 redist_isenabler0_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
     int size, void *arg)
 {
+	int error;
 	bool *retu = arg;
 
-	redist_simple_read(gicr_ixenabler0, rval, vm, vcpuid);
+	error = redist_ixenabler_access(vm, vcpuid, rval, READ, false);
 
 	*retu = false;
-	return (0);
+	return (error);
 }
 
 static int
 redist_isenabler0_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
     int size, void *arg)
 {
-	uint32_t ixenabler0;
+	int error;
 	bool *retu = arg;
 
-	redist_simple_read(gicr_ixenabler0, &ixenabler0, vm, vcpuid);
-	/* A write of 1 enables the interrupt */
-	ixenabler0 |= wval;
-	redist_simple_write(ixenabler0, gicr_ixenabler0, vm, vcpuid);
+	error = redist_ixenabler_access(vm, vcpuid, &wval, WRITE, false);
 
 	*retu = false;
-	return (0);
+	return (error);
 }
 
 static int
 redist_icenabler0_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
     int size, void *arg)
 {
+	int error;
 	bool *retu = arg;
 
-	redist_simple_read(gicr_ixenabler0, rval, vm, vcpuid);
+	error = redist_ixenabler_access(vm, vcpuid, rval, READ, false);
 
 	*retu = false;
-	return (0);
+	return (error);
 }
 
 static int
 redist_icenabler0_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
     int size, void *arg)
 {
-	uint32_t ixenabler0;
+	int error;
 	bool *retu = arg;
 
-	redist_simple_read(gicr_ixenabler0, &ixenabler0, vm, vcpuid);
-	/* A write of 1 disabled the interrupt */
-	ixenabler0 &= ~wval;
-	redist_simple_write(ixenabler0, gicr_ixenabler0, vm, vcpuid);
+	error = redist_ixenabler_access(vm, vcpuid, &wval, WRITE, true);
 
 	*retu = false;
-	return (0);
-}
+	return (error);
 
+}
 
 static int
 redist_ipriorityr_access(struct hyp *hyp, int vcpuid, uint64_t fault_ipa,

@@ -78,6 +78,8 @@
     (ICH_LR_EL2_STATE(lr) == ICH_LR_EL2_STATE_INACTIVE)
 #define	lr_not_active(lr) (lr_pending(lr) || lr_inactive(lr))
 
+#define	lr_clear_irq(lr) ((lr) &= ~ICH_LR_EL2_STATE_MASK)
+
 MALLOC_DEFINE(M_VGIC_V3, "ARM VMM VGIC V3", "ARM VMM VGIC V3");
 
 extern uint64_t hypmode_enabled;
@@ -97,7 +99,6 @@ struct vgic_v3_ro_regs {
 
 struct vgic_v3_irq {
 	uint32_t irq;
-	uint32_t vintid;
 	enum vgic_v3_irqtype irqtype;
 	uint8_t group;
 	uint8_t enabled;
@@ -110,6 +111,13 @@ do {									\
 	lr |= (uint64_t)vip->group << ICH_LR_EL2_GROUP_SHIFT;		\
 	lr |= (uint64_t)vip->priority << ICH_LR_EL2_PRIO_SHIFT;		\
 	lr |= vip->irq;							\
+} while (0)
+
+#define	lr_to_vip(lr, vip)						\
+do {									\
+	(vip)->priority = \
+	    (uint8_t)(((lr) & ICH_LR_EL2_PRIO_MASK) >> ICH_LR_EL2_PRIO_SHIFT); \
+	(vip)->group = (uint8_t)(((lr) >> ICH_LR_EL2_GROUP_SHIFT) & 0x1); \
 } while (0)
 
 static struct vgic_v3_virt_features virt_features;
@@ -278,7 +286,7 @@ vgic_v3_vcpu_pending_irq(void *arg)
 	return (cpu_if->irqbuf_num);
 }
 
-/* Removes ALL instances of interrupt with ID 'irq' */
+/* Removes ALL instances of interrupt 'irq' */
 static int
 vgic_v3_irqbuf_remove_unsafe(uint32_t irq, struct vgic_v3_cpu_if *cpu_if)
 {
@@ -307,20 +315,45 @@ vgic_v3_remove_irq(void *arg, uint32_t irq, bool ignore_state)
         struct hypctx *hypctx = arg;
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
+	int cnt = 0;
 	size_t i;
 
 	if (irq >= dist->nirqs) {
-		eprintf("Malformed irq\n");
+		eprintf("Malformed IRQ %u.\n", irq);
 		return (1);
 	}
 
+	if (irq != 30)
+		eprintf("Removing IRQ = %u\n", irq);
+
 	mtx_lock_spin(&cpu_if->lr_mtx);
-	for (i = 0; i < cpu_if->ich_lr_num; i++)
+
+	for (i = 0; i < cpu_if->ich_lr_num; i++) {
+		if (ICH_LR_EL2_VINTID(cpu_if->ich_lr_el2[i]) == irq)
+			cnt++;
 		if (ICH_LR_EL2_VINTID(cpu_if->ich_lr_el2[i]) == irq &&
 		    (lr_not_active(cpu_if->ich_lr_el2[i]) || ignore_state))
-			cpu_if->ich_lr_el2[i] &= ~ICH_LR_EL2_STATE_MASK;
+			lr_clear_irq(cpu_if->ich_lr_el2[i]);
+	}
+
+	if (irq != 30)
+		eprintf("IRQ %u, in LR regs = %d\n", irq, cnt);
+	cnt = 0;
+	for (i = 0; i < cpu_if->irqbuf_num; i++)
+		if (cpu_if->irqbuf[i].irq == irq)
+			cnt++;
+	if (irq != 30)
+		eprintf("IRQ %u, in irqbuf = %d\n", irq, cnt);
 
 	vgic_v3_irqbuf_remove_unsafe(irq, cpu_if);
+
+	cnt = 0;
+	for (i = 0; i < cpu_if->irqbuf_num; i++)
+		if (cpu_if->irqbuf[i].irq == irq)
+			cnt++;
+	if (irq != 30)
+		eprintf("IRQ %u, in irqbuf = %d\n", irq, cnt);
+
 	mtx_unlock_spin(&cpu_if->lr_mtx);
 
 	return (0);
@@ -339,6 +372,10 @@ vgic_v3_irqbuf_add_unsafe(uint32_t irq, enum vgic_v3_irqtype irqtype,
 		if (new_size > PENDING_SIZE_MAX)
 			return (1);
 
+		/*
+		 * TODO: Replace M_WAITOK with M_NOWAIT because the function can
+		 * be called from an atomic context
+		 */
 		new_irqbuf = malloc(new_size * sizeof(*cpu_if->irqbuf),
 		    M_VGIC_V3, M_WAITOK | M_ZERO);
 		memcpy(new_irqbuf, cpu_if->irqbuf,
@@ -457,6 +494,7 @@ vgic_v3_intid_enabled(uint32_t irq, struct vgic_v3_dist *dist,
 	return (true);
 }
 
+/* TODO: Rename into group enabled */
 static bool
 vgic_v3_int_enabled(uint32_t irq, int group, struct hypctx *hypctx)
 {
@@ -470,10 +508,7 @@ vgic_v3_int_enabled(uint32_t irq, int group, struct hypctx *hypctx)
 	 * - in the CPU interface
 	 */
 
-	/*
-	 * TODO: Mark Group {0, 1} interrupts as disabled when GICD_CTLR is
-	 * written
-	 * */
+	/* TODO: Move the CPU IF test in vgic_v3_sync_hwstate */
 	if (group == 1) {
 		if (!(dist->gicd_ctlr & GICD_CTLR_G1A))
 			return (false);
@@ -532,31 +567,21 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 		return (1);
 	}
 
+	int i, cnt;
+	cnt = 0;
+	for (i = 0; i < cpu_if->irqbuf_num; i++)
+		if (cpu_if->irqbuf[i].irq == irq)
+			cnt++;
+	if (irq != 30)
+		eprintf("Injecting %u, existing instances = %d\n", irq, cnt);
+
 	mtx_lock_spin(&dist->dist_mtx);
 
 	/* XXX GIC{R, D}_IGROUPMODR set the secure/non-secure bit */
 	group  = vgic_v3_get_int_group(irq, hypctx);
 	enabled = vgic_v3_int_enabled(irq, group, hypctx);
-	/* TODO: deleteme */
-	if (!enabled) {
-		eprintf("IRQ %u NOT ENABLED!\n", irq);
-		if (irq <= GIC_LAST_PPI)
-			eprintf("gicr_ixenabler(%u) = %u\n", irq,
-			    hypctx->vgic_redist.gicr_ixenabler0 & (1 << irq));
-		else {
-			int n, off;
-			n = irq / 32;
-			off = irq % 32;
-			eprintf("gicd_ixenabled[%d](%u) = %u\n", n, irq,
-			    dist->gicd_ixenabler[n] & (1 << off));
-		}
-	}
-	if (enabled) {
+	if (enabled)
 		enabled = vgic_v3_int_target(irq, hypctx);
-		/* TODO: deleteme */
-		if (!enabled)
-			eprintf("IRQ %u NOT DIRECTED AT CURRENT CPU!\n", irq);
-	}
 	priority = vgic_v3_get_priority(irq, hypctx);
 
 	mtx_lock_spin(&cpu_if->lr_mtx);
@@ -660,7 +685,7 @@ vgic_v3_irq_set_group(uint32_t irq, uint8_t group, struct hyp *hyp, int vcpuid)
 }
 
 void
-vgic_v3_toggle_irq_group(int group, bool enable, struct hyp *hyp)
+vgic_v3_irq_toggle_group_enabled(int group, bool enabled, struct hyp *hyp)
 {
 	struct vgic_v3_dist *dist;
 	struct vgic_v3_redist *redist;
@@ -679,15 +704,76 @@ vgic_v3_toggle_irq_group(int group, bool enable, struct hyp *hyp)
 			vip = &cpu_if->irqbuf[j];
 			if (vip->group != group)
 				continue;
-			if (!enable)
+			if (!enabled)
 				vip->enabled = 0;
-			if (enable &&
+			if (enabled &&
 			    vgic_v3_intid_enabled(vip->irq, dist, redist))
 				vip->enabled = 1;
 		}
 
 		mtx_unlock_spin(&cpu_if->lr_mtx);
 	}
+}
+
+static int
+vgic_v3_irq_toggle_enabled_vcpu(uint32_t irq, bool enabled,
+    struct vgic_v3_cpu_if *cpu_if)
+{
+	//struct vgic_v3_irq *vip;
+	//int group;
+	int i;
+
+	mtx_lock_spin(&cpu_if->lr_mtx);
+
+	if (enabled) {
+		/*
+		 * Enable IRQs that were injected when the interrupt ID was
+		 * disabled
+		 */
+		for (i = 0; i < cpu_if->irqbuf_num; i++)
+			if (cpu_if->irqbuf[i].irq == irq) {
+				/* TODO: Check if group is enabled */
+				//group = vgic_v3_get_int_group(irq, cpu_if);
+				cpu_if->irqbuf[i].enabled = true;
+			}
+	} else {
+		/* Remove the disabled IRQ from the LR regs if it is pending */
+		for (i = 0; i < cpu_if->ich_lr_num; i++)
+			if (lr_pending(cpu_if->ich_lr_el2[i]) &&
+			    ICH_LR_EL2_VINTID(cpu_if->ich_lr_el2[i]) == irq)
+				lr_clear_irq(cpu_if->ich_lr_el2[i]);
+
+		/* Remove the IRQ from the interrupt buffer */
+		vgic_v3_irqbuf_remove_unsafe(irq, cpu_if);
+	}
+
+	mtx_unlock_spin(&cpu_if->lr_mtx);
+
+	return (0);
+}
+
+int
+vgic_v3_irq_toggle_enabled(uint32_t irq, bool enabled,
+    struct hyp *hyp, int vcpuid)
+{
+	struct vgic_v3_cpu_if *cpu_if;
+	int error;
+	int i;
+
+	if (irq <= GIC_LAST_PPI) {
+		cpu_if = &hyp->ctx[vcpuid].vgic_cpu_if;
+		return (vgic_v3_irq_toggle_enabled_vcpu(irq, enabled, cpu_if));
+	} else {
+		/* TODO: Update irqbuf for all VCPUs, not just VCPU 0 */
+		for (i = 0; i < 1; i++) {
+			cpu_if = &hyp->ctx[i].vgic_cpu_if;
+			error = vgic_v3_irq_toggle_enabled_vcpu(irq, enabled, cpu_if);
+			if (error)
+				return (error);
+		}
+	}
+
+	return (0);
 }
 
 static struct vgic_v3_irq *
@@ -813,8 +899,10 @@ vgic_v3_sync_hwstate(void *arg)
 		goto out;
 	}
 
+	/*
 	eprintf("RESHUFFLING! lr_free = %d, irqbuf_num = %zu\n",
 	    lr_free, cpu_if->irqbuf_num);
+	    */
 
 	/*
 	 * Add all interrupts from the list registers that are not active to
@@ -831,9 +919,7 @@ vgic_v3_sync_hwstate(void *arg)
 				break;
 
 			vip = &cpu_if->irqbuf[cpu_if->irqbuf_num - 1];
-			vip->priority = \
-			    (uint8_t)((*lrp & ICH_LR_EL2_PRIO_MASK) >> ICH_LR_EL2_PRIO_SHIFT);
-			vip->group = (uint8_t)((*lrp >> ICH_LR_EL2_GROUP_SHIFT) & 0x1);
+			lr_to_vip(*lrp, vip);
 			/*
 			 * Interrupts from the LR regs are always enabled.
 			 * Distributor emulation will remove then if they become
@@ -842,7 +928,7 @@ vgic_v3_sync_hwstate(void *arg)
 			vip->enabled = 1;
 
 			/* Mark it as inactive */
-			*lrp &= ~ICH_LR_EL2_STATE_MASK;
+			lr_clear_irq(*lrp);
 		}
 
 	for (i = 0; i < cpu_if->ich_lr_num; i++) {
