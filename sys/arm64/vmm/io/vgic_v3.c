@@ -115,6 +115,7 @@ do {									\
 
 #define	lr_to_vip(lr, vip)						\
 do {									\
+	(vip)->irq = ICH_LR_EL2_VINTID(lr);				\
 	(vip)->priority = \
 	    (uint8_t)(((lr) & ICH_LR_EL2_PRIO_MASK) >> ICH_LR_EL2_PRIO_SHIFT); \
 	(vip)->group = (uint8_t)(((lr) >> ICH_LR_EL2_GROUP_SHIFT) & 0x1); \
@@ -359,20 +360,20 @@ vgic_v3_remove_irq(void *arg, uint32_t irq, bool ignore_state)
 	return (0);
 }
 
-static int
-vgic_v3_irqbuf_add_unsafe(uint32_t irq, enum vgic_v3_irqtype irqtype,
-    struct vgic_v3_cpu_if *cpu_if)
+static struct vgic_v3_irq *
+vgic_v3_irqbuf_add_unsafe(struct vgic_v3_cpu_if *cpu_if)
 {
-	struct vgic_v3_irq *new_irqbuf, *old_irqbuf, *vip;
+	struct vgic_v3_irq *new_irqbuf, *old_irqbuf;
 	size_t new_size;
 
 	if (cpu_if->irqbuf_num == cpu_if->irqbuf_size) {
 		/* Double the size of the buffered interrupts list */
 		new_size = cpu_if->irqbuf_size << 1;
 		if (new_size > PENDING_SIZE_MAX)
-			return (1);
+			return (NULL);
 
-		for (new_irqbuf = NULL; new_irqbuf != NULL;)
+		new_irqbuf = NULL;
+		while (new_irqbuf == NULL)
 			new_irqbuf = malloc(new_size * sizeof(*cpu_if->irqbuf),
 			    M_VGIC_V3, M_NOWAIT | M_ZERO);
 		memcpy(new_irqbuf, cpu_if->irqbuf,
@@ -384,13 +385,9 @@ vgic_v3_irqbuf_add_unsafe(uint32_t irq, enum vgic_v3_irqtype irqtype,
 		free(old_irqbuf, M_VGIC_V3);
 	}
 
-	vip = &cpu_if->irqbuf[cpu_if->irqbuf_num];
-	vip->irq = irq;
-	vip->irqtype = irqtype;
-
 	cpu_if->irqbuf_num++;
 
-	return (0);
+	return (&cpu_if->irqbuf[cpu_if->irqbuf_num - 1]);
 }
 
 static bool
@@ -564,6 +561,7 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 		return (1);
 	}
 
+#if 0
 	int i, cnt;
 	cnt = 0;
 	for (i = 0; i < cpu_if->irqbuf_num; i++)
@@ -571,7 +569,9 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 			cnt++;
 	if (irq != 30)
 		eprintf("Injecting %u, existing instances = %d\n", irq, cnt);
+#endif
 
+	error = 0;
 	mtx_lock_spin(&dist->dist_mtx);
 
 	/* XXX GIC{R, D}_IGROUPMODR set the secure/non-secure bit */
@@ -582,13 +582,15 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 	priority = vgic_v3_get_priority(irq, hypctx);
 
 	mtx_lock_spin(&cpu_if->lr_mtx);
-	error = vgic_v3_irqbuf_add_unsafe(irq, irqtype, cpu_if);
-	if (error) {
+
+	vip = vgic_v3_irqbuf_add_unsafe(cpu_if);
+	if (!vip) {
 		eprintf("Error adding IRQ %u to the IRQ buffer.\n", irq);
+		error = 1;
 		goto out_unlock;
 	}
-
-	vip = &cpu_if->irqbuf[cpu_if->irqbuf_num - 1];
+	vip->irq = irq;
+	vip->irqtype = irqtype;
 	vip->group = group;
 	vip->enabled = enabled;
 	vip->priority = priority;
@@ -871,7 +873,6 @@ vgic_v3_sync_hwstate(void *arg)
 	uint32_t irq;
 	int lr_free;
 	int i;
-	int error;
 
 	/*
 	 * All Distributor writes have been executed at this point, do not
@@ -896,10 +897,8 @@ vgic_v3_sync_hwstate(void *arg)
 		goto out;
 	}
 
-	/*
 	eprintf("RESHUFFLING! lr_free = %d, irqbuf_num = %zu\n",
 	    lr_free, cpu_if->irqbuf_num);
-	    */
 
 	/*
 	 * Add all interrupts from the list registers that are not active to
@@ -910,12 +909,10 @@ vgic_v3_sync_hwstate(void *arg)
 			lrp = &cpu_if->ich_lr_el2[i];
 			irq = *lrp & ICH_LR_EL2_VINTID_MASK;
 
-			error = vgic_v3_irqbuf_add_unsafe(irq, VGIC_IRQ_MAXPRIO, cpu_if);
-			if (error)
+			vip = vgic_v3_irqbuf_add_unsafe(cpu_if);
+			if (!vip)
 				/* Pending list full, stop it */
 				break;
-
-			vip = &cpu_if->irqbuf[cpu_if->irqbuf_num - 1];
 			lr_to_vip(*lrp, vip);
 			/*
 			 * Interrupts from the LR regs are always enabled.
@@ -923,6 +920,7 @@ vgic_v3_sync_hwstate(void *arg)
 			 * disabled.
 			 */
 			vip->enabled = 1;
+			vip->irqtype = VGIC_IRQ_MAXPRIO;
 
 			/* Mark it as inactive */
 			lr_clear_irq(*lrp);
