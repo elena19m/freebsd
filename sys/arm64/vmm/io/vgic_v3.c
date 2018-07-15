@@ -372,12 +372,9 @@ vgic_v3_irqbuf_add_unsafe(uint32_t irq, enum vgic_v3_irqtype irqtype,
 		if (new_size > PENDING_SIZE_MAX)
 			return (1);
 
-		/*
-		 * TODO: Replace M_WAITOK with M_NOWAIT because the function can
-		 * be called from an atomic context
-		 */
-		new_irqbuf = malloc(new_size * sizeof(*cpu_if->irqbuf),
-		    M_VGIC_V3, M_WAITOK | M_ZERO);
+		for (new_irqbuf = NULL; new_irqbuf != NULL;)
+			new_irqbuf = malloc(new_size * sizeof(*cpu_if->irqbuf),
+			    M_VGIC_V3, M_NOWAIT | M_ZERO);
 		memcpy(new_irqbuf, cpu_if->irqbuf,
 		    cpu_if->irqbuf_size * sizeof(*cpu_if->irqbuf));
 
