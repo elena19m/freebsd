@@ -490,10 +490,9 @@ vgic_v3_intid_enabled(uint32_t irq, struct vgic_v3_dist *dist,
 
 /* TODO: Rename into group enabled */
 static bool
-vgic_v3_int_enabled(uint32_t irq, int group, struct hypctx *hypctx)
+vgic_v3_group_enabled(int group, struct hypctx *hypctx)
 {
 	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
-	struct vgic_v3_redist *redist = &hypctx->vgic_redist;
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 
 	/*
@@ -515,7 +514,7 @@ vgic_v3_int_enabled(uint32_t irq, int group, struct hypctx *hypctx)
 			return (false);
 	}
 
-	return (vgic_v3_intid_enabled(irq, dist, redist));
+	return (true);
 }
 
 static inline int
@@ -546,8 +545,9 @@ int
 vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 {
         struct hypctx *hypctx = arg;
-	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
+	struct vgic_v3_redist *redist = &hypctx->vgic_redist;
+	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	struct vgic_v3_irq *vip;
 	int group;
 	int error;
@@ -576,9 +576,9 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 
 	/* XXX GIC{R, D}_IGROUPMODR set the secure/non-secure bit */
 	group  = vgic_v3_get_int_group(irq, hypctx);
-	enabled = vgic_v3_int_enabled(irq, group, hypctx);
-	if (enabled)
-		enabled = vgic_v3_int_target(irq, hypctx);
+	enabled = vgic_v3_group_enabled(group, hypctx);
+	enabled = enabled && vgic_v3_intid_enabled(irq, dist, redist);
+	enabled = enabled && vgic_v3_int_target(irq, hypctx);
 	priority = vgic_v3_get_priority(irq, hypctx);
 
 	mtx_lock_spin(&cpu_if->lr_mtx);
@@ -779,6 +779,8 @@ static struct vgic_v3_irq *
 vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
     struct hypctx *hypctx)
 {
+	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
+	struct vgic_v3_redist *redist = &hypctx->vgic_redist;
 	uint32_t irq;
 	int i, max_idx, group;
 	uint8_t priority, max_priority;
@@ -796,7 +798,9 @@ vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
 			continue;
 
 		group = vgic_v3_get_int_group(irq, hypctx);
-		if (!vgic_v3_int_enabled(irq, group, hypctx))
+		if (!vgic_v3_group_enabled(group, hypctx))
+			continue;
+		if (!vgic_v3_intid_enabled(irq, dist, redist))
 			continue;
 
 		if (!vgic_v3_int_target(irq, hypctx))
@@ -897,8 +901,11 @@ vgic_v3_sync_hwstate(void *arg)
 		goto out;
 	}
 
+	/* This is bad. This shouldn't happen */
 	eprintf("RESHUFFLING! lr_free = %d, irqbuf_num = %zu\n",
 	    lr_free, cpu_if->irqbuf_num);
+
+	/* TODO: Update this part for better efficiency */
 
 	/*
 	 * Add all interrupts from the list registers that are not active to
