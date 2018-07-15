@@ -467,9 +467,10 @@ vgic_v3_get_priority(uint32_t irq, struct hypctx *hypctx)
 }
 
 static bool
-vgic_v3_intid_enabled(uint32_t irq, struct vgic_v3_dist *dist,
-    struct vgic_v3_redist *redist)
+vgic_v3_intid_enabled(uint32_t irq, struct hypctx *hypctx)
 {
+	struct vgic_v3_dist *dist;
+	struct vgic_v3_redist *redist;
 	uint32_t irq_off, irq_mask;
 	int n;
 
@@ -478,9 +479,11 @@ vgic_v3_intid_enabled(uint32_t irq, struct vgic_v3_dist *dist,
 	n = irq / 32;
 
 	if (irq <= GIC_LAST_PPI) {
+		redist = &hypctx->vgic_redist;
 		if (!(redist->gicr_ixenabler0 & irq_mask))
 			return (false);
 	} else {
+		dist = &hypctx->hyp->vgic_dist;
 		if (!(dist->gicd_ixenabler[n] & irq_mask))
 			return (false);
 	}
@@ -488,31 +491,17 @@ vgic_v3_intid_enabled(uint32_t irq, struct vgic_v3_dist *dist,
 	return (true);
 }
 
-/* TODO: Rename into group enabled */
+/* Check in the Distributor that the interrupt group hasn't been disabled */
 static bool
 vgic_v3_group_enabled(int group, struct hypctx *hypctx)
 {
 	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
-	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 
-	/*
-	 * Check that the interrupt group hasn't been disabled:
-	 * - in the Distributor
-	 * - in the CPU interface
-	 */
+	if (group == 1 && !(dist->gicd_ctlr & GICD_CTLR_G1A))
+		return (false);
 
-	/* TODO: Move the CPU IF test in vgic_v3_sync_hwstate */
-	if (group == 1) {
-		if (!(dist->gicd_ctlr & GICD_CTLR_G1A))
-			return (false);
-		if (!(cpu_if->ich_vmcr_el2 & ICH_VMCR_EL2_VENG1))
-			return (false);
-	} else {
-		if (!(dist->gicd_ctlr & GICD_CTLR_G1))
-			return (false);
-		if (!(cpu_if->ich_vmcr_el2 & ICH_VMCR_EL2_VENG0))
-			return (false);
-	}
+	if (group == 0 && !(dist->gicd_ctlr & GICD_CTLR_G1))
+		return (false);
 
 	return (true);
 }
@@ -546,7 +535,6 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 {
         struct hypctx *hypctx = arg;
 	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
-	struct vgic_v3_redist *redist = &hypctx->vgic_redist;
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	struct vgic_v3_irq *vip;
 	int group;
@@ -577,7 +565,7 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 	/* XXX GIC{R, D}_IGROUPMODR set the secure/non-secure bit */
 	group  = vgic_v3_get_int_group(irq, hypctx);
 	enabled = vgic_v3_group_enabled(group, hypctx);
-	enabled = enabled && vgic_v3_intid_enabled(irq, dist, redist);
+	enabled = enabled && vgic_v3_intid_enabled(irq, hypctx);
 	enabled = enabled && vgic_v3_int_target(irq, hypctx);
 	priority = vgic_v3_get_priority(irq, hypctx);
 
@@ -686,16 +674,14 @@ vgic_v3_irq_set_group(uint32_t irq, uint8_t group, struct hyp *hyp, int vcpuid)
 void
 vgic_v3_irq_toggle_group_enabled(int group, bool enabled, struct hyp *hyp)
 {
-	struct vgic_v3_dist *dist;
-	struct vgic_v3_redist *redist;
+	struct hypctx *hypctx;
 	struct vgic_v3_cpu_if *cpu_if;
 	struct vgic_v3_irq *vip;
 	int i, j;
 
-	dist = &hyp->vgic_dist;
 	for (i = 0; i < VM_MAXCPU; i++) {
-		redist = &hyp->ctx[i].vgic_redist;
-		cpu_if = &hyp->ctx[i].vgic_cpu_if;
+		hypctx = &hyp->ctx[i];
+		cpu_if = &hypctx->vgic_cpu_if;
 
 		mtx_lock_spin(&cpu_if->lr_mtx);
 
@@ -705,8 +691,7 @@ vgic_v3_irq_toggle_group_enabled(int group, bool enabled, struct hyp *hyp)
 				continue;
 			if (!enabled)
 				vip->enabled = 0;
-			if (enabled &&
-			    vgic_v3_intid_enabled(vip->irq, dist, redist))
+			else if (vgic_v3_intid_enabled(vip->irq, hypctx))
 				vip->enabled = 1;
 		}
 
@@ -779,8 +764,6 @@ static struct vgic_v3_irq *
 vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
     struct hypctx *hypctx)
 {
-	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
-	struct vgic_v3_redist *redist = &hypctx->vgic_redist;
 	uint32_t irq;
 	int i, max_idx, group;
 	uint8_t priority, max_priority;
@@ -800,7 +783,7 @@ vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
 		group = vgic_v3_get_int_group(irq, hypctx);
 		if (!vgic_v3_group_enabled(group, hypctx))
 			continue;
-		if (!vgic_v3_intid_enabled(irq, dist, redist))
+		if (!vgic_v3_intid_enabled(irq, hypctx))
 			continue;
 
 		if (!vgic_v3_int_target(irq, hypctx))
@@ -833,7 +816,9 @@ static void
 vgic_v3_move_irqbuf_to_lr(struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if)
 {
 	struct vgic_v3_irq *vip;
-	int irqbuf_idx, i;
+	int irqbuf_idx;
+	int group;
+	int i;
 
 	irqbuf_idx = 0;
 	for (i = 0; i < cpu_if->ich_lr_num; i++) {
@@ -842,15 +827,23 @@ vgic_v3_move_irqbuf_to_lr(struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if)
 			continue;
 
 		/* Find the first enabled buffered interrupt */
-		for (; irqbuf_idx < cpu_if->irqbuf_num; irqbuf_idx++)
-			if (cpu_if->irqbuf[irqbuf_idx].enabled)
-				break;
+		for (; irqbuf_idx < cpu_if->irqbuf_num; irqbuf_idx++) {
+			vip = &cpu_if->irqbuf[irqbuf_idx];
+			if (!vip->enabled)
+				continue;
+			group = vgic_v3_get_int_group(vip->irq, hypctx);
+			if (group == 1 &&
+			    !(cpu_if->ich_vmcr_el2 & ICH_VMCR_EL2_VENG1))
+				continue;
+			if (group == 0 &&
+			    !(cpu_if->ich_vmcr_el2 & ICH_VMCR_EL2_VENG0))
+				continue;
+			break;
+		}
 
 		/* All buffered interrupts have been scheduled */
 		if (irqbuf_idx == cpu_if->irqbuf_num)
 			break;
-
-		vip = &cpu_if->irqbuf[irqbuf_idx];
 
 		/* Copy the IRQ to the LR register */
 		vip_to_lr(vip, cpu_if->ich_lr_el2[i]);
