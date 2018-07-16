@@ -68,9 +68,10 @@
 
 #define	RES0			0UL
 
-#define	PENDING_SIZE_MIN	32
-#define	PENDING_SIZE_MAX	(1 << 10)
-#define	PENDING_INVALID		(GIC_LAST_SPI + 1)
+#define	IRQBUF_SIZE_MIN	32
+#define	IRQ_SIZE_MAX	(1 << 10)
+
+#define	IRQ_SCHEDULED		(GIC_LAST_SPI + 1)
 
 #define	lr_pending(lr)		\
     (ICH_LR_EL2_STATE(lr) == ICH_LR_EL2_STATE_PENDING)
@@ -196,9 +197,9 @@ vgic_v3_cpuinit(void *arg, bool last_vcpu)
 	cpu_if->ich_ap0r_num = virt_features.ich_ap0r_num;
 	cpu_if->ich_ap1r_num = virt_features.ich_ap1r_num;
 
-	cpu_if->irqbuf = malloc(PENDING_SIZE_MIN * sizeof(*cpu_if->irqbuf),
+	cpu_if->irqbuf = malloc(IRQBUF_SIZE_MIN * sizeof(*cpu_if->irqbuf),
 	    M_VGIC_V3, M_WAITOK | M_ZERO);
-	cpu_if->irqbuf_size = PENDING_SIZE_MIN;
+	cpu_if->irqbuf_size = IRQBUF_SIZE_MIN;
 	cpu_if->irqbuf_num = 0;
 }
 
@@ -369,7 +370,7 @@ vgic_v3_irqbuf_add_unsafe(struct vgic_v3_cpu_if *cpu_if)
 	if (cpu_if->irqbuf_num == cpu_if->irqbuf_size) {
 		/* Double the size of the buffered interrupts list */
 		new_size = cpu_if->irqbuf_size << 1;
-		if (new_size > PENDING_SIZE_MAX)
+		if (new_size > IRQ_SIZE_MAX)
 			return (NULL);
 
 		new_irqbuf = NULL;
@@ -777,7 +778,7 @@ vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
 	for (i = 0; i < cpu_if->irqbuf_num; i++) {
 		irq = cpu_if->irqbuf[i].irq;
 		/* Check that the interrupt hasn't been already scheduled */
-		if (irq == PENDING_INVALID)
+		if (irq == IRQ_SCHEDULED)
 			continue;
 
 		group = vgic_v3_get_int_group(irq, hypctx);
@@ -849,7 +850,7 @@ vgic_v3_move_irqbuf_to_lr(struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if)
 		vip_to_lr(vip, cpu_if->ich_lr_el2[i]);
 
 		/* Mark the buffered interrupt as scheduled... */
-		vip->irq = PENDING_INVALID;
+		vip->irq = IRQ_SCHEDULED;
 		/* ... and proceed to the next buffered interrupt */
 		irqbuf_idx++;
 		if (irqbuf_idx == cpu_if->irqbuf_num)
@@ -857,7 +858,7 @@ vgic_v3_move_irqbuf_to_lr(struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if)
 	}
 
 	/* Remove all interrupts that were scheduled now */
-	vgic_v3_irqbuf_remove_unsafe(PENDING_INVALID, cpu_if);
+	vgic_v3_irqbuf_remove_unsafe(IRQ_SCHEDULED, cpu_if);
 }
 
 void
@@ -937,11 +938,11 @@ vgic_v3_sync_hwstate(void *arg)
 		vip_to_lr(vip, cpu_if->ich_lr_el2[i]);
 
 		/* Mark the scheduled pending interrupt as invalid */
-		vip->irq = PENDING_INVALID;
+		vip->irq = IRQ_SCHEDULED;
 	}
 
 	/* Remove all scheduled interrupts */
-	vgic_v3_irqbuf_remove_unsafe(PENDING_INVALID, cpu_if);
+	vgic_v3_irqbuf_remove_unsafe(IRQ_SCHEDULED, cpu_if);
 
 	/* TODO Enable maintenance interrupts if interrupts are still pending */
 
