@@ -15,10 +15,9 @@ SRCS+=	vmm.c		\
 	hyp.S
 
 .PATH: ${.CURDIR}/../../arm64/vmm/io
-SRCS+=  dist_mmio.c	\
-	redist_mmio.c	\
-	vtimer.c	\
-	vgic_v3.c
+SRCS+=  vgic_v3.c	\
+	vgic_v3_mmio.c	\
+	vtimer.c
 
 CLEANFILES=	hyp_assym.h hyp_genassym.o
 
