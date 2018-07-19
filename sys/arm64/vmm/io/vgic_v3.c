@@ -234,7 +234,6 @@ vgic_v3_attach_to_vm(void *arg, uint64_t dist_start, size_t dist_size,
     uint64_t redist_start, size_t redist_size)
 {
 	struct hyp *hyp = arg;
-	struct hypctx *hypctx;
 	struct vgic_v3_dist *dist = &hyp->vgic_dist;
 	struct vgic_v3_redist *redist;
 	int i;
@@ -246,17 +245,14 @@ vgic_v3_attach_to_vm(void *arg, uint64_t dist_start, size_t dist_size,
 	hyp->vgic_mmio_regions = \
 	    malloc(VGIC_MEM_REGION_LAST * sizeof(*hyp->vgic_mmio_regions),
 	    M_VGIC_V3, M_WAITOK | M_ZERO);
-	dist_mmio_init(hyp);
 
 	for (i = 0; i < VM_MAXCPU; i++) {
-		hypctx = &hyp->ctx[i];
-		redist = &hypctx->vgic_redist;
-
+		redist = &hyp->ctx[i].vgic_redist;
 		/* Set the redistributor address and size. */
 		redist->start = redist_start;
 		redist->end = redist_start + redist_size;
-		redist_mmio_init(hypctx);
 	}
+	vgic_v3_mmio_init(hyp);
 
 	hyp->vgic_attached = true;
 
@@ -267,15 +263,8 @@ vgic_v3_attach_to_vm(void *arg, uint64_t dist_start, size_t dist_size,
 static void vgic_v3_detach_from_vm(void *arg)
 {
 	struct hyp *hyp = arg;
-	struct hypctx *hypctx;
-	int i;
 
-	for (i = 0; i < VM_MAXCPU; i++) {
-		hypctx = &hyp->ctx[i];
-		redist_mmio_destroy(hypctx);
-	}
-
-	dist_mmio_destroy(hyp);
+	vgic_v3_mmio_destroy(hyp);
 	free(hyp->vgic_mmio_regions, M_VGIC_V3);
 }
 
@@ -317,7 +306,6 @@ vgic_v3_remove_irq(void *arg, uint32_t irq, bool ignore_state)
         struct hypctx *hypctx = arg;
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
-	int cnt = 0;
 	size_t i;
 
 	if (irq >= dist->nirqs) {
@@ -325,36 +313,14 @@ vgic_v3_remove_irq(void *arg, uint32_t irq, bool ignore_state)
 		return (1);
 	}
 
-	if (irq != 30)
-		eprintf("Removing IRQ = %u\n", irq);
-
 	mtx_lock_spin(&cpu_if->lr_mtx);
 
 	for (i = 0; i < cpu_if->ich_lr_num; i++) {
-		if (ICH_LR_EL2_VINTID(cpu_if->ich_lr_el2[i]) == irq)
-			cnt++;
 		if (ICH_LR_EL2_VINTID(cpu_if->ich_lr_el2[i]) == irq &&
 		    (lr_not_active(cpu_if->ich_lr_el2[i]) || ignore_state))
 			lr_clear_irq(cpu_if->ich_lr_el2[i]);
 	}
-
-	if (irq != 30)
-		eprintf("IRQ %u, in LR regs = %d\n", irq, cnt);
-	cnt = 0;
-	for (i = 0; i < cpu_if->irqbuf_num; i++)
-		if (cpu_if->irqbuf[i].irq == irq)
-			cnt++;
-	if (irq != 30)
-		eprintf("IRQ %u, in irqbuf = %d\n", irq, cnt);
-
 	vgic_v3_irqbuf_remove_unsafe(irq, cpu_if);
-
-	cnt = 0;
-	for (i = 0; i < cpu_if->irqbuf_num; i++)
-		if (cpu_if->irqbuf[i].irq == irq)
-			cnt++;
-	if (irq != 30)
-		eprintf("IRQ %u, in irqbuf = %d\n", irq, cnt);
 
 	mtx_unlock_spin(&cpu_if->lr_mtx);
 

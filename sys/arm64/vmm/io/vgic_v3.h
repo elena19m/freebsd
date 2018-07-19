@@ -175,10 +175,8 @@ void	vgic_v3_vminit(void *arg);
 void	vgic_v3_cpuinit(void *arg, bool last_vcpu);
 void 	vgic_v3_sync_hwstate(void *arg);
 
-void	dist_mmio_init(struct hyp *hyp);
-void	dist_mmio_destroy(struct hyp *hyp);
-void	redist_mmio_init(struct hypctx *hypctx);
-void	redist_mmio_destroy(struct hypctx *hypctx);
+void	vgic_v3_mmio_init(struct hyp *hyp);
+void	vgic_v3_mmio_destroy(struct hyp *hyp);
 
 int 	vgic_v3_vcpu_pending_irq(void *arg);
 int 	vgic_v3_inject_irq(void *arg, uint32_t irq,
