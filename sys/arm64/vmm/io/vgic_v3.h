@@ -58,32 +58,6 @@ enum vgic_v3_irqtype {
 	VGIC_IRQ_INVALID,
 };
 
-/* The names should always be in ascending order of memory address */
-enum vgic_mmio_region_name {
-	/* Distributor registers */
-	VGIC_GICD_CTLR,
-	VGIC_GICD_TYPER,
-	VGIC_GICD_IGROUPR,
-	VGIC_GICD_ISENABLER,
-	VGIC_GICD_ICENABLER,
-	VGIC_GICD_IPRIORITYR,
-	VGIC_GICD_ICFGR,
-	VGIC_GICD_IROUTER,
-	VGIC_GICD_PIDR2,
-	/* Redistributor registers */
-	VGIC_GICR_CTLR,
-	VGIC_GICR_TYPER,
-	VGIC_GICR_WAKER,
-	VGIC_GICR_PIDR2,
-	VGIC_GICR_IGROUPR0,
-	VGIC_GICR_ISENABLER0,
-	VGIC_GICR_ICENABLER0,
-	VGIC_GICR_IPRIORITYR,
-	VGIC_GICR_ICFGR0,
-	VGIC_GICR_ICFGR1,
-	VGIC_MEM_REGION_LAST
-};
-
 struct vgic_mmio_region {
 	vm_offset_t start;
 	vm_offset_t end;

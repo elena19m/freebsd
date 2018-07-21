@@ -408,8 +408,9 @@ vm_handle_inst_emul(struct vm *vm, int vcpuid, bool *retu)
 
 	fault_ipa = vme->u.inst_emul.gpa;
 
-	vmr = bsearch(&fault_ipa, hyp->vgic_mmio_regions, VGIC_MEM_REGION_LAST,
-	    sizeof(struct vgic_mmio_region), vm_mmio_region_match);
+	vmr = bsearch(&fault_ipa, hyp->vgic_mmio_regions,
+	    hyp->vgic_mmio_regions_num, sizeof(struct vgic_mmio_region),
+	    vm_mmio_region_match);
 	if (!vmr)
 		goto out_user;
 

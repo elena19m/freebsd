@@ -242,10 +242,6 @@ vgic_v3_attach_to_vm(void *arg, uint64_t dist_start, size_t dist_size,
 	dist->start = dist_start;
 	dist->end = dist_start + dist_size;
 
-	hyp->vgic_mmio_regions = \
-	    malloc(VGIC_MEM_REGION_LAST * sizeof(*hyp->vgic_mmio_regions),
-	    M_VGIC_V3, M_WAITOK | M_ZERO);
-
 	for (i = 0; i < VM_MAXCPU; i++) {
 		redist = &hyp->ctx[i].vgic_redist;
 		/* Set the redistributor address and size. */
@@ -265,7 +261,6 @@ static void vgic_v3_detach_from_vm(void *arg)
 	struct hyp *hyp = arg;
 
 	vgic_v3_mmio_destroy(hyp);
-	free(hyp->vgic_mmio_regions, M_VGIC_V3);
 }
 
 int

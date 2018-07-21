@@ -25,6 +25,37 @@ do {									\
 	redist->dest = src;						\
 } while (0);
 
+/* The names should always be in ascending order of memory address */
+enum vgic_mmio_region_name {
+	/* Distributor registers */
+	VGIC_GICD_CTLR,
+	VGIC_GICD_TYPER,
+	VGIC_GICD_IGROUPR,
+	VGIC_GICD_ISENABLER,
+	VGIC_GICD_ICENABLER,
+	VGIC_GICD_IPRIORITYR,
+	VGIC_GICD_ICFGR,
+	VGIC_GICD_IROUTER,
+	VGIC_GICD_PIDR2,
+	/* Redistributor registers */
+	VGIC_GICR_CTLR,
+	VGIC_GICR_TYPER,
+	VGIC_GICR_WAKER,
+	VGIC_GICR_PIDR2,
+	VGIC_GICR_IGROUPR0,
+	VGIC_GICR_ISENABLER0,
+	VGIC_GICR_ICENABLER0,
+	VGIC_GICR_IPRIORITYR,
+	VGIC_GICR_ICFGR0,
+	VGIC_GICR_ICFGR1,
+	VGIC_MMIO_REGIONS_NUM,
+};
+/*
+ * Necessary for calculating the number of Distributor and Redistributor
+ * regions emulated.
+ */
+#define	FIRST_REDIST_MMIO_REGION	VGIC_GICR_CTLR;
+
 enum access_type {
 	READ,
 	WRITE,
@@ -1092,9 +1123,19 @@ vgic_v3_mmio_init(struct hyp *hyp)
 {
 	struct vgic_v3_dist *dist = &hyp->vgic_dist;
 	struct vgic_v3_redist *redist;
+	int redist_region_num, dist_region_num, region_num;
+	int ncpus;
 
-	KASSERT(hyp->vgic_mmio_regions != NULL,
-	    ("vgic_mmio_regions not allocated"));
+	ncpus = 1;
+	dist_region_num = FIRST_REDIST_MMIO_REGION;
+	redist_region_num = \
+	    ncpus * (VGIC_MMIO_REGIONS_NUM - FIRST_REDIST_MMIO_REGION);
+	region_num = dist_region_num + redist_region_num;
+
+	hyp->vgic_mmio_regions = \
+	    malloc(region_num * sizeof(*hyp->vgic_mmio_regions),
+	    M_DIST_MMIO, M_WAITOK | M_ZERO);
+	hyp->vgic_mmio_regions_num = region_num;
 
 	dist_mmio_init_regions(dist, hyp);
 
@@ -1110,6 +1151,7 @@ vgic_v3_mmio_destroy(struct hyp *hyp)
 
 	if (!hyp->vgic_mmio_regions)
 		return;
+	free(hyp->vgic_mmio_regions, M_DIST_MMIO);
 
 	free(dist->gicd_igroupr, M_DIST_MMIO);
 	free(dist->gicd_ixenabler, M_DIST_MMIO);
