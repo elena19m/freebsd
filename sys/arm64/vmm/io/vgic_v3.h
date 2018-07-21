@@ -91,6 +91,8 @@ struct vgic_v3_dist {
 	uint32_t	*gicd_ixenabler;
 };
 
+#define	aff_routing_en(distp)	(distp->gicd_ctlr & GICD_CTLR_ARE_NS)
+
 struct vgic_v3_redist {
 	uint64_t 	start;
 	uint64_t 	end;

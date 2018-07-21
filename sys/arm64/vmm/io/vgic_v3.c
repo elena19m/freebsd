@@ -367,7 +367,7 @@ vgic_v3_int_target(uint32_t irq, struct hypctx *hypctx)
 		return (true);
 
 	/* XXX Affinity routing disabled not implemented */
-	if (!(dist->gicd_ctlr & GICD_CTLR_ARE_NS))
+	if (!aff_routing_en(dist))
 		return (true);
 
 	irq_off = irq % 32;
@@ -421,7 +421,7 @@ vgic_v3_get_priority(uint32_t irq, struct hypctx *hypctx)
 	 * is not enabled, the Distributor registers are used for all
 	 * interrupts.
 	 */
-	if ((dist->gicd_ctlr & GICD_CTLR_ARE_NS) && (n <= 7))
+	if (aff_routing_en(dist) && (n <= 7))
 		priority = (redist->gicr_ipriorityr[n] & mask) >> off;
 	else
 		priority = (dist->gicd_ipriorityr[n] & mask) >> off;
