@@ -275,7 +275,7 @@ vgic_v3_vcpu_pending_irq(void *arg)
 
 /* Removes ALL instances of interrupt 'irq' */
 static int
-vgic_v3_irqbuf_remove_unsafe(uint32_t irq, struct vgic_v3_cpu_if *cpu_if)
+vgic_v3_irqbuf_remove_nolock(uint32_t irq, struct vgic_v3_cpu_if *cpu_if)
 {
 	size_t dest = 0;
 	size_t from = cpu_if->irqbuf_num;
@@ -316,7 +316,7 @@ vgic_v3_remove_irq(void *arg, uint32_t irq, bool ignore_state)
 		    (lr_not_active(cpu_if->ich_lr_el2[i]) || ignore_state))
 			lr_clear_irq(cpu_if->ich_lr_el2[i]);
 	}
-	vgic_v3_irqbuf_remove_unsafe(irq, cpu_if);
+	vgic_v3_irqbuf_remove_nolock(irq, cpu_if);
 
 	mtx_unlock_spin(&cpu_if->lr_mtx);
 
@@ -324,7 +324,7 @@ vgic_v3_remove_irq(void *arg, uint32_t irq, bool ignore_state)
 }
 
 static struct vgic_v3_irq *
-vgic_v3_irqbuf_add_unsafe(struct vgic_v3_cpu_if *cpu_if)
+vgic_v3_irqbuf_add_nolock(struct vgic_v3_cpu_if *cpu_if)
 {
 	struct vgic_v3_irq *new_irqbuf, *old_irqbuf;
 	size_t new_size;
@@ -534,7 +534,7 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 
 	mtx_lock_spin(&cpu_if->lr_mtx);
 
-	vip = vgic_v3_irqbuf_add_unsafe(cpu_if);
+	vip = vgic_v3_irqbuf_add_nolock(cpu_if);
 	if (!vip) {
 		eprintf("Error adding IRQ %u to the IRQ buffer.\n", irq);
 		error = 1;
@@ -691,7 +691,7 @@ vgic_v3_irq_toggle_enabled_vcpu(uint32_t irq, bool enabled,
 				lr_clear_irq(cpu_if->ich_lr_el2[i]);
 
 		/* Remove the IRQ from the interrupt buffer */
-		vgic_v3_irqbuf_remove_unsafe(irq, cpu_if);
+		vgic_v3_irqbuf_remove_nolock(irq, cpu_if);
 	}
 
 	mtx_unlock_spin(&cpu_if->lr_mtx);
@@ -820,7 +820,7 @@ vgic_v3_move_irqbuf_to_lr(struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if)
 	}
 
 	/* Remove all interrupts that were scheduled now */
-	vgic_v3_irqbuf_remove_unsafe(IRQ_SCHEDULED, cpu_if);
+	vgic_v3_irqbuf_remove_nolock(IRQ_SCHEDULED, cpu_if);
 }
 
 void
@@ -872,7 +872,7 @@ vgic_v3_sync_hwstate(void *arg)
 			lrp = &cpu_if->ich_lr_el2[i];
 			irq = *lrp & ICH_LR_EL2_VINTID_MASK;
 
-			vip = vgic_v3_irqbuf_add_unsafe(cpu_if);
+			vip = vgic_v3_irqbuf_add_nolock(cpu_if);
 			if (!vip)
 				/* Pending list full, stop it */
 				break;
@@ -904,7 +904,7 @@ vgic_v3_sync_hwstate(void *arg)
 	}
 
 	/* Remove all scheduled interrupts */
-	vgic_v3_irqbuf_remove_unsafe(IRQ_SCHEDULED, cpu_if);
+	vgic_v3_irqbuf_remove_nolock(IRQ_SCHEDULED, cpu_if);
 
 	/* TODO Enable maintenance interrupts if interrupts are still pending */
 

@@ -61,15 +61,15 @@ enum access_type {
 	MMIO_WRITE,
 };
 
-MALLOC_DEFINE(M_DIST_MMIO, "ARM VMM VGIC DIST MMIO", "ARM VMM VGIC DIST MMIO");
+MALLOC_DEFINE(M_VGIC_V3_MMIO, "ARM VMM VGIC DIST MMIO", "ARM VMM VGIC DIST MMIO");
 
 static int
 dist_ctlr_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
     int size, void *arg)
 {
 	struct hyp *hyp = vm_get_cookie(vm);
-	struct vgic_v3_dist *dist = &hyp->vgic_dist;
 	bool *retu = arg;
+	struct vgic_v3_dist *dist = &hyp->vgic_dist;
 
 	mtx_lock_spin(&dist->dist_mtx);
 	*rval = dist->gicd_ctlr;
@@ -239,7 +239,7 @@ mmio_update_int_enabled(uint32_t new_ixenabler, uint32_t old_ixenabler,
 }
 
 static int
-dist_ixenabler_access(struct hyp *hyp, int vcpuid, uint64_t fault_ipa,
+mmio_ixenabler_access(struct hyp *hyp, int vcpuid, uint64_t fault_ipa,
     uint64_t *val, bool *retu, enum access_type dir,
     enum vgic_mmio_region_name name)
 {
@@ -249,31 +249,44 @@ dist_ixenabler_access(struct hyp *hyp, int vcpuid, uint64_t fault_ipa,
 	uint32_t old_ixenabler;
 	size_t off;
 	size_t regsize, n;
+	bool lock;
 
 	redist = &hyp->ctx[vcpuid].vgic_redist;
-	off = fault_ipa - hyp->vgic_mmio_regions[name].start;
-	regsize = sizeof(*dist->gicd_ixenabler);
-	n = off / regsize;
 
-	if (n == 0)
-		/* GICD_ICENABLER0 is equivalent to GICR_ICENABLER0 */
+	lock = false;
+	if (name == VGIC_GICR_ICENABLER0 || name == VGIC_GICR_ISENABLER0) {
+		n = 0;
 		regp = &redist->gicr_ixenabler0;
-	else
-		regp = &dist->gicd_ixenabler[n];
+	} else {
+		off = fault_ipa - hyp->vgic_mmio_regions[name].start;
+		regsize = sizeof(*dist->gicd_ixenabler);
+		n = off / regsize;
+		if (n == 0) {
+			/* GICD_ICENABLER0 is equivalent to GICR_ICENABLER0 */
+			regp = &redist->gicr_ixenabler0;
+		} else {
+			regp = &dist->gicd_ixenabler[n];
+			lock = true;
+		}
+	}
 
-	mtx_lock_spin(&dist->dist_mtx);
+	if (lock)
+		mtx_lock_spin(&dist->dist_mtx);
+
 	if (dir == MMIO_READ) {
 		*val = *regp;
 	} else {
 		old_ixenabler = *regp;
-		if (name == VGIC_GICD_ICENABLER)
+		if (name == VGIC_GICD_ICENABLER || name == VGIC_GICR_ICENABLER0)
 			*regp &= ~(*val);
 		else
 			*regp |= *val;
 		mmio_update_int_enabled(*regp, old_ixenabler, n * 32,
 		    hyp, vcpuid);
 	}
-	mtx_unlock_spin(&dist->dist_mtx);
+
+	if (lock)
+		mtx_unlock_spin(&dist->dist_mtx);
 
 	*retu = false;
 	return (0);
@@ -287,7 +300,7 @@ dist_isenabler_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 	bool *retu = arg;
 	int error;
 
-	error = dist_ixenabler_access(hyp, vcpuid, fault_ipa, rval, retu,
+	error = mmio_ixenabler_access(hyp, vcpuid, fault_ipa, rval, retu,
 	    MMIO_READ, VGIC_GICD_ISENABLER);
 
 	return (error);
@@ -301,7 +314,7 @@ dist_isenabler_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 	bool *retu = arg;
 	int error;
 
-	error = dist_ixenabler_access(hyp, vcpuid, fault_ipa, &wval, retu,
+	error = mmio_ixenabler_access(hyp, vcpuid, fault_ipa, &wval, retu,
 	    MMIO_WRITE, VGIC_GICD_ISENABLER);
 
 	return (error);
@@ -315,7 +328,7 @@ dist_icenabler_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 	bool *retu = arg;
 	int error;
 
-	error = dist_ixenabler_access(hyp, vcpuid, fault_ipa, rval, retu,
+	error = mmio_ixenabler_access(hyp, vcpuid, fault_ipa, rval, retu,
 	    MMIO_READ, VGIC_GICD_ICENABLER);
 
 	return (error);
@@ -329,7 +342,7 @@ dist_icenabler_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 	bool *retu = arg;
 	int error;
 
-	error = dist_ixenabler_access(hyp, vcpuid, fault_ipa, &wval, retu,
+	error = mmio_ixenabler_access(hyp, vcpuid, fault_ipa, &wval, retu,
 	    MMIO_WRITE, VGIC_GICD_ICENABLER);
 
 	return (error);
@@ -422,7 +435,7 @@ dist_ipriorityr_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 }
 
 static int
-_dist_icfgr_access(struct hyp *hyp, uint64_t fault_ipa,
+dist_icfgr_access(struct hyp *hyp, uint64_t fault_ipa,
     uint64_t *val, bool *retu, enum access_type dir)
 {
 	struct vgic_v3_dist *dist = &hyp->vgic_dist;
@@ -459,7 +472,7 @@ out:
 }
 
 static int
-dist_icfgr_access(struct hyp *hyp, int vcpuid, uint64_t fault_ipa,
+mmio_icfgr_access(struct hyp *hyp, int vcpuid, uint64_t fault_ipa,
     uint64_t *val, bool *retu, enum access_type dir)
 {
 	struct vgic_v3_redist *redist;
@@ -472,7 +485,7 @@ dist_icfgr_access(struct hyp *hyp, int vcpuid, uint64_t fault_ipa,
 		redist = &hyp->ctx[vcpuid].vgic_redist;
 		regp = &redist->gicr_icfgr1;
 	} else {
-		return (_dist_icfgr_access(hyp, fault_ipa, val, retu, dir));
+		return (dist_icfgr_access(hyp, fault_ipa, val, retu, dir));
 	}
 
 	if (dir == MMIO_READ)
@@ -492,7 +505,7 @@ dist_icfgr_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 	bool *retu = arg;
 	int error;
 
-	error = dist_icfgr_access(hyp, vcpuid, fault_ipa, rval, retu, MMIO_READ);
+	error = mmio_icfgr_access(hyp, vcpuid, fault_ipa, rval, retu, MMIO_READ);
 
 	return (error);
 
@@ -506,7 +519,7 @@ dist_icfgr_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 	bool *retu = arg;
 	int error;
 
-	error = dist_icfgr_access(hyp, vcpuid, fault_ipa, &wval, retu, MMIO_WRITE);
+	error = mmio_icfgr_access(hyp, vcpuid, fault_ipa, &wval, retu, MMIO_WRITE);
 
 	return (error);
 }
@@ -519,7 +532,7 @@ redist_icfgr0_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 	bool *retu = arg;
 	int error;
 
-	error = dist_icfgr_access(hyp, vcpuid, fault_ipa, rval, retu, MMIO_READ);
+	error = mmio_icfgr_access(hyp, vcpuid, fault_ipa, rval, retu, MMIO_READ);
 	eprintf("\n");
 
 	return (error);
@@ -533,7 +546,7 @@ redist_icfgr0_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 	bool *retu = arg;
 	int error;
 
-	error = dist_icfgr_access(hyp, vcpuid, fault_ipa, &wval, retu, MMIO_WRITE);
+	error = mmio_icfgr_access(hyp, vcpuid, fault_ipa, &wval, retu, MMIO_WRITE);
 	eprintf("\n");
 
 	return (0);
@@ -547,7 +560,7 @@ redist_icfgr1_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 	bool *retu = arg;
 	int error;
 
-	error = dist_icfgr_access(hyp, vcpuid, fault_ipa, rval, retu, MMIO_READ);
+	error = mmio_icfgr_access(hyp, vcpuid, fault_ipa, rval, retu, MMIO_READ);
 	eprintf("\n");
 
 	return (error);
@@ -561,7 +574,7 @@ redist_icfgr1_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 	bool *retu = arg;
 	int error;
 
-	error = dist_icfgr_access(hyp, vcpuid, fault_ipa, &wval, retu, MMIO_WRITE);
+	error = mmio_icfgr_access(hyp, vcpuid, fault_ipa, &wval, retu, MMIO_WRITE);
 	eprintf("\n");
 
 	return (0);
@@ -711,7 +724,6 @@ redist_typer_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 
 	eprintf("Warning: Attempted write to read-only register GICR_TYPER.\n");
 
-
 	*retu = false;
 	return (0);
 }
@@ -748,9 +760,11 @@ static int
 redist_igroupr0_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
     int size, void *arg)
 {
+	struct hyp *hyp = vm_get_cookie(vm);
+	struct vgic_v3_redist *redist = &hyp->ctx[vcpuid].vgic_redist;
 	bool *retu = arg;
 
-	redist_simple_read(gicr_igroupr0, rval, vm, vcpuid);
+	*rval = redist->gicr_igroupr0;
 	eprintf("\n");
 
 	*retu = false;
@@ -776,40 +790,16 @@ redist_igroupr0_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 }
 
 static int
-redist_ixenabler_access(void *vm, int vcpuid, uint64_t *val,
-    enum access_type dir, bool clear)
-{
-	struct hyp *hyp = vm_get_cookie(vm);
-	struct vgic_v3_redist *redist = &hyp->ctx[vcpuid].vgic_redist;
-	uint32_t old_ixenabler0, new_ixenabler0;
-
-	if (dir == MMIO_READ) {
-		*val = redist->gicr_ixenabler0;
-	} else {
-		old_ixenabler0 = redist->gicr_ixenabler0;
-		if (clear)
-			new_ixenabler0 = old_ixenabler0 & ~(*val);
-		else
-			new_ixenabler0 = old_ixenabler0 | *val;
-		mmio_update_int_enabled(new_ixenabler0, old_ixenabler0, 0,
-		    hyp, vcpuid);
-		redist->gicr_ixenabler0 = new_ixenabler0;
-	}
-
-	return (0);
-}
-
-static int
 redist_isenabler0_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
     int size, void *arg)
 {
 	int error;
 	bool *retu = arg;
 
-	error = redist_ixenabler_access(vm, vcpuid, rval, MMIO_READ, false);
+	error = mmio_ixenabler_access(vm_get_cookie(vm), vcpuid, fault_ipa,
+	    rval, retu, MMIO_READ, VGIC_GICR_ISENABLER0);
 	eprintf("\n");
 
-	*retu = false;
 	return (error);
 }
 
@@ -820,10 +810,10 @@ redist_isenabler0_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 	int error;
 	bool *retu = arg;
 
-	error = redist_ixenabler_access(vm, vcpuid, &wval, MMIO_WRITE, false);
+	error = mmio_ixenabler_access(vm_get_cookie(vm), vcpuid, fault_ipa,
+	    &wval, retu, MMIO_WRITE, VGIC_GICR_ISENABLER0);
 	eprintf("\n");
 
-	*retu = false;
 	return (error);
 }
 
@@ -834,10 +824,10 @@ redist_icenabler0_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 	int error;
 	bool *retu = arg;
 
-	error = redist_ixenabler_access(vm, vcpuid, rval, MMIO_READ, false);
+	error = mmio_ixenabler_access(vm_get_cookie(vm), vcpuid, fault_ipa,
+	    rval, retu, MMIO_READ, VGIC_GICR_ICENABLER0);
 	eprintf("\n");
 
-	*retu = false;
 	return (error);
 }
 
@@ -848,12 +838,11 @@ redist_icenabler0_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 	int error;
 	bool *retu = arg;
 
-	error = redist_ixenabler_access(vm, vcpuid, &wval, MMIO_WRITE, true);
+	error = mmio_ixenabler_access(vm_get_cookie(vm), vcpuid, fault_ipa,
+	    &wval, retu, MMIO_WRITE, VGIC_GICR_ICENABLER0);
 	eprintf("\n");
 
-	*retu = false;
 	return (error);
-
 }
 
 static int
@@ -943,7 +932,7 @@ redist_pidr2_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 #define	alloc_registers(regs, num, size)				\
 do {									\
 	size = n * sizeof(*regs);					\
-	regs = malloc(size, M_DIST_MMIO, M_WAITOK | M_ZERO);		\
+	regs = malloc(size, M_VGIC_V3_MMIO, M_WAITOK | M_ZERO);		\
 } while (0)
 
 #define	div_round_up(n, div)	(((n) + (div) - 1) / (div))
@@ -1012,10 +1001,12 @@ dist_mmio_init_regions(struct vgic_v3_dist *dist, struct hyp *hyp)
 }
 
 static void
-redist_mmio_init_regions(struct vgic_v3_redist *redist, struct hyp *hyp)
+redist_mmio_init_regions(struct hyp *hyp, int vcpuid)
 {
+	struct vgic_v3_redist *redist;
 	vm_offset_t start;
 
+	redist = &hyp->ctx[vcpuid].vgic_redist;
 	start = redist->start + GICR_FRAME_RD + GICR_CTLR;
 	/*
 	hyp->vgic_mmio_regions[VGIC_GICR_CTLR] = (struct vgic_mmio_region) {
@@ -1072,7 +1063,6 @@ void
 vgic_v3_mmio_init(struct hyp *hyp)
 {
 	struct vgic_v3_dist *dist = &hyp->vgic_dist;
-	struct vgic_v3_redist *redist;
 	int redist_region_num, dist_region_num, region_num;
 	int ncpus = 1;
 
@@ -1083,14 +1073,13 @@ vgic_v3_mmio_init(struct hyp *hyp)
 
 	hyp->vgic_mmio_regions = \
 	    malloc(region_num * sizeof(*hyp->vgic_mmio_regions),
-	    M_DIST_MMIO, M_WAITOK | M_ZERO);
+	    M_VGIC_V3_MMIO, M_WAITOK | M_ZERO);
 	hyp->vgic_mmio_regions_num = region_num;
 
 	dist_mmio_init_regions(dist, hyp);
 
 	/* TODO: Do it for all VCPUs */
-	redist = &hyp->ctx[0].vgic_redist;
-	redist_mmio_init_regions(redist, hyp);
+	redist_mmio_init_regions(hyp, 0);
 }
 
 void
@@ -1100,11 +1089,11 @@ vgic_v3_mmio_destroy(struct hyp *hyp)
 
 	if (!hyp->vgic_mmio_regions)
 		return;
-	free(hyp->vgic_mmio_regions, M_DIST_MMIO);
+	free(hyp->vgic_mmio_regions, M_VGIC_V3_MMIO);
 
-	free(dist->gicd_igroupr, M_DIST_MMIO);
-	free(dist->gicd_ixenabler, M_DIST_MMIO);
-	free(dist->gicd_ipriorityr, M_DIST_MMIO);
-	free(dist->gicd_icfgr, M_DIST_MMIO);
-	free(dist->gicd_irouter, M_DIST_MMIO);
+	free(dist->gicd_igroupr, M_VGIC_V3_MMIO);
+	free(dist->gicd_ixenabler, M_VGIC_V3_MMIO);
+	free(dist->gicd_ipriorityr, M_VGIC_V3_MMIO);
+	free(dist->gicd_icfgr, M_VGIC_V3_MMIO);
+	free(dist->gicd_irouter, M_VGIC_V3_MMIO);
 }
