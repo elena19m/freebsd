@@ -25,6 +25,11 @@ do {									\
 	redist->dest = src;						\
 } while (0);
 
+#define	reg32_idx(ipa, region_start)	(((ipa) - (region_start)) / 4)
+#define	reg64_idx(ipa, region_start)	(((ipa) - (region_start)) / 8)
+
+#define	reg_changed(new, old, mask)	(((new) & (mask)) != ((old) & (mask)))
+
 /* The names should always be in ascending order of memory address */
 enum vgic_mmio_region_name {
 	/* Distributor registers */
@@ -91,13 +96,13 @@ dist_ctlr_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 
 	mtx_lock_spin(&dist->dist_mtx);
 
-	if ((dist->gicd_ctlr & GICD_CTLR_G1A) != (wval & GICD_CTLR_G1A)) {
+	if (reg_changed(wval, dist->gicd_ctlr, GICD_CTLR_G1A)) {
 		if (!(wval & GICD_CTLR_G1A))
 			vgic_v3_irq_toggle_group_enabled(1, false, hyp);
 		else
 			vgic_v3_irq_toggle_group_enabled(1, true, hyp);
 	}
-	if ((dist->gicd_ctlr & GICD_CTLR_G1) != (wval & GICD_CTLR_G1)) {
+	if (reg_changed(wval, dist->gicd_ctlr, GICD_CTLR_G1)) {
 		if (!(wval & GICD_CTLR_G1))
 			vgic_v3_irq_toggle_group_enabled(0, false, hyp);
 		else
@@ -147,7 +152,7 @@ mmio_update_int_group(uint32_t new_igroupr, uint32_t old_igroupr,
 
 	irq_mask = 0x1;
 	for (i = 0; i < 32; i++) {
-		if ((old_igroupr & irq_mask) != (new_igroupr & irq_mask)) {
+		if (reg_changed(new_igroupr, old_igroupr, irq_mask)) {
 			group = (uint8_t)((new_igroupr >> i) & 0x1);
 			vgic_v3_irq_set_group(irq, group, hyp, vcpuid);
 		}
@@ -157,34 +162,41 @@ mmio_update_int_group(uint32_t new_igroupr, uint32_t old_igroupr,
 }
 
 static int
-dist_igroupr_access(struct hyp *hyp, int vcpuid, uint64_t fault_ipa,
-    uint64_t *val, bool *retu, enum access_type dir)
+dist_igroupr_access(void *vm, int vcpuid, uint64_t ipa, uint64_t *val,
+    void *arg, enum access_type dir)
 {
+	struct hyp *hyp = vm_get_cookie(vm);
 	struct vgic_v3_dist *dist = &hyp->vgic_dist;
-	struct vgic_v3_redist *redist;
-	uint32_t *regp;
-	size_t regsize, n;
-	size_t off;
+	size_t n;
+	bool *retu = arg;
 
-	redist = &hyp->ctx[vcpuid].vgic_redist;
-	off = fault_ipa - hyp->vgic_mmio_regions[VGIC_GICD_IGROUPR].start;
-	regsize = sizeof(*dist->gicd_igroupr);
-	n = off / regsize;
-
-	if (n == 0)
-		regp = &redist->gicr_igroupr0;
-	else
-		regp = &dist->gicd_igroupr[n];
+	n = reg32_idx(ipa, hyp->vgic_mmio_regions[VGIC_GICD_IGROUPR].start);
+	/*
+	 * GIC Architecture specification, p 8-477: "When ARE is 1 for the
+	 * Security state of an interrupt, the field for that interrupt is RES0
+	 * and an implementation is permitted to* make the field RAZ/WI in this
+	 * case".
+	 */
+	if (n == 0 && aff_routing_en(dist)) {
+		if (dir == MMIO_READ)
+			*val = RES0;
+		else
+			/* Ignore writes */
+			;
+		goto out;
+	}
 
 	mtx_lock_spin(&dist->dist_mtx);
 	if (dir == MMIO_READ) {
-		*val = *regp;
+		*val = dist->gicd_igroupr[n];
 	} else {
-		mmio_update_int_group(*val, *regp, n * 32, hyp, vcpuid);
-		*regp = *val;
+		mmio_update_int_group(*val, dist->gicd_igroupr[n], n * 32,
+		    hyp, vcpuid);
+		dist->gicd_igroupr[n] = *val;
 	}
 	mtx_unlock_spin(&dist->dist_mtx);
 
+out:
 	*retu = false;
 	return (0);
 }
@@ -193,26 +205,16 @@ static int
 dist_igroupr_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
     int size, void *arg)
 {
-	struct hyp *hyp = vm_get_cookie(vm);
-	bool *retu = arg;
-	int error;
-
-	error = dist_igroupr_access(hyp, vcpuid, fault_ipa, rval, retu, MMIO_READ);
-
-	return (error);
+	return (dist_igroupr_access(vm, vcpuid, fault_ipa, rval, arg,
+	    MMIO_READ));
 }
 
 static int
 dist_igroupr_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
     int size, void *arg)
 {
-	struct hyp *hyp = vm_get_cookie(vm);
-	bool *retu = arg;
-	int error;
-
-	error = dist_igroupr_access(hyp, vcpuid, fault_ipa, &wval, retu, MMIO_WRITE);
-
-	return (error);
+	return (dist_igroupr_access(vm, vcpuid, fault_ipa, &wval, arg,
+	    MMIO_WRITE));
 }
 
 static void
@@ -226,7 +228,7 @@ mmio_update_int_enabled(uint32_t new_ixenabler, uint32_t old_ixenabler,
 
 	irq_mask = 0x1;
 	for (i = 0; i < 32; i++) {
-		if ((old_ixenabler & irq_mask) != (new_ixenabler & irq_mask)) {
+		if (reg_changed(new_ixenabler, old_ixenabler, irq_mask)) {
 			enabled = ((new_ixenabler & irq_mask) != 0);
 			error = vgic_v3_irq_toggle_enabled(irq, enabled,
 			    hyp, vcpuid);
@@ -237,57 +239,47 @@ mmio_update_int_enabled(uint32_t new_ixenabler, uint32_t old_ixenabler,
 		irq_mask <<= 1;
 	}
 }
-
 static int
-mmio_ixenabler_access(struct hyp *hyp, int vcpuid, uint64_t fault_ipa,
-    uint64_t *val, bool *retu, enum access_type dir,
-    enum vgic_mmio_region_name name)
+dist_ixenabler_access(void *vm, int vcpuid, uint64_t ipa, uint64_t *val,
+    void *arg, enum access_type dir, enum vgic_mmio_region_name name)
 {
+	struct hyp *hyp = vm_get_cookie(vm);
 	struct vgic_v3_dist *dist = &hyp->vgic_dist;
-	struct vgic_v3_redist *redist;
-	uint32_t *regp;
 	uint32_t old_ixenabler;
-	size_t off;
-	size_t regsize, n;
-	bool lock;
+	size_t n;
+	bool *retu = arg;
 
-	redist = &hyp->ctx[vcpuid].vgic_redist;
-
-	lock = false;
-	if (name == VGIC_GICR_ICENABLER0 || name == VGIC_GICR_ISENABLER0) {
-		n = 0;
-		regp = &redist->gicr_ixenabler0;
-	} else {
-		off = fault_ipa - hyp->vgic_mmio_regions[name].start;
-		regsize = sizeof(*dist->gicd_ixenabler);
-		n = off / regsize;
-		if (n == 0) {
-			/* GICD_ICENABLER0 is equivalent to GICR_ICENABLER0 */
-			regp = &redist->gicr_ixenabler0;
-		} else {
-			regp = &dist->gicd_ixenabler[n];
-			lock = true;
-		}
-	}
-
-	if (lock)
-		mtx_lock_spin(&dist->dist_mtx);
-
-	if (dir == MMIO_READ) {
-		*val = *regp;
-	} else {
-		old_ixenabler = *regp;
-		if (name == VGIC_GICD_ICENABLER || name == VGIC_GICR_ICENABLER0)
-			*regp &= ~(*val);
+	n = reg32_idx(ipa, hyp->vgic_mmio_regions[name].start);
+	/*
+	 * GIC Architecture specification, p 8-471: "When ARE is 1 for the
+	 * Security state of an interrupt, the field for that interrupt is RES0
+	 * and an implementation is permitted to* make the field RAZ/WI in this
+	 * case".
+	 */
+	if (n == 0 && aff_routing_en(dist)) {
+		if (dir == MMIO_READ)
+			*val = RES0;
 		else
-			*regp |= *val;
-		mmio_update_int_enabled(*regp, old_ixenabler, n * 32,
-		    hyp, vcpuid);
+			/* Ignore writes */
+			;
+		goto out;
 	}
 
-	if (lock)
-		mtx_unlock_spin(&dist->dist_mtx);
+	mtx_lock_spin(&dist->dist_mtx);
+	if (dir == MMIO_READ) {
+		*val = dist->gicd_ixenabler[n];
+	} else {
+		old_ixenabler = dist->gicd_ixenabler[n];
+		if (name == VGIC_GICD_ICENABLER)
+			dist->gicd_ixenabler[n] &= ~(*val);
+		else
+			dist->gicd_ixenabler[n] |= *val;
+		mmio_update_int_enabled(dist->gicd_ixenabler[n], old_ixenabler,
+		    n * 32, hyp, vcpuid);
+	}
+	mtx_unlock_spin(&dist->dist_mtx);
 
+out:
 	*retu = false;
 	return (0);
 }
@@ -296,56 +288,32 @@ static int
 dist_isenabler_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
     int size, void *arg)
 {
-	struct hyp *hyp = vm_get_cookie(vm);
-	bool *retu = arg;
-	int error;
-
-	error = mmio_ixenabler_access(hyp, vcpuid, fault_ipa, rval, retu,
-	    MMIO_READ, VGIC_GICD_ISENABLER);
-
-	return (error);
+	return (dist_ixenabler_access(vm, vcpuid, fault_ipa, rval, arg,
+	    MMIO_READ, VGIC_GICD_ISENABLER));
 }
 
 static int
 dist_isenabler_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
     int size, void *arg)
 {
-	struct hyp *hyp = vm_get_cookie(vm);
-	bool *retu = arg;
-	int error;
-
-	error = mmio_ixenabler_access(hyp, vcpuid, fault_ipa, &wval, retu,
-	    MMIO_WRITE, VGIC_GICD_ISENABLER);
-
-	return (error);
+	return (dist_ixenabler_access(vm, vcpuid, fault_ipa, &wval, arg,
+	    MMIO_WRITE, VGIC_GICD_ISENABLER));
 }
 
 static int
 dist_icenabler_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
     int size, void *arg)
 {
-	struct hyp *hyp = vm_get_cookie(vm);
-	bool *retu = arg;
-	int error;
-
-	error = mmio_ixenabler_access(hyp, vcpuid, fault_ipa, rval, retu,
-	    MMIO_READ, VGIC_GICD_ICENABLER);
-
-	return (error);
+	return (dist_ixenabler_access(vm, vcpuid, fault_ipa, rval, arg,
+	    MMIO_READ, VGIC_GICD_ICENABLER));
 }
 
 static int
 dist_icenabler_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
     int size, void *arg)
 {
-	struct hyp *hyp = vm_get_cookie(vm);
-	bool *retu = arg;
-	int error;
-
-	error = mmio_ixenabler_access(hyp, vcpuid, fault_ipa, &wval, retu,
-	    MMIO_WRITE, VGIC_GICD_ICENABLER);
-
-	return (error);
+	return (dist_ixenabler_access(vm, vcpuid, fault_ipa, &wval, arg,
+	    MMIO_WRITE, VGIC_GICD_ICENABLER));
 }
 
 static void
@@ -358,7 +326,7 @@ mmio_update_int_priority(uint32_t new_ipriorityr, uint32_t old_ipriorityr,
 
 	irq_mask = 0xff;
 	for (i = 0; i < 4; i++) {
-		if ((old_ipriorityr & irq_mask) != (new_ipriorityr & irq_mask)) {
+		if (reg_changed(new_ipriorityr, old_ipriorityr, irq_mask)) {
 			new_prio = (uint8_t)((new_ipriorityr >> (i * 8)) & 0xff);
 			vgic_v3_irq_set_priority(irq, new_prio, hyp, vcpuid);
 		}
@@ -369,25 +337,26 @@ mmio_update_int_priority(uint32_t new_ipriorityr, uint32_t old_ipriorityr,
 
 /* TODO: Registers are byte accessible. */
 static int
-dist_ipriorityr_access(struct hyp *hyp, int vcpuid, uint64_t fault_ipa,
-    uint64_t *val, bool *retu, enum access_type dir)
+dist_ipriorityr_access(void *vm, int vcpuid, uint64_t ipa, uint64_t *val,
+    void *arg, enum access_type dir)
 {
+	struct hyp *hyp = vm_get_cookie(vm);
 	struct vgic_v3_dist *dist = &hyp->vgic_dist;
-	size_t regsize, n;
-	size_t off;
+	bool *retu = arg;
+	size_t n;
 
-	off = fault_ipa - hyp->vgic_mmio_regions[VGIC_GICD_IPRIORITYR].start;
-	regsize = sizeof(*dist->gicd_ipriorityr);
-	n = off / regsize;
+	n = reg32_idx(ipa, hyp->vgic_mmio_regions[VGIC_GICD_IPRIORITYR].start);
 	/*
 	 * GIC Architecture specification, p 8-483: when affinity
 	 * routing is enabled, GICD_IPRIORITYR<n> is RAZ/WI for
 	 * n = 0 to 7.
 	 */
-	if (dist->gicd_ctlr & GICD_CTLR_ARE_NS && n <= 7) {
+	if (aff_routing_en(dist) && n <= 7) {
 		if (dir == MMIO_READ)
 			*val = RES0;
-		/* Ignore writes, fall through */
+		else
+			/* Ignore writes */
+			;
 		goto out;
 	}
 
@@ -395,8 +364,8 @@ dist_ipriorityr_access(struct hyp *hyp, int vcpuid, uint64_t fault_ipa,
 	if (dir == MMIO_READ) {
 		*val = dist->gicd_ipriorityr[n];
 	} else {
-		mmio_update_int_priority(*val, dist->gicd_ipriorityr[n],
-		    n * 4, hyp, vcpuid);
+		mmio_update_int_priority(*val, dist->gicd_ipriorityr[n], n * 4,
+		    hyp, vcpuid);
 		dist->gicd_ipriorityr[n] = *val;
 	}
 	mtx_unlock_spin(&dist->dist_mtx);
@@ -410,42 +379,28 @@ static int
 dist_ipriorityr_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
     int size, void *arg)
 {
-	struct hyp *hyp = vm_get_cookie(vm);
-	bool *retu = arg;
-	int error;
-
-	error = dist_ipriorityr_access(hyp, vcpuid, fault_ipa, rval, retu,
-	    MMIO_READ);
-
-	return (error);
+	return (dist_ipriorityr_access(vm, vcpuid, fault_ipa, rval, arg,
+	    MMIO_READ));
 }
 
 static int
 dist_ipriorityr_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
     int size, void *arg)
 {
-	struct hyp *hyp = vm_get_cookie(vm);
-	bool *retu = arg;
-	int error;
-
-	error = dist_ipriorityr_access(hyp, vcpuid, fault_ipa, &wval, retu,
-	    MMIO_WRITE);
-
-	return (error);
+	return (dist_ipriorityr_access(vm, vcpuid, fault_ipa, &wval, arg,
+	    MMIO_WRITE));
 }
 
 static int
-dist_icfgr_access(struct hyp *hyp, uint64_t fault_ipa,
-    uint64_t *val, bool *retu, enum access_type dir)
+dist_icfgr_access(void *vm, int vcpuid, uint64_t ipa, uint64_t *val, void *arg,
+    enum access_type dir)
 {
+	struct hyp *hyp = vm_get_cookie(vm);
 	struct vgic_v3_dist *dist = &hyp->vgic_dist;
-	size_t regsize, off;
 	size_t n;
+	bool *retu = arg;
 
-	off = fault_ipa - hyp->vgic_mmio_regions[VGIC_GICD_ICFGR].start;
-	regsize = sizeof(*dist->gicd_icfgr);
-	n = off / regsize;
-
+	n = reg32_idx(ipa, hyp->vgic_mmio_regions[VGIC_GICD_ICFGR].start);
 	/*
 	 * ARM GIC Architecture Specification, p 8-472: "For SGIs,
 	 * Int_config fields are RO, meaning that GICD_ICFGR0 is RO."
@@ -472,126 +427,33 @@ out:
 }
 
 static int
-mmio_icfgr_access(struct hyp *hyp, int vcpuid, uint64_t fault_ipa,
-    uint64_t *val, bool *retu, enum access_type dir)
-{
-	struct vgic_v3_redist *redist;
-	uint32_t *regp;
-
-	if (fault_ipa == hyp->vgic_mmio_regions[VGIC_GICR_ICFGR0].start) {
-		redist = &hyp->ctx[vcpuid].vgic_redist;
-		regp = &redist->gicr_icfgr0;
-	} else if (fault_ipa == hyp->vgic_mmio_regions[VGIC_GICR_ICFGR1].start) {
-		redist = &hyp->ctx[vcpuid].vgic_redist;
-		regp = &redist->gicr_icfgr1;
-	} else {
-		return (dist_icfgr_access(hyp, fault_ipa, val, retu, dir));
-	}
-
-	if (dir == MMIO_READ)
-		*val = *regp;
-	else
-		 *regp = *val;
-
-	*retu = false;
-	return (0);
-}
-
-static int
 dist_icfgr_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
     int size, void *arg)
 {
-	struct hyp *hyp = vm_get_cookie(vm);
-	bool *retu = arg;
-	int error;
-
-	error = mmio_icfgr_access(hyp, vcpuid, fault_ipa, rval, retu, MMIO_READ);
-
-	return (error);
-
+	eprintf("\n");
+	return (dist_icfgr_access(vm, vcpuid, fault_ipa, rval, arg,
+	    MMIO_READ));
 }
 
 static int
 dist_icfgr_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
     int size, void *arg)
 {
-	struct hyp *hyp = vm_get_cookie(vm);
-	bool *retu = arg;
-	int error;
-
-	error = mmio_icfgr_access(hyp, vcpuid, fault_ipa, &wval, retu, MMIO_WRITE);
-
-	return (error);
-}
-
-static int
-redist_icfgr0_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
-    int size, void *arg)
-{
-	struct hyp *hyp = vm_get_cookie(vm);
-	bool *retu = arg;
-	int error;
-
-	error = mmio_icfgr_access(hyp, vcpuid, fault_ipa, rval, retu, MMIO_READ);
 	eprintf("\n");
-
-	return (error);
+	return (dist_icfgr_access(vm, vcpuid, fault_ipa, &wval, arg,
+	    MMIO_WRITE));
 }
 
 static int
-redist_icfgr0_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
-    int size, void *arg)
+dist_irouter_access(void *vm, int vcpuid, uint64_t ipa, uint64_t *val,
+    void *arg, enum access_type dir)
 {
 	struct hyp *hyp = vm_get_cookie(vm);
-	bool *retu = arg;
-	int error;
-
-	error = mmio_icfgr_access(hyp, vcpuid, fault_ipa, &wval, retu, MMIO_WRITE);
-	eprintf("\n");
-
-	return (0);
-}
-
-static int
-redist_icfgr1_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
-    int size, void *arg)
-{
-	struct hyp *hyp = vm_get_cookie(vm);
-	bool *retu = arg;
-	int error;
-
-	error = mmio_icfgr_access(hyp, vcpuid, fault_ipa, rval, retu, MMIO_READ);
-	eprintf("\n");
-
-	return (error);
-}
-
-static int
-redist_icfgr1_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
-    int size, void *arg)
-{
-	struct hyp *hyp = vm_get_cookie(vm);
-	bool *retu = arg;
-	int error;
-
-	error = mmio_icfgr_access(hyp, vcpuid, fault_ipa, &wval, retu, MMIO_WRITE);
-	eprintf("\n");
-
-	return (0);
-}
-
-static int
-dist_irouter_access(struct hyp *hyp, int vcpuid, uint64_t fault_ipa,
-    uint64_t *val, bool *retu, enum access_type dir)
-{
 	struct vgic_v3_dist *dist = &hyp->vgic_dist;
-	size_t regsize, n;
-	size_t off;
+	size_t n;
+	bool *retu = arg;
 
-	off = fault_ipa - hyp->vgic_mmio_regions[VGIC_GICD_IROUTER].start;
-	regsize = sizeof(*dist->gicd_irouter);
-	n = off / regsize;
-
+	n = reg64_idx(ipa, hyp->vgic_mmio_regions[VGIC_GICD_IROUTER].start);
 	/* GIC Architecture Manual, p 8-485: registers 0 to 31 are reserved */
 	if (n <= 31) {
 		if (dir == MMIO_READ) {
@@ -607,9 +469,12 @@ dist_irouter_access(struct hyp *hyp, int vcpuid, uint64_t fault_ipa,
 	 * GIC Architecture Manual, p 8-485: when affinity routing is not
 	 * enabled, the registers are RAZ/WI.
 	 */
-	if (!(dist->gicd_ctlr & GICD_CTLR_ARE_NS)) {
+	if (!aff_routing_en(dist)) {
 		if (dir == MMIO_READ)
 			*val = RES0;
+		else
+			/* Ignore writes */
+			;
 		goto out;
 	}
 
@@ -629,21 +494,16 @@ static int
 dist_irouter_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
     int size, void *arg)
 {
-
-	struct hyp *hyp = vm_get_cookie(vm);
-	bool *retu = arg;
-
-	return (dist_irouter_access(hyp, vcpuid, fault_ipa, rval, retu, MMIO_READ));
+	return (dist_irouter_access(vm, vcpuid, fault_ipa, rval, arg,
+	    MMIO_READ));
 }
 
 static int
 dist_irouter_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
     int size, void *arg)
 {
-	struct hyp *hyp = vm_get_cookie(vm);
-	bool *retu = arg;
-
-	return (dist_irouter_access(hyp, vcpuid, fault_ipa, &wval, retu, MMIO_WRITE));
+	return (dist_irouter_access(vm, vcpuid, fault_ipa, &wval, arg,
+	    MMIO_WRITE));
 }
 
 static int
@@ -790,74 +650,78 @@ redist_igroupr0_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 }
 
 static int
+redist_ixenabler_access(void *vm, int vcpuid, uint64_t *val, void *arg,
+    enum access_type dir, enum vgic_mmio_region_name reg)
+{
+	struct hyp *hyp = vm_get_cookie(vm);
+	struct vgic_v3_redist *redist = &hyp->ctx[vcpuid].vgic_redist;
+	uint32_t old_ixenabler0, new_ixenabler0;
+	bool *retu = arg;
+
+	if (dir == MMIO_READ) {
+		*val = redist->gicr_ixenabler0;
+	} else {
+		old_ixenabler0 = redist->gicr_ixenabler0;
+		if (reg == VGIC_GICR_ICENABLER0)
+			new_ixenabler0 = old_ixenabler0 & ~(*val);
+		else
+			new_ixenabler0 = old_ixenabler0 | *val;
+		mmio_update_int_enabled(new_ixenabler0, old_ixenabler0, 0,
+		    hyp, vcpuid);
+		redist->gicr_ixenabler0 = new_ixenabler0;
+	}
+
+	*retu = false;
+	return (0);
+}
+
+static int
 redist_isenabler0_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
     int size, void *arg)
 {
-	int error;
-	bool *retu = arg;
-
-	error = mmio_ixenabler_access(vm_get_cookie(vm), vcpuid, fault_ipa,
-	    rval, retu, MMIO_READ, VGIC_GICR_ISENABLER0);
 	eprintf("\n");
-
-	return (error);
+	return (redist_ixenabler_access(vm, vcpuid, rval, arg,
+	    MMIO_READ, VGIC_GICR_ISENABLER0));
 }
 
 static int
 redist_isenabler0_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
     int size, void *arg)
 {
-	int error;
-	bool *retu = arg;
-
-	error = mmio_ixenabler_access(vm_get_cookie(vm), vcpuid, fault_ipa,
-	    &wval, retu, MMIO_WRITE, VGIC_GICR_ISENABLER0);
 	eprintf("\n");
-
-	return (error);
+	return (redist_ixenabler_access(vm, vcpuid, &wval, arg,
+	    MMIO_WRITE, VGIC_GICR_ISENABLER0));
 }
 
 static int
 redist_icenabler0_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
     int size, void *arg)
 {
-	int error;
-	bool *retu = arg;
-
-	error = mmio_ixenabler_access(vm_get_cookie(vm), vcpuid, fault_ipa,
-	    rval, retu, MMIO_READ, VGIC_GICR_ICENABLER0);
 	eprintf("\n");
-
-	return (error);
+	return (redist_ixenabler_access(vm, vcpuid, rval, arg,
+	    MMIO_READ, VGIC_GICR_ICENABLER0));
 }
 
 static int
 redist_icenabler0_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
     int size, void *arg)
 {
-	int error;
-	bool *retu = arg;
-
-	error = mmio_ixenabler_access(vm_get_cookie(vm), vcpuid, fault_ipa,
-	    &wval, retu, MMIO_WRITE, VGIC_GICR_ICENABLER0);
 	eprintf("\n");
-
-	return (error);
+	return (redist_ixenabler_access(vm, vcpuid, &wval, arg,
+	    MMIO_WRITE, VGIC_GICR_ICENABLER0));
 }
 
 static int
-redist_ipriorityr_access(struct hyp *hyp, int vcpuid, uint64_t fault_ipa,
-    uint64_t *val, bool *retu, enum access_type dir)
+redist_ipriorityr_access(void *vm, int vcpuid, uint64_t ipa, uint64_t *val,
+    void *arg, enum access_type dir)
 {
+	struct hyp *hyp = vm_get_cookie(vm);
 	struct vgic_v3_redist *redist = &hyp->ctx[vcpuid].vgic_redist;
-	size_t regsize, n;
-	size_t off;
+	size_t n;
 	uint32_t old_ipriorityr;
+	bool *retu = arg;
 
-	off = fault_ipa - hyp->vgic_mmio_regions[VGIC_GICR_IPRIORITYR].start;
-	regsize = sizeof(*redist->gicr_ipriorityr);
-	n = off / regsize;
-
+	n = reg32_idx(ipa, hyp->vgic_mmio_regions[VGIC_GICR_IPRIORITYR].start);
 	if (dir == MMIO_READ) {
 		*val = redist->gicr_ipriorityr[n];
 	} else {
@@ -875,30 +739,18 @@ static int
 redist_ipriorityr_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
     int size, void *arg)
 {
-	struct hyp *hyp = vm_get_cookie(vm);
-	bool *retu = arg;
-	int error;
-
-	error = redist_ipriorityr_access(hyp, vcpuid, fault_ipa, rval, retu,
-	    MMIO_READ);
 	eprintf("\n");
-
-	return (error);
+	return (redist_ipriorityr_access(vm, vcpuid, fault_ipa, rval, arg,
+	    MMIO_READ));
 }
 
 static int
 redist_ipriorityr_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
     int size, void *arg)
 {
-	struct hyp *hyp = vm_get_cookie(vm);
-	bool *retu = arg;
-	int error;
-
-	error = redist_ipriorityr_access(hyp, vcpuid, fault_ipa, &wval, retu,
-	    MMIO_WRITE);
 	eprintf("\n");
-
-	return (error);
+	return (redist_ipriorityr_access(vm, vcpuid, fault_ipa, &wval, arg,
+	    MMIO_WRITE));
 }
 
 static int
@@ -924,6 +776,54 @@ redist_pidr2_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 	bool *retu = arg;
 
 	eprintf("Warning: Attempted write to read-only register GICR_PIDR2.\n");
+
+	*retu = false;
+	return (0);
+}
+
+static int
+redist_icfgr0_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
+    int size, void *arg)
+{
+	bool *retu = arg;
+
+	redist_simple_read(gicr_icfgr0, rval, vm, vcpuid);
+
+	*retu = false;
+	return (0);
+}
+
+static int
+redist_icfgr0_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
+    int size, void *arg)
+{
+	bool *retu = arg;
+
+	redist_simple_write(wval, gicr_icfgr0, vm, vcpuid);
+
+	*retu = false;
+	return (0);
+}
+
+static int
+redist_icfgr1_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
+    int size, void *arg)
+{
+	bool *retu = arg;
+
+	redist_simple_read(gicr_icfgr0, rval, vm, vcpuid);
+
+	*retu = false;
+	return (0);
+}
+
+static int
+redist_icfgr1_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
+    int size, void *arg)
+{
+	bool *retu = arg;
+
+	redist_simple_write(wval, gicr_icfgr0, vm, vcpuid);
 
 	*retu = false;
 	return (0);
