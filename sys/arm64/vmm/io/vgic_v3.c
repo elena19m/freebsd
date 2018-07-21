@@ -256,7 +256,8 @@ vgic_v3_attach_to_vm(void *arg, uint64_t dist_start, size_t dist_size,
 }
 
 /* TODO: call this on VM destroy. */
-static void vgic_v3_detach_from_vm(void *arg)
+void
+vgic_v3_detach_from_vm(void *arg)
 {
 	struct hyp *hyp = arg;
 
