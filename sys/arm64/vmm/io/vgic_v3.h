@@ -144,6 +144,7 @@ struct vgic_v3_cpu_if {
 
 int 	vgic_v3_attach_to_vm(void *arg, uint64_t dist_start, size_t dist_size,
 			     uint64_t redist_start, size_t redist_size);
+void	vgic_v3_detach_from_vm(void *arg);
 void	vgic_v3_init(uint64_t ich_vtr_el2);
 void	vgic_v3_vminit(void *arg);
 void	vgic_v3_cpuinit(void *arg, bool last_vcpu);
