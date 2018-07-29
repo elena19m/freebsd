@@ -6,6 +6,8 @@
 
 #include "vgic_v3.h"
 
+#define	DEBUG 0
+
 #define	GICR_FRAME_RD	0
 #define	GICR_FRAME_SGI	GICR_RD_BASE_SIZE
 
@@ -607,7 +609,9 @@ redist_ctlr_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 	/* Writes are never pending */
 	*rval &= ~GICR_CTLR_RWP & ~GICR_CTLR_UWP;
 
+#if (DEBUG > 0)
 	eprintf("\n");
+#endif
 
 	*retu = false;
 	return (0);
@@ -621,7 +625,9 @@ redist_ctlr_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 
 	redist_simple_write(wval, gicr_ctlr, vm, vcpuid);
 
+#if (DEBUG > 0)
 	eprintf("\n");
+#endif
 
 	*retu = false;
 	return (0);
@@ -635,7 +641,9 @@ redist_typer_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 
 	redist_simple_read(gicr_typer, rval, vm, vcpuid);
 
+#if (DEBUG > 0)
 	eprintf("\n");
+#endif
 
 	*retu = false;
 	return (0);
@@ -662,7 +670,9 @@ redist_waker_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 	/* Redistributor is always awake */
 	*rval = 0 & ~GICR_WAKER_PS & ~GICR_WAKER_CA;
 
+#if (DEBUG > 0)
 	eprintf("\n");
+#endif
 
 	*retu = false;
 	return (0);
@@ -675,7 +685,9 @@ redist_waker_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 	bool *retu = arg;
 
 	/* Ignore writes */
+#if (DEBUG > 0)
 	eprintf("\n");
+#endif
 
 	*retu = false;
 	return (0);
@@ -693,7 +705,10 @@ redist_igroupr0_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 	redist = &hyp->ctx[vcpuid].vgic_redist;
 
 	*rval = redist->gicr_igroupr0;
+
+#if (DEBUG > 0)
 	eprintf("\n");
+#endif
 
 	*retu = false;
 	return (0);
@@ -714,7 +729,9 @@ redist_igroupr0_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 	    hyp, vcpuid);
 	redist->gicr_igroupr0 = (uint32_t)wval;
 
+#if (DEBUG > 0)
 	eprintf("\n");
+#endif
 
 	*retu = false;
 	return (0);
@@ -766,7 +783,9 @@ static int
 redist_isenabler0_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
     int size, void *arg)
 {
+#if (DEBUG > 0)
 	eprintf("\n");
+#endif
 	return (redist_ixenabler_read(vm, vcpuid, rval, arg,
 	    VGIC_GICR_ISENABLER0));
 }
@@ -775,7 +794,9 @@ static int
 redist_isenabler0_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
     int size, void *arg)
 {
+#if (DEBUG > 0)
 	eprintf("\n");
+#endif
 	return (redist_ixenabler_write(vm, vcpuid, wval, arg,
 	    VGIC_GICR_ISENABLER0));
 }
@@ -784,7 +805,9 @@ static int
 redist_icenabler0_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
     int size, void *arg)
 {
+#if (DEBUG > 0)
 	eprintf("\n");
+#endif
 	return (redist_ixenabler_read(vm, vcpuid, rval, arg,
 	    VGIC_GICR_ICENABLER0));
 }
@@ -793,7 +816,9 @@ static int
 redist_icenabler0_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
     int size, void *arg)
 {
+#if (DEBUG > 0)
 	eprintf("\n");
+#endif
 	return (redist_ixenabler_write(vm, vcpuid, wval, arg,
 	    VGIC_GICR_ICENABLER0));
 }
@@ -807,7 +832,9 @@ redist_ipriorityr_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 	size_t n;
 	bool *retu = arg;
 
+#if (DEBUG > 0)
 	eprintf("\n");
+#endif
 
 	hyp = vm_get_cookie(vm);
 	redist = &hyp->ctx[vcpuid].vgic_redist;
@@ -829,7 +856,9 @@ redist_ipriorityr_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 	uint32_t old_ipriorityr;
 	bool *retu = arg;
 
+#if (DEBUG > 0)
 	eprintf("\n");
+#endif
 
 	hyp = vm_get_cookie(vm);
 	redist = &hyp->ctx[vcpuid].vgic_redist;
@@ -856,7 +885,9 @@ redist_pidr2_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 
 	/* GICR_PIDR2 has the same value as GICD_PIDR2 */
 	*rval = dist->gicd_pidr2;
+#if (DEBUG > 0)
 	eprintf("\n");
+#endif
 
 	*retu = false;
 	return (0);
