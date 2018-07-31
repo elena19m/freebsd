@@ -86,6 +86,12 @@ extern int guest_ncpus;
 #define JSON_MEMSIZE_KEY		"memsize"
 #define JSON_MEMFLAGS_KEY		"memflags"
 
+const char *pci_devs[] = {
+	"virtio-net",
+	"virtio-blk",
+	"lpc",
+};
+
 /* TODO: Harden this function and all of its callers since 'base_str' is a user
  * provided string.
  */
@@ -554,22 +560,28 @@ restore_pci_devs(struct vmctx *ctx, struct restore_state *rstate)
 	size_t dev_size;
 	int ret;
 	int i;
-	char *devs[] = {
-		"virtio-net",
-		"virtio-blk",
-		"lpc",
-	};
 
-	for (i = 0; i < sizeof(devs)/sizeof(devs[0]); i++) {
-		dev_ptr = lookup_pci_dev(devs[i], rstate, &dev_size);
+	for (i = 0; i < nitems(pci_devs); i++) {
+		dev_ptr = lookup_pci_dev(pci_devs[i], rstate, &dev_size);
 		if (dev_ptr == NULL) {
-			fprintf(stderr, "Failed to lookup dev: %s\n", devs[i]);
-			return (-1);
+			fprintf(stderr, "Failed to lookup dev: %s\r\n",
+				pci_devs[i]);
+			fprintf(stderr,
+				"Continuing the restore process\r\n");
+			continue;
 		}
 
-		ret = pci_restore(ctx, devs[i], dev_ptr, dev_size);
+		if (dev_size == 0) {
+			fprintf(stderr, "%s: Device size is 0. "
+				"Assuming %s is not used\r\n",
+				__func__, pci_devs[i]);
+			continue;
+		}
+
+		ret = pci_restore(ctx, pci_devs[i], dev_ptr, dev_size);
 		if (ret != 0) {
-			fprintf(stderr, "Failed to restore dev: %s\n", devs[i]);
+			fprintf(stderr, "Failed to restore dev: %s\n",
+				pci_devs[i]);
 			return (-1);
 		}
 	}
@@ -674,11 +686,6 @@ vm_snapshot_pci_data(struct vmctx *ctx, int data_fd, xo_handle_t *xop)
 	size_t data_size;
 	off_t offset;
 	void *buffer = NULL;
-	char *devs[] = {
-		"virtio-net",
-		"virtio-blk",
-		"lpc",
-	};
 
 	offset = lseek(data_fd, 0, SEEK_CUR);
 	if (offset < 0) {
@@ -693,14 +700,14 @@ vm_snapshot_pci_data(struct vmctx *ctx, int data_fd, xo_handle_t *xop)
 	}
 
 	xo_open_list_h(xop, JSON_PCI_ARR_KEY);
-	for (i = 0; i < sizeof(devs) / sizeof(devs[0]); i++) {
+	for (i = 0; i < nitems(pci_devs); i++) {
 		memset(buffer, 0, SNAPSHOT_BUFFER_SIZE);
-		ret = pci_snapshot(ctx, devs[i], buffer, SNAPSHOT_BUFFER_SIZE,
-				   &data_size);
+		ret = pci_snapshot(ctx, pci_devs[i], buffer,
+				   SNAPSHOT_BUFFER_SIZE, &data_size);
 
 		if (ret != 0) {
-			fprintf(stderr, "Failed to snapshot pci dev %s; ret=%d\n",
-				devs[i], ret);
+			fprintf(stderr, "Failed to snapshot pci dev %s; ret=%d\r\n",
+				pci_devs[i], ret);
 			error = -1;
 			goto err_pci;
 		}
@@ -716,7 +723,8 @@ vm_snapshot_pci_data(struct vmctx *ctx, int data_fd, xo_handle_t *xop)
 
 		/* Write metadata. */
 		xo_open_instance_h(xop, JSON_PCI_ARR_KEY);
-		xo_emit_h(xop, "{:" JSON_SNAPSHOT_REQ_KEY "/%s}\n", devs[i]);
+		xo_emit_h(xop, "{:" JSON_SNAPSHOT_REQ_KEY "/%s}\n",
+			  pci_devs[i]);
 		xo_emit_h(xop, "{:" JSON_SIZE_KEY "/%lu}\n", data_size);
 		xo_emit_h(xop, "{:" JSON_FILE_OFFSET_KEY "/%lu}\n", offset);
 		xo_close_instance_h(xop, JSON_PCI_ARR_KEY);
