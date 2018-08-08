@@ -33,7 +33,7 @@ int lookup_guest_ncpus(struct restore_state *rstate);
 int restore_vm_mem(struct vmctx *ctx, struct restore_state *rstate);
 int restore_kernel_structs(struct vmctx *ctx, struct restore_state *rstate);
 
-int restore_pci_devs(struct vmctx *ctx, struct restore_state *rstate);
+int restore_devs(struct vmctx *ctx, struct restore_state *rstate);
 
 int get_checkpoint_msg(int conn_fd, struct vmctx *ctx);
 void *checkpoint_thread(void *param);
