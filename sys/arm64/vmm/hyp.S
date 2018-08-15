@@ -266,15 +266,15 @@ END(handle_el2_sync)
 
 ENTRY(handle_el1_sync)
 	/* Save registers before modifying so we can restore them */
-	str	x1, [sp, #-16]!
+	str	x19, [sp, #-16]!
 
 	/* Check for host hypervisor call */
-	mrs	x1, vttbr_el2
-	cmp	x1, #VTTBR_HOST
+	mrs	x19, vttbr_el2
+	cmp	x19, #VTTBR_HOST
 	beq	1f
 
 	/* Restore register */
-	ldr	x1, [sp], #16
+	ldr	x19, [sp], #16
 
 	/* Guest exception taken to EL2 */
 	do_world_switch_to_host
@@ -283,7 +283,7 @@ ENTRY(handle_el1_sync)
 
 1:
 	/* Restore register */
-	ldr	x1, [sp], #16
+	ldr	x19, [sp], #16
 
 	cmp 	x0, #HYP_GET_VECTOR_TABLE
 	beq 	2f
