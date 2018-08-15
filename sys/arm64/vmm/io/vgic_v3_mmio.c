@@ -63,11 +63,6 @@ enum vgic_mmio_region_name {
  */
 #define	FIRST_REDIST_MMIO_REGION	VGIC_GICR_CTLR
 
-enum access_type {
-	MMIO_READ,
-	MMIO_WRITE,
-};
-
 MALLOC_DEFINE(M_VGIC_V3_MMIO, "ARM VMM VGIC DIST MMIO", "ARM VMM VGIC DIST MMIO");
 
 static int
