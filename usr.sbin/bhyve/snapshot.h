@@ -52,4 +52,43 @@ int init_checkpoint_thread(struct vmctx *ctx);
 
 int load_restore_file(const char *filename, struct restore_state *rstate);
 
+int snapshot_part(volatile void *data, size_t data_size, uint8_t **buffer,
+		  size_t *buf_size, size_t *snapshot_len);
+int restore_part(volatile void *data, size_t data_size, uint8_t **buffer,
+		  size_t *buf_size);
+
+#define	SNAPSHOT_PART(DATA, BUFFER, BUF_SIZE, SNAP_LEN) _Generic((BUFFER),     \
+	uint8_t *: snapshot_part(&(DATA), sizeof(DATA), (uint8_t **) &(BUFFER),\
+				(size_t *) &(BUF_SIZE), SNAP_LEN),             \
+	uint8_t**: snapshot_part(&(DATA), sizeof(DATA), (uint8_t **) (BUFFER), \
+				(size_t *) (BUF_SIZE), SNAP_LEN),              \
+	default: fprintf(stderr, "Incompatible pointer. Must be uint8_t * or " \
+			 "uint8_t **\r\n")                                     \
+)
+
+#define	RESTORE_PART(DATA, BUFFER, BUF_SIZE) _Generic((BUFFER),                \
+	uint8_t* : restore_part(&(DATA), sizeof(DATA), (uint8_t **) &(BUFFER), \
+				(size_t *) &(BUF_SIZE)),                       \
+	uint8_t**: restore_part(&(DATA), sizeof(DATA), (uint8_t **) (BUFFER),  \
+				(size_t *) (BUF_SIZE)),                        \
+	default: fprintf(stderr, "Incompatible pointer. Must be uint8_t * or " \
+			 "uint8_t **\r\n")                                     \
+)
+
+#define	SNAPSHOT_PART_OR_RET(DATA, BUFFER, BUF_SIZE, SNAP_LEN)                 \
+do {                                                                           \
+	int ret;                                                               \
+	ret = SNAPSHOT_PART(DATA, BUFFER, BUF_SIZE, SNAP_LEN);                 \
+	if (ret != 0)                                                          \
+		return (ret);                                                  \
+} while (0)
+
+#define	RESTORE_PART_OR_RET(DATA, BUFFER, BUF_SIZE)                            \
+do {                                                                           \
+	int ret;                                                               \
+	ret = RESTORE_PART(DATA, BUFFER, BUF_SIZE);                            \
+	if (ret != 0)                                                          \
+		return (ret);                                                  \
+} while (0)
+
 #endif
