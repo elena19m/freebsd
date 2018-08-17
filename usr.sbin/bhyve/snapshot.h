@@ -1,6 +1,7 @@
 #ifndef _BHYVE_SNAPSHOT_
 #define _BHYVE_SNAPSHOT_
 
+#include <machine/vmm_dev.h>
 #include <sys/types.h>
 #include <ucl.h>
 
@@ -33,6 +34,11 @@ struct vm_snapshot_dev_info {
 	const char *dev_name;            /* device name */
 	vm_snapshot_dev_cb snapshot_cb;  /* callback for device snapshot */
 	vm_restore_dev_cb restore_cb;    /* callback for device restore */
+};
+
+struct vm_snapshot_kern_info {
+	const char *struct_name;	/* kernel structure name*/
+	enum snapshot_req req;		/* request type */
 };
 
 void destroy_restore_state(struct restore_state *rstate);
