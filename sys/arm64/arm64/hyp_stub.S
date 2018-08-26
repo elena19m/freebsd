@@ -28,19 +28,14 @@
 
 __FBSDID("$FreeBSD$");
 
+	.text
+
 /*
  * Install a new exception vector table with the base address supplied by the
- * parameter in X0. If the parameter is -1 then return the physical base
- * address of the currently installed exception vectors.
+ * parameter in register x0.
  */
-ENTRY(handle_hyp_stub)
-	cmp	x0, #-1
-	b.ne    1f
-	mrs 	x0, vbar_el2
-	b       9f
-1:
+ENTRY(handle_el2_el1h_sync)
 	msr 	vbar_el2, x0
-9:
 	eret
 END(handle_hyp_stub)
 
@@ -54,28 +49,25 @@ END(handle_hyp_stub)
 	b 	handle_\name
 .endm
 
-	.text
-
 	.align 11
-
 	.globl hyp_stub_vectors
 hyp_stub_vectors:
-	vempty		/* Synchronous EL2t */
-	vempty		/* IRQ EL2t */
-	vempty		/* FIQ EL2t */
-	vempty		/* Error EL2t */
+	vempty			/* Synchronous EL2t */
+	vempty			/* IRQ EL2t */
+	vempty			/* FIQ EL2t */
+	vempty			/* SError EL2t */
 
-	vempty		/* Synchronous EL2h */
-	vempty		/* IRQ EL2h */
-	vempty		/* FIQ EL2h */
-	vempty		/* Error EL2h */
+	vempty			/* Synchronous EL2h */
+	vempty			/* IRQ EL2h */
+	vempty			/* FIQ EL2h */
+	vempty			/* SError EL2h */
 
-	vector hyp_stub	/* Synchronous 64-bit EL1 */
-	vempty		/* IRQ 64-bit EL1 */
-	vempty		/* FIQ 64-bit EL1 */
-	vempty		/* Error 64-bit EL1 */
+	vector el2_el1h_sync	/* Synchronous 64-bit EL1 */
+	vempty			/* IRQ 64-bit EL1 */
+	vempty			/* FIQ 64-bit EL1 */
+	vempty			/* SError 64-bit EL1 */
 
-	vempty		/* Synchronous 32-bit EL1 */
-	vempty		/* IRQ 32-bit EL1 */
-	vempty		/* FIQ 32-bit EL1 */
-	vempty		/* Error 32-bit EL1 */
+	vempty			/* Synchronous 32-bit EL1 */
+	vempty			/* IRQ 32-bit EL1 */
+	vempty			/* FIQ 32-bit EL1 */
+	vempty			/* SError 32-bit EL1 */
