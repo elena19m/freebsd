@@ -24,7 +24,7 @@ ident		FOUNDATION_GUEST
 makeoptions	DEBUG=-g		# Build kernel with gdb(1) debug symbols
 
 options 	MD_ROOT			# MD is a potential root device
-options	   	MD_ROOT_SIZE=15360
+options	   	MD_ROOT_SIZE=45360
 makeoptions	MFS_IMAGE=/usr/home/alex/arm64-workspace/ramdisk/ramdisk-guest.img
 options		ROOTDEVNAME=\"ufs:md0\"
 
@@ -91,10 +91,10 @@ options 	KDB_TRACE		# Print a stack trace for a panic.
 #options 	MALLOC_DEBUG_MAXZONES=8	# Separate malloc(9) zones
 
 # SoC support
-options 	SOC_ALLWINNER_A64
-options 	SOC_CAVM_THUNDERX
-options 	SOC_HISI_HI6220
-options 	SOC_BRCM_BCM2837
+#options 	SOC_ALLWINNER_A64
+#options 	SOC_CAVM_THUNDERX
+#options 	SOC_HISI_HI6220
+#options 	SOC_BRCM_BCM2837
 
 # Annapurna Alpine drivers
 device		al_ccu			# Alpine Cache Coherency Unit
