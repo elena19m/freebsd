@@ -103,6 +103,7 @@ void vmm_cleanup(void *hyp_stub_vectors);
 uint64_t vmm_enter_guest(struct hypctx *hypctx);
 uint64_t vmm_read_ich_vtr_el2(void);
 uint64_t vmm_read_cnthctl_el2(void);
+uint64_t vmm_read_tcr_el2(void);
 
 #define	eprintf(fmt, ...)	printf("%s:%d " fmt, __func__, __LINE__, ##__VA_ARGS__)
 //#define	eprintf(fmt, ...)	do {} while(0)

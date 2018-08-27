@@ -41,6 +41,7 @@
 #include <vm/vm_page.h>
 #include <vm/vm_param.h>
 
+#include <machine/armreg.h>
 #include <machine/vm.h>
 #include <machine/cpufunc.h>
 #include <machine/cpu.h>
@@ -110,7 +111,13 @@ arm_init(int ipinum)
 {
 	char *stack_top;
 	size_t hyp_code_len;
-	uint64_t ich_vtr_el2, cnthctl_el2;
+	uint64_t ich_vtr_el2;
+	uint64_t cnthctl_el2;
+	uint64_t tcr_el1, tcr_el2;
+	uint64_t id_aa64mmfr0_el1;
+	uint64_t pa_range_bits;
+	uint32_t sctlr_el2;
+	uint32_t vtcr_el2;
 	register_t daif;
 
 	if (!hypmode_enabled) {
@@ -137,22 +144,73 @@ arm_init(int ipinum)
 	hypmap_map(hyp_pmap, (vm_offset_t)hyp_code_start, hyp_code_len, VM_PROT_EXECUTE);
 
 	/* We need an identity mapping for when we activate the MMU */
-	hypmap_map_identity(hyp_pmap, (vm_offset_t)hyp_code_start, hyp_code_len, VM_PROT_EXECUTE);
+	hypmap_map_identity(hyp_pmap, (vm_offset_t)hyp_code_start, hyp_code_len,
+	    VM_PROT_EXECUTE);
 
 	/* Create and map the hypervisor stack */
 	stack = malloc(PAGE_SIZE, M_HYP, M_WAITOK | M_ZERO);
 	stack_top = stack + PAGE_SIZE;
 	hypmap_map(hyp_pmap, (vm_offset_t)stack, PAGE_SIZE, VM_PROT_READ | VM_PROT_WRITE);
 
+	/* Configure address translation at EL2 */
+	tcr_el1 = READ_SPECIALREG(tcr_el1);
+	tcr_el2 = TCR_EL2_RES1;
+
+	/* Set physical address size */
+	id_aa64mmfr0_el1 = READ_SPECIALREG(id_aa64mmfr0_el1);
+	pa_range_bits = ID_AA64MMFR0_PA_RANGE(id_aa64mmfr0_el1);
+	tcr_el2	|= (pa_range_bits & 0x7) << TCR_EL2_PS_SHIFT;
+
+	/* Use the same address translation attributes as the host */
+	tcr_el2 |= tcr_el1 & TCR_T0SZ_MASK;
+	tcr_el2 |= tcr_el1 & (0xff << TCR_IRGN0_SHIFT);
+
 	/*
-	 * Special init call to activate the MMU and change the exception
-	 * vector.
+	 * Configure the system control register for EL2:
 	 *
-	 * x0: the new exception vector table
-	 * x1: the physical address of the hypervisor translation table
-	 * x2: stack top address
+	 * SCTLR_EL2_M: MMU on
+	 * SCTLR_EL2_C: Data cacheability not affected
+	 * SCTLR_EL2_I: Instruction cacheability not affected
+	 * SCTLR_EL2_A: Instruction alignment check
+	 * SCTLR_EL2_SA: Stack pointer alignment check
+	 * SCTLR_EL2_WXN: Treat writable memory as execute never
+	 * ~SCTLR_EL2_EE: Data accesses are little-endian
 	 */
-	vmm_call_hyp((void *)vtophys(hyp_vectors), vtophys(hyp_pmap->pm_l0), ktohyp(stack_top));
+	sctlr_el2 = SCTLR_EL2_RES1;
+	sctlr_el2 |= SCTLR_EL2_M | SCTLR_EL2_C | SCTLR_EL2_I;
+	sctlr_el2 |= SCTLR_EL2_A | SCTLR_EL2_SA;
+	sctlr_el2 |= SCTLR_EL2_WXN;
+	sctlr_el2 &= ~SCTLR_EL2_EE;
+
+	/*
+	 * Configure the Stage 2 translation control register:
+	 *
+	 * VTCR_IRGN0_WBWA: Translation table walks access inner cacheable
+	 * normal memory
+	 * VTCR_ORGN0_WBWA: Translation table walks access outer cacheable
+	 * normal memory
+	 * VTCR_EL2_TG0_4K: Stage 2 uses 4K pages
+	 * VTCR_EL2_SL0_4K_LVL1: Stage 2 uses concatenated level 1 tables
+	 * VTCR_EL2_SH0_IS: Memory associated with Stage 2 walks is inner
+	 * shareable
+	 */
+	vtcr_el2 = VTCR_EL2_RES1;
+	vtcr_el2 = (pa_range_bits & 0x7) << VTCR_EL2_PS_SHIFT;
+	vtcr_el2 |= VTCR_EL2_IRGN0_WBWA | VTCR_EL2_ORGN0_WBWA;
+	vtcr_el2 |= VTCR_EL2_TG0_4K;
+	vtcr_el2 |= VTCR_EL2_SH0_IS;
+	if (pa_range_bits == ID_AA64MMFR0_PA_RANGE_1T) {
+		/*
+		 * 40 bits of physical addresses, use concatenated level 1
+		 * tables
+		 */
+		vtcr_el2 |= 24 & VTCR_EL2_T0SZ_MASK;
+		vtcr_el2 |= VTCR_EL2_SL0_4K_LVL1;
+	}
+
+	/* Special call to initialize EL2 */
+	vmm_call_hyp((void *)vtophys(hyp_vectors), vtophys(hyp_pmap->pm_l0),
+	    ktohyp(stack_top), tcr_el2, sctlr_el2, vtcr_el2);
 
 	ich_vtr_el2 = vmm_call_hyp((void *)ktohyp(vmm_read_ich_vtr_el2));
 	vgic_v3_init(ich_vtr_el2);
