@@ -795,12 +795,6 @@ vmexit_debug(struct vmctx *ctx, struct vm_exit *vmexit, int *pvcpu)
 	return (VMEXIT_CONTINUE);
 }
 
-static int
-vmexit_rdtsc(struct vmctx *ctx, struct vm_exit *vmexit, int *pvcpu)
-{
-	return (VMEXIT_CONTINUE);
-}
-
 static vmexit_handler_t handler[VM_EXITCODE_MAX] = {
 	[VM_EXITCODE_INOUT]  = vmexit_inout,
 	[VM_EXITCODE_INOUT_STR]  = vmexit_inout,
@@ -816,7 +810,6 @@ static vmexit_handler_t handler[VM_EXITCODE_MAX] = {
 	[VM_EXITCODE_SUSPENDED] = vmexit_suspend,
 	[VM_EXITCODE_TASK_SWITCH] = vmexit_task_switch,
 	[VM_EXITCODE_DEBUG] = vmexit_debug,
-	[VM_EXITCODE_RDTSC] = vmexit_rdtsc,
 };
 
 static void
@@ -1313,12 +1306,16 @@ main(int argc, char *argv[])
 		printf("Failed to start checkpoint thread!\r\n");
 
 	/*
-	 * Add CPU 0
 	 * Change the proc title to include the VM name.
 	 */
-	setproctitle("%s", vmname); 
+	setproctitle("%s", vmname);
 
-	/* If we restore a VM, start all vCPUs now (including APs), otherwise,
+	if (restore_file != NULL) {
+		vm_restore_time(ctx);
+	}
+
+	/* Add CPU 0
+	 * If we restore a VM, start all vCPUs now (including APs), otherwise,
 	 * let the guest OS to spin them up later via vmexits.
 	 */
 
