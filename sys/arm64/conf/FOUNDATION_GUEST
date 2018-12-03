@@ -25,7 +25,7 @@ makeoptions	DEBUG=-g		# Build kernel with gdb(1) debug symbols
 
 options 	MD_ROOT			# MD is a potential root device
 options	   	MD_ROOT_SIZE=45360
-makeoptions	MFS_IMAGE=/usr/home/alex/arm64-workspace/ramdisk/ramdisk-guest.img
+makeoptions	MFS_IMAGE=/usr/home/alex/workspace/utils/files_guest/ramdisk-guest.img
 options		ROOTDEVNAME=\"ufs:md0\"
 
 options 	SCHED_ULE		# ULE scheduler
