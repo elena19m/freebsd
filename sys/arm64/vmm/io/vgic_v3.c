@@ -83,8 +83,6 @@
 
 MALLOC_DEFINE(M_VGIC_V3, "ARM VMM VGIC V3", "ARM VMM VGIC V3");
 
-extern uint64_t hypmode_enabled;
-
 struct vgic_v3_virt_features {
 	uint8_t min_prio;
 	size_t ich_lr_num;

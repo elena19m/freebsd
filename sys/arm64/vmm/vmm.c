@@ -107,8 +107,6 @@ struct vm {
 	cpuset_t	active_cpus;
 };
 
-extern uint64_t hypmode_enabled;
-
 static bool vmm_initialized = false;
 
 static struct vmm_ops *ops = NULL;
