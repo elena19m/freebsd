@@ -14,6 +14,13 @@
 
 	chosen { };
 
+	aliases {
+		serial0 = &v2m_serial0;
+		serial1 = &v2m_serial1;
+		serial2 = &v2m_serial2;
+		serial3 = &v2m_serial3;
+	};
+
 	cpus {
 		#address-cells = <2>;
 		#size-cells = <0>;
@@ -22,6 +29,8 @@
 			device_type = "cpu";
 			compatible = "arm,armv8";
 			reg = <0x0 0x0>;
+			//enable-method = "spin-table";
+			//cpu-release-addr = <0x0 0x8000fff8>;
 			next-level-cache = <&L2_0>;
 		};
 
@@ -41,8 +50,12 @@
 		#interrupt-cells = <3>;
 		#size-cells = <2>;
 		interrupt-controller;
-		reg =	<0x0 0x2f000000 0x0 0x10000>,	/* Distributor */
-			<0x0 0x2f100000 0x0 0x200000>;	/* Redistributor */
+		reg =	<0x0 0x2f000000 0x0 0x10000>,
+			<0x0 0x2f100000 0x0 0x200000>,
+			<0x0 0x2c000000 0x0 0x2000>,
+			<0x0 0x2c010000 0x0 0x2000>,
+			<0x0 0x2c02f000 0x0 0x2000>;
+		interrupts = <1 9 4>;
 	};
 
 	/*
@@ -53,34 +66,10 @@
 	timer {
 		compatible = "arm,armv8-timer";
 		interrupts = <1 13 0xf08>,
-			     <1 14 0xf08>;
+			     <1 14 0xf08>,
+			     <1 11 0xf08>,
+			     <1 10 0xf08>;
 		interrupt-parrent = <&gic>;
 		clock-frequency = <100000000>;
-	};
-
-	virtio_rnd@4000 {
-		compatible = "virtio,mmio";
-		reg = <0x0 0x4000 0x0 0x200>;
-	};
-
-	virtio_console@5000 {
-		compatible = "virtio,mmio";
-		reg = <0x0 0x5000 0x0 0x200>;
-		interrupt-parent=<&gic>;
-		interrupts = <1 6 4>;
-	};
-
-	virtio_net@6000 {
-		compatible = "virtio,mmio";
-		reg = <0x0 0x6000 0x0 0x200>;
-		interrupt-parent=<&gic>;
-		interrupts = <1 7 4>;
-	};
-
-	virtio_blk@7000 {
-		compatible = "virtio,mmio";
-		reg = <0x0 0x7000 0x0 0x200>;
-		interrupt-parent=<&gic>;
-		interrupts = <1 8 4>;
 	};
 };
