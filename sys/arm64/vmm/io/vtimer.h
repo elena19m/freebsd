@@ -85,6 +85,15 @@ struct vtimer_cpu
 	 */
 	uint64_t	cntp_cval_el0;
 	uint32_t	cntp_ctl_el0;
+	/*
+	 * The virtual machine has full access to the virtual timer. The
+	 * following registers are part of the VM context for the current CPU:
+	 *
+	 * CNTV_CTL_EL0:  Counter-timer Virtuel Timer Control Register
+	 * CNTV_CVAL_EL0: Counter-timer Virtual Timer CompareValue Register
+	 */
+	uint64_t	cntv_cval_el0;
+	uint32_t	cntv_ctl_el0;
 };
 
 int	vtimer_attach_to_vm(void *arg, int phys_ns_irq);
