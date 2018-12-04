@@ -32,6 +32,17 @@
 #ifndef _ARM_GENERIC_TIMER_H_
 #define _ARM_GENERIC_TIMER_H_
 
+#include <sys/timeet.h>
+
+struct arm_tmr_softc {
+	struct resource		*res[4];
+	void			*ihl[4];
+	uint64_t		(*get_cntxct)(bool);
+	uint32_t		clkfreq;
+	struct eventtimer	et;
+	bool			physical;
+};
+
 DECLARE_CLASS(generic_timer_driver);
 
 #endif
