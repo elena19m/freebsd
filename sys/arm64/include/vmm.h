@@ -203,7 +203,7 @@ extern uint64_t hypmode_enabled;
 static __inline bool
 virt_enabled()
 {
-	return (hypmode_enabled != 0)
+	return (hypmode_enabled != 0);
 }
 
 static __inline int
