@@ -464,6 +464,15 @@ arm_tmr_attach(device_t dev)
 		/* If we do not have the interrupt, skip it. */
 		if (sc->res[i] == NULL)
 			continue;
+#if defined(__aarch64__)
+		if (i == 2 && virt_enabled()) {
+			/*
+			 * Do not install an interrupt handler for the virtual
+			 * timer. This will be used by the VM.
+			 */
+			continue;
+		}
+#endif
 		error = bus_setup_intr(dev, sc->res[i], INTR_TYPE_CLK,
 		    arm_tmr_intr, NULL, sc, &sc->ihl[i]);
 		if (error) {
