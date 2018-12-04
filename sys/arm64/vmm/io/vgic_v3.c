@@ -100,6 +100,7 @@ struct vgic_v3_ro_regs {
 struct vgic_v3_irq {
 	uint32_t irq;
 	enum vgic_v3_irqtype irqtype;
+	int16_t pintd;
 	uint8_t group;
 	uint8_t enabled;
 	uint8_t priority;
@@ -111,6 +112,10 @@ do {									\
 	lr |= (uint64_t)vip->group << ICH_LR_EL2_GROUP_SHIFT;		\
 	lr |= (uint64_t)vip->priority << ICH_LR_EL2_PRIO_SHIFT;		\
 	lr |= vip->irq;							\
+	if (vip->pintd != -1) {						\
+		lr |= (uint64_t)vip->pintd << 32;			\
+		lr |= (uint64_t)1 << 61;				\
+	}								\
 } while (0)
 
 #define	lr_to_vip(lr, vip)						\
@@ -119,12 +124,38 @@ do {									\
 	(vip)->priority = \
 	    (uint8_t)(((lr) & ICH_LR_EL2_PRIO_MASK) >> ICH_LR_EL2_PRIO_SHIFT); \
 	(vip)->group = (uint8_t)(((lr) >> ICH_LR_EL2_GROUP_SHIFT) & 0x1); \
+	if (lr & ((uint64_t)1 << 61)) 					\
+		vip->pintd = (lr >> 32) & ((1 << 10) - 1);		\
+	else								\
+		vip->pintd = -1;					\
 } while (0)
 
 static struct vgic_v3_virt_features virt_features;
 static struct vgic_v3_ro_regs ro_regs;
+
 static struct gic_v3_softc *gic_sc;
-static struct arm_tmr_sofct *tmr_sc;
+static struct arm_tmr_softc *tmr_sc;
+static device_t tmr_dev;
+
+static int
+vgic_v3_virtual_timer_intr(void *arg)
+{
+	uint32_t cntv_ctl;
+	struct hypctx *hypctx;
+
+	hypctx = arg;
+
+	eprintf("here\n");
+	eprintf("hypctx->exit_info.esr_el2 = 0x%x\n", hypctx->exit_info.esr_el2);
+
+	cntv_ctl = READ_SPECIALREG(cntv_ctl_el0);
+	cntv_ctl |= (1 << 1);
+	WRITE_SPECIALREG(cntv_ctl_el0, cntv_ctl);
+
+	vgic_v3_inject_irq_hw(arg, 27, VGIC_IRQ_CLK, 27);
+
+	return (FILTER_HANDLED);
+}
 
 void
 vgic_v3_cpuinit(void *arg, bool last_vcpu)
@@ -133,7 +164,16 @@ vgic_v3_cpuinit(void *arg, bool last_vcpu)
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	struct vgic_v3_redist *redist = &hypctx->vgic_redist;
 	uint64_t aff, vmpidr_el2;
+	int error;
 	int i;
+
+	error = bus_setup_intr(tmr_dev, tmr_sc->res[2], INTR_TYPE_CLK,
+	    vgic_v3_virtual_timer_intr, NULL, hypctx, &tmr_sc->ihl[2]);
+	if (error) {
+		printf("Unable to set up the virtual timer interrupt handler\n");
+		/* XXX Fallback to physical timer emulation or is it too late? */
+		return;
+	}
 
 	vmpidr_el2 = hypctx->vmpidr_el2;
 	/*
@@ -337,6 +377,7 @@ vgic_v3_irqbuf_add_nolock(struct vgic_v3_cpu_if *cpu_if)
 			return (NULL);
 
 		new_irqbuf = NULL;
+		/* TODO: malloc sleeps here and causes a panic */
 		while (new_irqbuf == NULL)
 			new_irqbuf = malloc(new_size * sizeof(*cpu_if->irqbuf),
 			    M_VGIC_V3, M_NOWAIT | M_ZERO);
@@ -493,9 +534,9 @@ vgic_v3_get_int_group(unsigned int irq, struct hypctx *hypctx)
 	return group;
 }
 
-
-int
-vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
+static int
+__vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype,
+    int pintd)
 {
         struct hypctx *hypctx = arg;
 	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
@@ -546,12 +587,26 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 	vip->group = group;
 	vip->enabled = enabled;
 	vip->priority = priority;
+	vip->pintd = pintd;
 
 out_unlock:
 	mtx_unlock_spin(&cpu_if->lr_mtx);
 	mtx_unlock_spin(&dist->dist_mtx);
 
 	return (error);
+}
+
+int
+vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
+{
+	return __vgic_v3_inject_irq(arg, irq, irqtype, -1);
+}
+
+int
+vgic_v3_inject_irq_hw(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype,
+    int pintd)
+{
+	return __vgic_v3_inject_irq(arg, irq, irqtype, pintd);
 }
 
 static void
@@ -863,6 +918,7 @@ vgic_v3_sync_hwstate(void *arg)
 	    lr_free, cpu_if->irqbuf_num);
 
 	/* TODO: Update this part for better efficiency */
+	/* TODO: This cauuses a panic still? where? */
 
 	/*
 	 * Add all interrupts from the list registers that are not active to
@@ -890,6 +946,7 @@ vgic_v3_sync_hwstate(void *arg)
 			lr_clear_irq(*lrp);
 		}
 
+	eprintf("before filling the list registers\n");
 	for (i = 0; i < cpu_if->ich_lr_num; i++) {
 		if (!lr_inactive(cpu_if->ich_lr_el2[i]))
 			continue;
@@ -905,6 +962,7 @@ vgic_v3_sync_hwstate(void *arg)
 	}
 
 	/* Remove all scheduled interrupts */
+	eprintf("before removing the scheduled interrupts\n");
 	vgic_v3_irqbuf_remove_nolock(IRQ_SCHEDULED, cpu_if);
 
 	/* TODO Enable maintenance interrupts if interrupts are still pending */
@@ -987,7 +1045,6 @@ arm_vgic_detach(device_t dev)
 static int
 arm_vgic_attach(device_t dev)
 {
-
 	return (0);
 }
 
@@ -1001,8 +1058,10 @@ arm_vgic_identify(driver_t *driver, device_t parent)
 		gic_sc = device_get_softc(parent);
 	}
 
-	if (strcmp(device_get_name(parent), "generic_timer") == 0)
-		tmr_sc = device_get_softc(parent);
+	if (strcmp(device_get_name(parent), "generic_timer") == 0) {
+		tmr_dev = parent;
+		tmr_sc = device_get_softc(tmr_dev);
+	}
 }
 
 static int
