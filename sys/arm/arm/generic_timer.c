@@ -49,7 +49,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/module.h>
 #include <sys/malloc.h>
 #include <sys/rman.h>
-#include <sys/timeet.h>
 #include <sys/timetc.h>
 #include <sys/smp.h>
 #include <sys/vdso.h>
@@ -98,15 +97,6 @@ __FBSDID("$FreeBSD$");
 #ifdef __arm__
 extern char hypmode_enabled[];
 #endif
-
-struct arm_tmr_softc {
-	struct resource		*res[4];
-	void			*ihl[4];
-	uint64_t		(*get_cntxct)(bool);
-	uint32_t		clkfreq;
-	struct eventtimer	et;
-	bool			physical;
-};
 
 static struct arm_tmr_softc *arm_tmr_sc = NULL;
 
