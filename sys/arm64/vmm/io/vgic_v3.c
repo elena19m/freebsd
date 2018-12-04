@@ -53,6 +53,7 @@
 #include <machine/vmm_instruction_emul.h>
 
 #include <arm/arm/gic_common.h>
+#include <arm/arm/generic_timer.h>
 #include <arm64/arm64/gic_v3_reg.h>
 #include <arm64/arm64/gic_v3_var.h>
 
@@ -122,6 +123,8 @@ do {									\
 
 static struct vgic_v3_virt_features virt_features;
 static struct vgic_v3_ro_regs ro_regs;
+static struct gic_v3_softc *gic_sc;
+static struct arm_tmr_sofct *tmr_sc;
 
 void
 vgic_v3_cpuinit(void *arg, bool last_vcpu)
@@ -910,9 +913,39 @@ out:
 	mtx_unlock_spin(&cpu_if->lr_mtx);
 }
 
+static void
+vgic_v3_get_ro_regs()
+{
+	/* GICD_ICFGR0 configures SGIs and it is read-only. */
+	ro_regs.gicd_icfgr0 = gic_d_read(gic_sc, 4, GICD_ICFGR(0));
+
+	/*
+	 * Configure the GIC type register for the guest.
+	 *
+	 * ~GICD_TYPER_SECURITYEXTN: disable security extensions.
+	 * ~GICD_TYPER_DVIS: direct injection for virtual LPIs not supported.
+	 * ~GICD_TYPER_LPIS: LPIs not supported.
+	 */
+	ro_regs.gicd_typer = gic_d_read(gic_sc, 4, GICD_TYPER);
+	ro_regs.gicd_typer &= ~GICD_TYPER_SECURITYEXTN;
+	ro_regs.gicd_typer &= ~GICD_TYPER_DVIS;
+	ro_regs.gicd_typer &= ~GICD_TYPER_LPIS;
+
+	/*
+	 * XXX. Guest reads of GICD_PIDR2 should return the same ArchRev as
+	 * specified in the guest FDT.
+	 */
+	ro_regs.gicd_pidr2 = gic_d_read(gic_sc, 4, GICD_PIDR2);
+}
+
 void
 vgic_v3_init(uint64_t ich_vtr_el2) {
 	uint32_t pribits, prebits;
+
+	KASSERT(gic_sc != NULL, ("GIC softc is NULL"));
+	KASSERT(tmr_sc != NULL, ("Generic Timer softc is NULL"));
+
+	vgic_v3_get_ro_regs();
 
 	pribits = ICH_VTR_EL2_PRIBITS(ich_vtr_el2);
 	switch (pribits) {
@@ -945,43 +978,15 @@ vgic_v3_init(uint64_t ich_vtr_el2) {
 static int
 arm_vgic_detach(device_t dev)
 {
+	gic_sc = NULL;
+	tmr_sc = NULL;
+
 	return (0);
-}
-
-static void vgic_v3_set_ro_regs(device_t dev)
-{
-	device_t gic;
-	struct gic_v3_softc *gic_sc;
-
-	gic = device_get_parent(dev);
-	gic_sc = device_get_softc(gic);
-
-	/* GICD_ICFGR0 configures SGIs and it is read-only. */
-	ro_regs.gicd_icfgr0 = gic_d_read(gic_sc, 4, GICD_ICFGR(0));
-
-	/*
-	 * Configure the GIC type register for the guest.
-	 *
-	 * ~GICD_TYPER_SECURITYEXTN: disable security extensions.
-	 * ~GICD_TYPER_DVIS: direct injection for virtual LPIs not supported.
-	 * ~GICD_TYPER_LPIS: LPIs not supported.
-	 */
-	ro_regs.gicd_typer = gic_d_read(gic_sc, 4, GICD_TYPER);
-	ro_regs.gicd_typer &= ~GICD_TYPER_SECURITYEXTN;
-	ro_regs.gicd_typer &= ~GICD_TYPER_DVIS;
-	ro_regs.gicd_typer &= ~GICD_TYPER_LPIS;
-
-	/*
-	 * XXX. Guest reads of GICD_PIDR2 should return the same ArchRev as
-	 * specified in the guest FDT.
-	 */
-	ro_regs.gicd_pidr2 = gic_d_read(gic_sc, 4, GICD_PIDR2);
 }
 
 static int
 arm_vgic_attach(device_t dev)
 {
-	vgic_v3_set_ro_regs(dev);
 
 	return (0);
 }
@@ -991,25 +996,27 @@ arm_vgic_identify(driver_t *driver, device_t parent)
 {
 	device_t dev;
 
-	/*
-	 * After we create the VGIC device this function gets called with the
-	 * VGIC as the parent. Exit in that case to avoid an infinite loop.
-	 */
-	if (strcmp(device_get_name(parent), VGIC_V3_DEVNAME) == 0)
-		return;
-
-	dev = device_find_child(parent, VGIC_V3_DEVNAME, -1);
-	if (!dev)
-		/* Create the virtual GIC device */
+	if (strcmp(device_get_name(parent), "gic") == 0) {
 		dev = device_add_child(parent, VGIC_V3_DEVNAME, -1);
+		gic_sc = device_get_softc(parent);
+	}
+
+	if (strcmp(device_get_name(parent), "generic_timer") == 0)
+		tmr_sc = device_get_softc(parent);
 }
 
 static int
 arm_vgic_probe(device_t dev)
 {
-	device_set_desc(dev, VGIC_V3_DEVSTR);
+	device_t parent;
 
-	return (BUS_PROBE_DEFAULT);
+	parent = device_get_parent(dev);
+	if (strcmp(device_get_name(parent), "gic") == 0) {
+		device_set_desc(dev, VGIC_V3_DEVSTR);
+		return (BUS_PROBE_DEFAULT);
+	}
+
+	return (ENXIO);
 }
 
 static device_method_t arm_vgic_methods[] = {
@@ -1020,8 +1027,8 @@ static device_method_t arm_vgic_methods[] = {
 	DEVMETHOD_END
 };
 
-static devclass_t arm_vgic_devclass;
-
 DEFINE_CLASS_1(vgic, arm_vgic_driver, arm_vgic_methods, 0, gic_v3_driver);
 
-DRIVER_MODULE(vgic, gic, arm_vgic_driver, arm_vgic_devclass, 0, 0);
+static devclass_t arm_vgic_devclass1, arm_vgic_devclass2;
+DRIVER_MODULE(vgic, gic, arm_vgic_driver, arm_vgic_devclass1, 0, 0);
+DRIVER_MODULE(vgic, generic_timer, arm_vgic_driver, arm_vgic_devclass2, 0, 0);
