@@ -143,6 +143,7 @@ vtimer_cpuinit(void *arg)
 	 * ~CNTP_CTL_ENABLE: disable the timer
 	 */
 	vtimer_cpu->cntp_ctl_el0 = CNTP_CTL_IMASK & ~CNTP_CTL_ENABLE;
+	vtimer_cpu->cntv_ctl_el0 = CNTP_CTL_IMASK & ~CNTP_CTL_ENABLE;
 
 	/*
 	 * Callout function is MP_SAFE because the VGIC uses a spin mutex when
