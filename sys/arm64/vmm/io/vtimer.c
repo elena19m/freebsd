@@ -45,7 +45,7 @@
 
 #define	RES1		0xffffffffffffffffUL
 
-#define vtimer_enabled(ctl)	\
+#define timer_enabled(ctl)	\
     (!((ctl) & CNTP_CTL_IMASK) && ((ctl) & CNTP_CTL_ENABLE))
 
 static uint64_t cnthctl_el2_reg;
@@ -152,6 +152,45 @@ vtimer_cpuinit(void *arg)
 	callout_init(&vtimer_cpu->callout, 1);
 }
 
+#define timer_condition_met(ctl)	((ctl) & CNTP_CTL_ISTATUS)
+
+int
+vtimer_virtual_timer_intr(void *arg)
+{
+	struct hypctx *hypctx;
+	uint32_t cntv_ctl;
+
+	hypctx = arg;
+
+	cntv_ctl = READ_SPECIALREG(cntv_ctl_el0);
+	if (!timer_enabled(cntv_ctl)) {
+		eprintf("Guest has timer interrupt disabled\n");
+		goto out;
+	}
+	if (!timer_condition_met(cntv_ctl)) {
+		eprintf("ISTATUS not set");
+		goto out;
+	}
+
+	vgic_v3_inject_irq(arg, 27, VGIC_IRQ_CLK);
+	eprintf("Injected interrupt\n");
+
+out:
+	/*
+	 * Also mask the timer interrupt for the guest. This will prevent
+	 * reasserting the timer interrupt as soon as we enter the guest, ending
+	 * up in an infinite loop.
+	 *
+	 * This is safe to do because the guest masks the timer interrupt as
+	 * part of the interrupt handling routine.
+	 */
+	cntv_ctl |= CNTP_CTL_IMASK;
+	WRITE_SPECIALREG(cntv_ctl_el0, cntv_ctl);
+
+	return (FILTER_HANDLED);
+}
+
+
 static void
 vtimer_schedule_irq(struct vtimer_cpu *vtimer_cpu, struct hypctx *hypctx)
 {
@@ -238,9 +277,9 @@ vtimer_phys_ctl_write(void *vm, int vcpuid, uint64_t wval, void *arg)
 	timer_toggled_on = timer_toggled_off = false;
 	ctl_el0 = vtimer_cpu->cntp_ctl_el0;
 
-	if (!vtimer_enabled(ctl_el0) && vtimer_enabled(wval))
+	if (!timer_enabled(ctl_el0) && timer_enabled(wval))
 		timer_toggled_on = true;
-	if (vtimer_enabled(ctl_el0) && !vtimer_enabled(wval))
+	if (timer_enabled(ctl_el0) && !timer_enabled(wval))
 		timer_toggled_off = true;
 
 	vtimer_cpu->cntp_ctl_el0 = wval;
@@ -284,7 +323,7 @@ vtimer_phys_cval_write(void *vm, int vcpuid, uint64_t wval, void *arg)
 
 	vtimer_cpu->cntp_cval_el0 = wval;
 
-	if (vtimer_enabled(vtimer_cpu->cntp_ctl_el0)) {
+	if (timer_enabled(vtimer_cpu->cntp_ctl_el0)) {
 		vtimer_remove_irq(hypctx);
 		vtimer_schedule_irq(vtimer_cpu, hypctx);
 	}
@@ -337,7 +376,7 @@ vtimer_phys_tval_write(void *vm, int vcpuid, uint64_t wval, void *arg)
 	cntpct_el0 = READ_SPECIALREG(cntpct_el0);
 	vtimer_cpu->cntp_cval_el0 = (int32_t)wval + cntpct_el0;
 
-	if (vtimer_enabled(vtimer_cpu->cntp_ctl_el0)) {
+	if (timer_enabled(vtimer_cpu->cntp_ctl_el0)) {
 		vtimer_remove_irq(hypctx);
 		vtimer_schedule_irq(vtimer_cpu, hypctx);
 	}

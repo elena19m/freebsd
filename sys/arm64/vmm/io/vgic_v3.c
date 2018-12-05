@@ -137,25 +137,7 @@ static struct gic_v3_softc *gic_sc;
 static struct arm_tmr_softc *tmr_sc;
 static device_t tmr_dev;
 
-static int
-vgic_v3_virtual_timer_intr(void *arg)
-{
-	uint32_t cntv_ctl;
-	struct hypctx *hypctx;
-
-	hypctx = arg;
-
-	eprintf("here\n");
-	eprintf("hypctx->exit_info.esr_el2 = 0x%x\n", hypctx->exit_info.esr_el2);
-
-	cntv_ctl = READ_SPECIALREG(cntv_ctl_el0);
-	cntv_ctl |= (1 << 1);
-	WRITE_SPECIALREG(cntv_ctl_el0, cntv_ctl);
-
-	vgic_v3_inject_irq_hw(arg, 27, VGIC_IRQ_CLK, 27);
-
-	return (FILTER_HANDLED);
-}
+#include "vtimer.h"
 
 void
 vgic_v3_cpuinit(void *arg, bool last_vcpu)
@@ -168,7 +150,7 @@ vgic_v3_cpuinit(void *arg, bool last_vcpu)
 	int i;
 
 	error = bus_setup_intr(tmr_dev, tmr_sc->res[2], INTR_TYPE_CLK,
-	    vgic_v3_virtual_timer_intr, NULL, hypctx, &tmr_sc->ihl[2]);
+	    vtimer_virtual_timer_intr, NULL, hypctx, &tmr_sc->ihl[2]);
 	if (error) {
 		printf("Unable to set up the virtual timer interrupt handler\n");
 		/* XXX Fallback to physical timer emulation or is it too late? */
@@ -554,15 +536,13 @@ __vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype,
 		return (1);
 	}
 
-#if 0
 	int i, cnt;
 	cnt = 0;
 	for (i = 0; i < cpu_if->irqbuf_num; i++)
 		if (cpu_if->irqbuf[i].irq == irq)
 			cnt++;
-	if (irq != 30)
+	if (irq == 27 && cnt >= 1)
 		eprintf("Injecting %u, existing instances = %d\n", irq, cnt);
-#endif
 
 	error = 0;
 	mtx_lock_spin(&dist->dist_mtx);
