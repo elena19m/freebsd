@@ -125,8 +125,6 @@ static struct vgic_v3_virt_features virt_features;
 static struct vgic_v3_ro_regs ro_regs;
 
 static struct gic_v3_softc *gic_sc;
-static struct arm_tmr_softc *tmr_sc;
-static device_t tmr_dev;
 
 #include "vtimer.h"
 
@@ -140,8 +138,8 @@ vgic_v3_cpuinit(void *arg, bool last_vcpu)
 	int error;
 	int i;
 
-	error = bus_setup_intr(tmr_dev, tmr_sc->res[2], INTR_TYPE_CLK,
-	    vtimer_virtual_timer_intr, NULL, hypctx, &tmr_sc->ihl[2]);
+	error = arm_tmr_setup_intr(GT_VIRT, vtimer_virtual_timer_intr, NULL,
+	    hypctx);
 	if (error) {
 		printf("Unable to set up the virtual timer interrupt handler\n");
 		/* XXX Fallback to physical timer emulation or is it too late? */
@@ -982,7 +980,6 @@ vgic_v3_init(uint64_t ich_vtr_el2) {
 	uint32_t pribits, prebits;
 
 	KASSERT(gic_sc != NULL, ("GIC softc is NULL"));
-	KASSERT(tmr_sc != NULL, ("Generic Timer softc is NULL"));
 
 	vgic_v3_get_ro_regs();
 
@@ -1018,7 +1015,6 @@ static int
 arm_vgic_detach(device_t dev)
 {
 	gic_sc = NULL;
-	tmr_sc = NULL;
 
 	return (0);
 }
@@ -1037,11 +1033,6 @@ arm_vgic_identify(driver_t *driver, device_t parent)
 	if (strcmp(device_get_name(parent), "gic") == 0) {
 		dev = device_add_child(parent, VGIC_V3_DEVNAME, -1);
 		gic_sc = device_get_softc(parent);
-	}
-
-	if (strcmp(device_get_name(parent), "generic_timer") == 0) {
-		tmr_dev = parent;
-		tmr_sc = device_get_softc(tmr_dev);
 	}
 }
 
@@ -1069,6 +1060,5 @@ static device_method_t arm_vgic_methods[] = {
 
 DEFINE_CLASS_1(vgic, arm_vgic_driver, arm_vgic_methods, 0, gic_v3_driver);
 
-static devclass_t arm_vgic_devclass1, arm_vgic_devclass2;
-DRIVER_MODULE(vgic, gic, arm_vgic_driver, arm_vgic_devclass1, 0, 0);
-DRIVER_MODULE(vgic, generic_timer, arm_vgic_driver, arm_vgic_devclass2, 0, 0);
+static devclass_t arm_vgic_devclass;
+DRIVER_MODULE(vgic, gic, arm_vgic_driver, arm_vgic_devclass, 0, 0);
