@@ -108,7 +108,4 @@ int 	vtimer_phys_cval_read(void *vm, int vcpuid, uint64_t *rval, void *arg);
 int 	vtimer_phys_cval_write(void *vm, int vcpuid, uint64_t wval, void *arg);
 int 	vtimer_phys_tval_read(void *vm, int vcpuid, uint64_t *rval, void *arg);
 int 	vtimer_phys_tval_write(void *vm, int vcpuid, uint64_t wval, void *arg);
-
-int	vtimer_virtual_timer_intr(void *arg);
-
 #endif
