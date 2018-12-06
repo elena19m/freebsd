@@ -595,9 +595,9 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	hypctx->elr_el2 = (uint64_t)pc;
 
 	for (;;) {
-		vgic_v3_sync_hwstate(hypctx);
-
 		daif = intr_disable();
+
+		vgic_v3_sync_hwstate(hypctx);
 		excp_type = vmm_call_hyp((void *)ktohyp(vmm_enter_guest),
 		    ktohyp(hypctx));
 		intr_restore(daif);
