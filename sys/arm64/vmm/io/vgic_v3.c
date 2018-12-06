@@ -135,16 +135,7 @@ vgic_v3_cpuinit(void *arg, bool last_vcpu)
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	struct vgic_v3_redist *redist = &hypctx->vgic_redist;
 	uint64_t aff, vmpidr_el2;
-	int error;
 	int i;
-
-	error = arm_tmr_setup_intr(GT_VIRT, vtimer_virtual_timer_intr, NULL,
-	    hypctx);
-	if (error) {
-		printf("Unable to set up the virtual timer interrupt handler\n");
-		/* XXX Fallback to physical timer emulation or is it too late? */
-		return;
-	}
 
 	vmpidr_el2 = hypctx->vmpidr_el2;
 	/*

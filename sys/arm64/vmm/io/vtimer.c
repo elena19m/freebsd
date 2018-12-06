@@ -38,6 +38,7 @@
 #include <machine/vmm.h>
 #include <machine/armreg.h>
 
+#include <arm/arm/generic_timer.h>
 #include <arm64/vmm/arm64.h>
 
 #include "vgic_v3.h"
@@ -127,36 +128,11 @@ vtimer_vminit(void *arg)
 	return;
 }
 
-void
-vtimer_cpuinit(void *arg)
-{
-	struct hypctx *hypctx;
-	struct vtimer_cpu *vtimer_cpu;
-
-	hypctx = (struct hypctx *)arg;
-	vtimer_cpu = &hypctx->vtimer_cpu;
-
-	/*
-	 * Configure timer interrupts for the VCPU.
-	 *
-	 * CNTP_CTL_IMASK: mask interrupts
-	 * ~CNTP_CTL_ENABLE: disable the timer
-	 */
-	vtimer_cpu->cntp_ctl_el0 = CNTP_CTL_IMASK & ~CNTP_CTL_ENABLE;
-	vtimer_cpu->cntv_ctl_el0 = CNTP_CTL_IMASK & ~CNTP_CTL_ENABLE;
-
-	/*
-	 * Callout function is MP_SAFE because the VGIC uses a spin mutex when
-	 * modifying the list registers.
-	 */
-	callout_init(&vtimer_cpu->callout, 1);
-}
-
 #define timer_condition_met(ctl)	((ctl) & CNTP_CTL_ISTATUS)
 
 static int count = 0;
 
-int
+static int
 vtimer_virtual_timer_intr(void *arg)
 {
 	struct hypctx *hypctx;
@@ -196,6 +172,35 @@ out:
 	return (FILTER_HANDLED);
 }
 
+void
+vtimer_cpuinit(void *arg)
+{
+	struct hypctx *hypctx;
+	struct vtimer_cpu *vtimer_cpu;
+	int error;
+
+	hypctx = (struct hypctx *)arg;
+	vtimer_cpu = &hypctx->vtimer_cpu;
+
+	error = arm_tmr_setup_intr(GT_VIRT, vtimer_virtual_timer_intr, NULL,
+	    hypctx);
+	if (error)
+		printf("Unable to set up the virtual timer interrupt handler\n");
+
+	/*
+	 * Configure timer interrupts for the VCPU.
+	 *
+	 * CNTP_CTL_IMASK: mask interrupts
+	 * ~CNTP_CTL_ENABLE: disable the timer
+	 */
+	vtimer_cpu->cntp_ctl_el0 = CNTP_CTL_IMASK & ~CNTP_CTL_ENABLE;
+
+	/*
+	 * Callout function is MP_SAFE because the VGIC uses a spin
+	 * mutex when modifying the list registers.
+	 */
+	callout_init(&vtimer_cpu->callout, 1);
+}
 
 static void
 vtimer_schedule_irq(struct vtimer_cpu *vtimer_cpu, struct hypctx *hypctx)
