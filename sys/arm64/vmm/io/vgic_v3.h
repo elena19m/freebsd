@@ -158,8 +158,6 @@ void	vgic_v3_mmio_destroy(struct hyp *hyp);
 int 	vgic_v3_vcpu_pending_irq(void *arg);
 int 	vgic_v3_inject_irq(void *arg, uint32_t irq,
 			   enum vgic_v3_irqtype irqtype);
-int 	vgic_v3_inject_irq_hw(void *arg, uint32_t irq,
-			      enum vgic_v3_irqtype irqtype, int pintd);
 int 	vgic_v3_remove_irq(void *arg, uint32_t irq, bool ignore_state);
 
 void	vgic_v3_irq_set_priority(uint32_t irq, uint8_t priority,

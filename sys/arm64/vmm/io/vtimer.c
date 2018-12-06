@@ -154,6 +154,8 @@ vtimer_cpuinit(void *arg)
 
 #define timer_condition_met(ctl)	((ctl) & CNTP_CTL_ISTATUS)
 
+static int count = 0;
+
 int
 vtimer_virtual_timer_intr(void *arg)
 {
@@ -163,6 +165,9 @@ vtimer_virtual_timer_intr(void *arg)
 	hypctx = arg;
 
 	cntv_ctl = READ_SPECIALREG(cntv_ctl_el0);
+
+//	eprintf("cntv_ctl = 0x%08x\n", cntv_ctl);
+
 	if (!timer_enabled(cntv_ctl)) {
 		eprintf("Guest has timer interrupt disabled\n");
 		goto out;
@@ -173,7 +178,8 @@ vtimer_virtual_timer_intr(void *arg)
 	}
 
 	vgic_v3_inject_irq(arg, 27, VGIC_IRQ_CLK);
-	eprintf("Injected interrupt\n");
+	count++;
+//	eprintf("Injected interrupt. Total: %d\n", count);
 
 out:
 	/*
@@ -184,7 +190,7 @@ out:
 	 * This is safe to do because the guest masks the timer interrupt as
 	 * part of the interrupt handling routine.
 	 */
-	cntv_ctl |= CNTP_CTL_IMASK;
+	cntv_ctl &= ~CNTP_CTL_ENABLE;
 	WRITE_SPECIALREG(cntv_ctl_el0, cntv_ctl);
 
 	return (FILTER_HANDLED);
