@@ -101,6 +101,15 @@ __FBSDID("$FreeBSD$");
 extern char hypmode_enabled[];
 #endif
 
+struct arm_tmr_softc {
+	struct resource		*res[4];
+	void			*ihl[4];
+	uint64_t		(*get_cntxct)(bool);
+	uint32_t		clkfreq;
+	struct eventtimer	et;
+	bool			physical;
+};
+
 static struct arm_tmr_softc *arm_tmr_sc = NULL;
 
 static struct resource_spec timer_spec[] = {
@@ -587,9 +596,6 @@ static driver_t arm_tmr_fdt_driver = {
 
 static devclass_t arm_tmr_fdt_devclass;
 
-DEFINE_CLASS_0(generic_timer, generic_timer_driver, arm_tmr_fdt_methods,
-    sizeof(struct arm_tmr_softc));
-
 EARLY_DRIVER_MODULE(timer, simplebus, arm_tmr_fdt_driver, arm_tmr_fdt_devclass,
     0, 0, BUS_PASS_TIMER + BUS_PASS_ORDER_MIDDLE);
 EARLY_DRIVER_MODULE(timer, ofwbus, arm_tmr_fdt_driver, arm_tmr_fdt_devclass,
@@ -611,11 +617,6 @@ static driver_t arm_tmr_acpi_driver = {
 };
 
 static devclass_t arm_tmr_acpi_devclass;
-
-#ifndef FDT
-DEFINE_CLASS_0(generic_timer, generic_timer_driver, arm_tmr_acpi_methods,
-    sizeof(struct arm_tmr_softc));
-#endif
 
 EARLY_DRIVER_MODULE(timer, acpi, arm_tmr_acpi_driver, arm_tmr_acpi_devclass,
     0, 0, BUS_PASS_TIMER + BUS_PASS_ORDER_MIDDLE);
