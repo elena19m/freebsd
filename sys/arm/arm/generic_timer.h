@@ -32,23 +32,10 @@
 #ifndef _ARM_GENERIC_TIMER_H_
 #define _ARM_GENERIC_TIMER_H_
 
-#include <sys/timeet.h>
-
 #define	GT_PHYS_SECURE		0
 #define	GT_PHYS_NONSECURE	1
 #define	GT_VIRT			2
 #define	GT_HYP			3
-
-struct arm_tmr_softc {
-	struct resource		*res[4];
-	void			*ihl[4];
-	uint64_t		(*get_cntxct)(bool);
-	uint32_t		clkfreq;
-	struct eventtimer	et;
-	bool			physical;
-};
-
-DECLARE_CLASS(generic_timer_driver);
 
 int	arm_tmr_setup_intr(int gt_type, driver_filter_t filter,
     driver_intr_t handler, void *arg);
