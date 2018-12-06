@@ -100,7 +100,6 @@ struct vgic_v3_ro_regs {
 struct vgic_v3_irq {
 	uint32_t irq;
 	enum vgic_v3_irqtype irqtype;
-	int16_t pintd;
 	uint8_t group;
 	uint8_t enabled;
 	uint8_t priority;
@@ -112,10 +111,6 @@ do {									\
 	lr |= (uint64_t)vip->group << ICH_LR_EL2_GROUP_SHIFT;		\
 	lr |= (uint64_t)vip->priority << ICH_LR_EL2_PRIO_SHIFT;		\
 	lr |= vip->irq;							\
-	if (vip->pintd != -1) {						\
-		lr |= (uint64_t)vip->pintd << 32;			\
-		lr |= (uint64_t)1 << 61;				\
-	}								\
 } while (0)
 
 #define	lr_to_vip(lr, vip)						\
@@ -124,10 +119,6 @@ do {									\
 	(vip)->priority = \
 	    (uint8_t)(((lr) & ICH_LR_EL2_PRIO_MASK) >> ICH_LR_EL2_PRIO_SHIFT); \
 	(vip)->group = (uint8_t)(((lr) >> ICH_LR_EL2_GROUP_SHIFT) & 0x1); \
-	if (lr & ((uint64_t)1 << 61)) 					\
-		vip->pintd = (lr >> 32) & ((1 << 10) - 1);		\
-	else								\
-		vip->pintd = -1;					\
 } while (0)
 
 static struct vgic_v3_virt_features virt_features;
@@ -516,9 +507,8 @@ vgic_v3_get_int_group(unsigned int irq, struct hypctx *hypctx)
 	return group;
 }
 
-static int
-__vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype,
-    int pintd)
+int
+vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 {
         struct hypctx *hypctx = arg;
 	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
@@ -536,13 +526,21 @@ __vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype,
 		return (1);
 	}
 
+#if 0
 	int i, cnt;
 	cnt = 0;
 	for (i = 0; i < cpu_if->irqbuf_num; i++)
 		if (cpu_if->irqbuf[i].irq == irq)
 			cnt++;
-	if (irq == 27 && cnt >= 1)
+	if (irq == 27)
 		eprintf("Injecting %u, existing instances = %d\n", irq, cnt);
+	cnt = 0;
+	for (i = 0; i < cpu_if->ich_lr_num; i++)
+		if ((cpu_if->ich_lr_el2[i] & (uint64_t)0xffffffff) == (uint64_t)irq)
+			cnt++;
+	if (irq == 27)
+		eprintf("Injecting %u, lr pending = %d\n", irq, cnt);
+#endif
 
 	error = 0;
 	mtx_lock_spin(&dist->dist_mtx);
@@ -567,26 +565,12 @@ __vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype,
 	vip->group = group;
 	vip->enabled = enabled;
 	vip->priority = priority;
-	vip->pintd = pintd;
 
 out_unlock:
 	mtx_unlock_spin(&cpu_if->lr_mtx);
 	mtx_unlock_spin(&dist->dist_mtx);
 
 	return (error);
-}
-
-int
-vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
-{
-	return __vgic_v3_inject_irq(arg, irq, irqtype, -1);
-}
-
-int
-vgic_v3_inject_irq_hw(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype,
-    int pintd)
-{
-	return __vgic_v3_inject_irq(arg, irq, irqtype, pintd);
 }
 
 static void
@@ -821,11 +805,8 @@ vgic_v3_move_irqbuf_to_lr(struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if)
 
 	irqbuf_idx = 0;
 	for (i = 0; i < cpu_if->ich_lr_num; i++) {
-		/* Find an empty LR register */
-		if (!lr_inactive(cpu_if->ich_lr_el2[i]))
-			continue;
-
 		/* Find the first enabled buffered interrupt */
+find_next_buffered_interrupt:
 		for (; irqbuf_idx < cpu_if->irqbuf_num; irqbuf_idx++) {
 			vip = &cpu_if->irqbuf[irqbuf_idx];
 			if (!vip->enabled)
@@ -844,8 +825,27 @@ vgic_v3_move_irqbuf_to_lr(struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if)
 		if (irqbuf_idx == cpu_if->irqbuf_num)
 			break;
 
+		/* Find an empty LR register */
+		/* TODO: this is very inefficient. Move it up again. */
+		if (vip->irq == 27 && !lr_inactive(cpu_if->ich_lr_el2[i])) {
+			/* Guest is behind timer interrupts. Don't swamp the
+			 * guest with interrupts and move to the next buffered
+			 * interupt. */
+			irqbuf_idx++;
+			goto find_next_buffered_interrupt;
+		}
+
+		if (!lr_inactive(cpu_if->ich_lr_el2[i]))
+			continue;
+
 		/* Copy the IRQ to the LR register */
 		vip_to_lr(vip, cpu_if->ich_lr_el2[i]);
+
+		/*
+		printf("IRQ %u, group = %u\n", vip->irq, vip->group);
+		printf("cpu_if->ich_lr_el2[%d] = 0x%016lx\n",
+				i, cpu_if->ich_lr_el2[i]);
+				*/
 
 		/* Mark the buffered interrupt as scheduled... */
 		vip->irq = IRQ_SCHEDULED;
@@ -946,6 +946,7 @@ vgic_v3_sync_hwstate(void *arg)
 	vgic_v3_irqbuf_remove_nolock(IRQ_SCHEDULED, cpu_if);
 
 	/* TODO Enable maintenance interrupts if interrupts are still pending */
+	panic("reshuffled");
 
 out:
 	mtx_unlock_spin(&cpu_if->lr_mtx);
