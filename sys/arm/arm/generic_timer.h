@@ -34,6 +34,11 @@
 
 #include <sys/timeet.h>
 
+#define	GT_PHYS_SECURE		0
+#define	GT_PHYS_NONSECURE	1
+#define	GT_VIRT			2
+#define	GT_HYP			3
+
 struct arm_tmr_softc {
 	struct resource		*res[4];
 	void			*ihl[4];
@@ -44,5 +49,8 @@ struct arm_tmr_softc {
 };
 
 DECLARE_CLASS(generic_timer_driver);
+
+int	arm_tmr_setup_intr(int gt_type, driver_filter_t filter,
+    driver_intr_t handler, void *arg);
 
 #endif

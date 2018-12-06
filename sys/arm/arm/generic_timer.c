@@ -49,6 +49,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/module.h>
 #include <sys/malloc.h>
 #include <sys/rman.h>
+#include <sys/timeet.h>
 #include <sys/timetc.h>
 #include <sys/smp.h>
 #include <sys/vdso.h>
@@ -77,6 +78,9 @@ __FBSDID("$FreeBSD$");
 #include <dev/acpica/acpivar.h>
 #endif
 
+/* TODO: delete me */
+#include <arm64/vmm/arm64.h>
+
 #include "generic_timer.h"
 
 #define	GT_CTRL_ENABLE		(1 << 0)
@@ -92,11 +96,6 @@ __FBSDID("$FreeBSD$");
 #define	GT_CNTKCTL_EVNTEN	(1 << 2) /* Enables virtual counter events */
 #define	GT_CNTKCTL_PL0VCTEN	(1 << 1) /* PL0 CNTVCT and CNTFRQ access */
 #define	GT_CNTKCTL_PL0PCTEN	(1 << 0) /* PL0 CNTPCT and CNTFRQ access */
-
-#define	GT_PHYS_SECURE		0
-#define	GT_PHYS_NONSECURE	1
-#define	GT_VIRT			2
-#define	GT_HYP			3
 
 #ifdef __arm__
 extern char hypmode_enabled[];
@@ -127,6 +126,8 @@ struct timecounter arm_tmr_timecount = {
 	.tc_quality        = 1000,
 	.tc_fill_vdso_timehands = arm_tmr_fill_vdso_timehands,
 };
+
+static device_t arm_tmr_dev;
 
 #ifdef __arm__
 #define	get_el0(x)	cp15_## x ##_get()
@@ -263,6 +264,13 @@ arm_tmr_start(struct eventtimer *et, sbintime_t first,
 	struct arm_tmr_softc *sc;
 	int counts, ctrl;
 
+	/*
+	if (!virt_enabled()) {
+		ctrl = READ_SPECIALREG(cntv_ctl_el0);
+		eprintf("Old cntv_ctl_el0 = 0x%08x\n", ctrl);
+	}
+	*/
+
 	sc = (struct arm_tmr_softc *)et->et_priv;
 
 	if (first != 0) {
@@ -271,6 +279,10 @@ arm_tmr_start(struct eventtimer *et, sbintime_t first,
 		ctrl &= ~GT_CTRL_INT_MASK;
 		ctrl |= GT_CTRL_ENABLE;
 		set_tval(counts, sc->physical);
+		/*
+		if (!virt_enabled())
+			eprintf("New cntv_ctl_el0 = 0x%08x\n", ctrl);
+			*/
 		set_ctrl(ctrl, sc->physical);
 		return (0);
 	}
@@ -294,8 +306,24 @@ arm_tmr_stop(struct eventtimer *et)
 {
 	struct arm_tmr_softc *sc;
 
+	/* TODO: delete me */
+	/*
+	int ctrl;
+	if (!virt_enabled()) {
+		ctrl = READ_SPECIALREG(cntv_ctl_el0);
+		eprintf("Old cntv_ctl_el0 = 0x%08x\n", ctrl);
+	}
+	*/
+
 	sc = (struct arm_tmr_softc *)et->et_priv;
 	arm_tmr_disable(sc->physical);
+
+	/*
+	if (!virt_enabled()) {
+		ctrl = READ_SPECIALREG(cntv_ctl_el0);
+		eprintf("New cntv_ctl_el0 = 0x%08x\n", ctrl);
+	}
+	*/
 
 	return (0);
 }
@@ -306,17 +334,47 @@ arm_tmr_intr(void *arg)
 	struct arm_tmr_softc *sc;
 	int ctrl;
 
+	/*
+	if (!virt_enabled()) {
+		ctrl = READ_SPECIALREG(cntv_ctl_el0);
+		eprintf("Old cntv_ctl_el0 = 0x%08x\n", ctrl);
+	}
+	*/
+
 	sc = (struct arm_tmr_softc *)arg;
 	ctrl = get_ctrl(sc->physical);
 	if (ctrl & GT_CTRL_INT_STAT) {
 		ctrl |= GT_CTRL_INT_MASK;
 		set_ctrl(ctrl, sc->physical);
+		/*
+		if (!virt_enabled()) {
+			ctrl = READ_SPECIALREG(cntv_ctl_el0);
+			eprintf("New cntv_ctl_el0 = 0x%08x\n", ctrl);
+		}
+		*/
 	}
 
 	if (sc->et.et_active)
 		sc->et.et_event_cb(&sc->et, sc->et.et_arg);
 
 	return (FILTER_HANDLED);
+}
+
+int
+arm_tmr_setup_intr(int gt_type, driver_filter_t filter, driver_intr_t handler,
+    void *arg)
+{
+	switch (gt_type) {
+	case GT_PHYS_SECURE:
+	case GT_PHYS_NONSECURE:
+	case GT_VIRT:
+	case GT_HYP:
+		return (bus_setup_intr(arm_tmr_dev, arm_tmr_sc->res[gt_type],
+		    INTR_TYPE_CLK, filter, handler, arg,
+		    &arm_tmr_sc->ihl[gt_type]));
+	default:
+		return (ENODEV);
+	}
 }
 
 #ifdef FDT
@@ -398,6 +456,10 @@ arm_tmr_attach(device_t dev)
 #endif
 	int error;
 	int i, first_timer, last_timer;
+
+	uint32_t cntv_ctl;
+	cntv_ctl = READ_SPECIALREG(cntv_ctl_el0);
+	eprintf("cntv_ctl_el0 = 0x%08x\n", cntv_ctl);
 
 	sc = device_get_softc(dev);
 	if (arm_tmr_sc)
@@ -504,6 +566,8 @@ arm_tmr_attach(device_t dev)
 #if defined(__arm__)
 	arm_set_delay(arm_tmr_do_delay, sc);
 #endif
+
+	arm_tmr_dev = dev;
 
 	return (0);
 }
