@@ -373,17 +373,17 @@ int
 arm_tmr_setup_intr(int gt_type, driver_filter_t filter, driver_intr_t handler,
     void *arg)
 {
-	switch (gt_type) {
-	case GT_PHYS_SECURE:
-	case GT_PHYS_NONSECURE:
-	case GT_VIRT:
-	case GT_HYP:
-		return (bus_setup_intr(arm_tmr_dev, arm_tmr_sc->res[gt_type],
-		    INTR_TYPE_CLK, filter, handler, arg,
-		    &arm_tmr_sc->ihl[gt_type]));
-	default:
-		return (ENODEV);
-	}
+	if (gt_type != GT_PHYS_SECURE &&
+	    gt_type != GT_PHYS_NONSECURE &&
+	    gt_type != GT_VIRT &&
+	    gt_type != GT_HYP)
+		return (ENXIO);
+
+	if (arm_tmr_sc->res[gt_type] == NULL)
+		return (ENXIO);
+
+	return (bus_setup_intr(arm_tmr_dev, arm_tmr_sc->res[gt_type],
+	    INTR_TYPE_CLK, filter, handler, arg, &arm_tmr_sc->ihl[gt_type]));
 }
 
 #ifdef FDT
@@ -465,10 +465,6 @@ arm_tmr_attach(device_t dev)
 #endif
 	int error;
 	int i, first_timer, last_timer;
-
-	uint32_t cntv_ctl;
-	cntv_ctl = READ_SPECIALREG(cntv_ctl_el0);
-	eprintf("cntv_ctl_el0 = 0x%08x\n", cntv_ctl);
 
 	sc = device_get_softc(dev);
 	if (arm_tmr_sc)
