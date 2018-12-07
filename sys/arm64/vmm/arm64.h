@@ -127,4 +127,6 @@ uint64_t vmm_read_tcr_el2(void);
 		(!((esr_iss) & 0b111000) && ((esr_iss) & 0b000100))
 #define	FAR_EL2_PAGE_OFFSET(x)		((x) & PAGE_MASK)
 
+#define	DEBUG_ME	1
+
 #endif /* !_VMM_ARM64_H_ */

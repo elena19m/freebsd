@@ -142,7 +142,10 @@ vtimer_virtual_timer_intr(void *arg)
 
 	cntv_ctl = READ_SPECIALREG(cntv_ctl_el0);
 
-//	eprintf("cntv_ctl = 0x%08x\n", cntv_ctl);
+#if DEBUG_ME == 1
+	eprintf("Guest cntv_ctl = 0x%08x\n", hypctx->vtimer_cpu.cntv_ctl_el0);
+	eprintf("Old   cntv_ctl = 0x%08x\n", cntv_ctl);
+#endif
 
 	if (!timer_enabled(cntv_ctl)) {
 		eprintf("Guest has timer interrupt disabled\n");
@@ -155,7 +158,9 @@ vtimer_virtual_timer_intr(void *arg)
 
 	vgic_v3_inject_irq(arg, 27, VGIC_IRQ_CLK);
 	count++;
-//	eprintf("Injected interrupt. Total: %d\n", count);
+#if DEBUG_ME == 1
+	eprintf("Injected interrupt. Total: %d\n", count);
+#endif
 
 out:
 	/*
@@ -168,6 +173,10 @@ out:
 	 */
 	cntv_ctl &= ~CNTP_CTL_ENABLE;
 	WRITE_SPECIALREG(cntv_ctl_el0, cntv_ctl);
+
+#if DEBUG_ME == 1
+	eprintf("New   cntv_ctl = 0x%08x\n", cntv_ctl);
+#endif
 
 	return (FILTER_HANDLED);
 }
@@ -182,8 +191,7 @@ vtimer_cpuinit(void *arg)
 	hypctx = (struct hypctx *)arg;
 	vtimer_cpu = &hypctx->vtimer_cpu;
 
-	error = arm_tmr_setup_intr(GT_VIRT, vtimer_virtual_timer_intr, NULL,
-	    hypctx);
+	error = arm_tmr_setup_intr(GT_VIRT, vtimer_virtual_timer_intr, NULL, hypctx);
 	if (error)
 		printf("Unable to set up the virtual timer interrupt handler\n");
 
