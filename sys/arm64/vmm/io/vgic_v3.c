@@ -505,10 +505,8 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	struct vgic_v3_irq *vip;
-	uint64_t lr;
 	int group;
 	int error;
-	int i;
 	uint8_t priority;
 	bool enabled;
 
@@ -519,20 +517,30 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 		return (1);
 	}
 
-
+#if 0
+	/* Make there aren't two timer interrupts scheduled at the same time */
+	uint64_t lr;
+	int i;
 	if (irqtype == VGIC_IRQ_CLK) {
 		for (i = 0; i < cpu_if->ich_lr_num; i++) {
 			lr = cpu_if->ich_lr_el2[i];
-			if (ICH_LR_EL2_VINTID(lr) == irq && !lr_inactive(lr)) {
-				/*
-				 * Guest lagging behind timer interrupts. Do not
-				 * speed it up by injecting interrupts one right
-				 * after the other.
-				 */
-				eprintf("WARNING: Timer interrupt already pending. Skipping\n");
-				return (0);
+			if (ICH_LR_EL2_VINTID(lr) == irq) {
+				if (lr_pending(lr)) {
+					/*
+					 * Guest lagging behind timer interrupts. Do not
+					 * speed it up by injecting interrupts one right
+					 * after the other.
+					 */
+					eprintf("WARNING: Timer interrupt already pending. Skipping\n");
+					return (0);
+				}
 			}
 		}
+	}
+#endif
+
+	int i;
+	if (irqtype == VGIC_IRQ_CLK) {
 		for (i = 0; i < cpu_if->irqbuf_num; i++)
 			if (cpu_if->irqbuf[i].irq == irq) {
 				eprintf("WARNING: Timer interrupt already buffered. Skipping\n");
@@ -856,8 +864,18 @@ static void
 vgic_v3_irqbuf_to_lr(struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if)
 {
 	struct vgic_v3_irq *vip;
+	uint64_t lr;
 	int irqbuf_idx;
 	int lr_idx;
+	bool clk_active;
+
+	for (lr_idx = 0; lr_idx < cpu_if->ich_lr_num; lr_idx++) {
+		lr = cpu_if->ich_lr_el2[lr_idx];
+		if (lr_active(lr) || lr_pending_active(lr)) {
+			clk_active = true;
+			break;
+		}
+	}
 
 	irqbuf_idx = 0;
 	lr_idx = 0;
@@ -874,12 +892,19 @@ vgic_v3_irqbuf_to_lr(struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if)
 			break;
 
 		vip = &cpu_if->irqbuf[irqbuf_idx];
+		if (vip->irqtype == VGIC_IRQ_CLK && clk_active) {
+			irqbuf_idx++;
+			continue;
+		}
+
 		/* Copy the IRQ to the LR register */
 		vip_to_lr(vip, cpu_if->ich_lr_el2[lr_idx]);
 
+#if DEBUG_ME == 1
 		eprintf("irqbuf_idx = %d\n", irqbuf_idx);
 		eprintf("lr_idx = %d\n", lr_idx);
 		eprintf("irq = %u\n", vip->irq);
+#endif
 
 		/* Mark the buffered interrupt as scheduled... */
 		vip->irq = IRQ_SCHEDULED;
@@ -890,7 +915,9 @@ vgic_v3_irqbuf_to_lr(struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if)
 	}
 
 	/* Remove all interrupts that were scheduled now */
+#if DEBUG_ME == 1
 	eprintf("Done\n\n");
+#endif
 	vgic_v3_irqbuf_remove_nolock(IRQ_SCHEDULED, cpu_if);
 }
 
