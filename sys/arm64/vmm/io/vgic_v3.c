@@ -69,8 +69,8 @@
 
 #define	RES0			0UL
 
-#define	IRQBUF_SIZE_MIN	32
-#define	IRQ_SIZE_MAX	(1 << 10)
+#define	IRQBUF_SIZE_MIN		32
+#define	IRQBUF_SIZE_MAX		(1 << 10)
 
 #define	IRQ_SCHEDULED		(GIC_LAST_SPI + 1)
 
@@ -125,8 +125,6 @@ static struct vgic_v3_virt_features virt_features;
 static struct vgic_v3_ro_regs ro_regs;
 
 static struct gic_v3_softc *gic_sc;
-
-#include "vtimer.h"
 
 void
 vgic_v3_cpuinit(void *arg, bool last_vcpu)
@@ -335,7 +333,7 @@ vgic_v3_irqbuf_add_nolock(struct vgic_v3_cpu_if *cpu_if)
 	if (cpu_if->irqbuf_num == cpu_if->irqbuf_size) {
 		/* Double the size of the buffered interrupts list */
 		new_size = cpu_if->irqbuf_size << 1;
-		if (new_size > IRQ_SIZE_MAX)
+		if (new_size > IRQBUF_SIZE_MAX)
 			return (NULL);
 
 		new_irqbuf = NULL;
@@ -1022,7 +1020,9 @@ arm_vgic_identify(driver_t *driver, device_t parent)
 	device_t dev;
 
 	if (strcmp(device_get_name(parent), "gic") == 0) {
-		dev = device_add_child(parent, VGIC_V3_DEVNAME, -1);
+		dev = device_find_child(parent, VGIC_V3_DEVNAME, -1);
+		if (!dev)
+			dev = device_add_child(parent, VGIC_V3_DEVNAME, -1);
 		gic_sc = device_get_softc(parent);
 	}
 }
