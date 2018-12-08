@@ -543,7 +543,13 @@ vgic_v3_irq_set_priority(uint32_t irq, uint8_t priority,
 }
 
 void
-vgic_v3_irq_toggle_group_enabled(int group, bool enabled, struct hyp *hyp)
+vgic_v3_irq_set_group(uint32_t irq, uint8_t group, struct hyp *hyp, int vcpuid)
+{
+	return;
+}
+
+void
+vgic_v3_irq_toggle_group_enabled(bool enabled, struct hyp *hyp)
 {
 	struct hypctx *hypctx;
 	struct vgic_v3_cpu_if *cpu_if;
@@ -566,12 +572,6 @@ vgic_v3_irq_toggle_group_enabled(int group, bool enabled, struct hyp *hyp)
 
 		mtx_unlock_spin(&cpu_if->lr_mtx);
 	}
-}
-
-void
-vgic_v3_irq_set_group(uint32_t irq, uint8_t group, struct hyp *hyp, int vcpuid)
-{
-	return;
 }
 
 static int

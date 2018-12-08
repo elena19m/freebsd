@@ -102,9 +102,9 @@ dist_ctlr_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 
 	if (reg_changed(wval, dist->gicd_ctlr, GICD_CTLR_G1A)) {
 		if (!(wval & GICD_CTLR_G1A))
-			vgic_v3_irq_toggle_group_enabled(1, false, hyp);
+			vgic_v3_irq_toggle_group_enabled(false, hyp);
 		else
-			vgic_v3_irq_toggle_group_enabled(1, true, hyp);
+			vgic_v3_irq_toggle_group_enabled(true, hyp);
 	}
 	dist->gicd_ctlr = wval;
 

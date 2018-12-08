@@ -164,8 +164,7 @@ void	vgic_v3_irq_set_priority(uint32_t irq, uint8_t priority,
 				 struct hyp *hyp, int vcpuid);
 void	vgic_v3_irq_set_group(uint32_t irq, uint8_t group,
 			      struct hyp *hyp, int vcpuid);
-void	vgic_v3_irq_toggle_group_enabled(int group, bool enabled,
-					 struct hyp *hyp);
+void	vgic_v3_irq_toggle_group_enabled(bool enabled, struct hyp *hyp);
 int	vgic_v3_irq_toggle_enabled(uint32_t irq, bool enabled,
 				   struct hyp *hyp, int vcpuid);
 
