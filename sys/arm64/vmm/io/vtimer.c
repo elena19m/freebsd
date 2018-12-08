@@ -142,41 +142,30 @@ vtimer_virtual_timer_intr(void *arg)
 
 	cntv_ctl = READ_SPECIALREG(cntv_ctl_el0);
 
-#if DEBUG_ME == 1
-	eprintf("Guest cntv_ctl = 0x%08x\n", hypctx->vtimer_cpu.cntv_ctl_el0);
-	eprintf("Old   cntv_ctl = 0x%08x\n", cntv_ctl);
-#endif
-
-	if (!timer_enabled(cntv_ctl)) {
-		eprintf("Guest has timer interrupt disabled\n");
+	/*
+	 * This can happen if we change the virtual machine running on the cpu
+	 * and a timer set by the previous guest fires before the current guest
+	 * has been initialized.
+	 */
+	if (!timer_enabled(cntv_ctl))
 		goto out;
-	}
-	if (!timer_condition_met(cntv_ctl)) {
-		eprintf("ISTATUS not set");
+	if (!timer_condition_met(cntv_ctl))
 		goto out;
-	}
 
 	vgic_v3_inject_irq(arg, 27, VGIC_IRQ_CLK);
 	count++;
-#if DEBUG_ME == 1
-	eprintf("Injected interrupt. Total: %d\n", count);
-#endif
 
 out:
 	/*
-	 * Also mask the timer interrupt for the guest. This will prevent
-	 * reasserting the timer interrupt as soon as we enter the guest, ending
-	 * up in an infinite loop.
+	 * Disable the timer interrupt. This will prevent the interrupt from
+	 * being reasserted as soon as we exit the handler and getting stuck
+	 * in an infinite loop.
 	 *
-	 * This is safe to do because the guest masks the timer interrupt as
-	 * part of the interrupt handling routine.
+	 * This is safe to do because the guest disabled the timer, and then
+	 * enables it as part of the interrupt handling routine.
 	 */
 	cntv_ctl &= ~CNTP_CTL_ENABLE;
 	WRITE_SPECIALREG(cntv_ctl_el0, cntv_ctl);
-
-#if DEBUG_ME == 1
-	eprintf("New   cntv_ctl = 0x%08x\n", cntv_ctl);
-#endif
 
 	return (FILTER_HANDLED);
 }
@@ -196,7 +185,7 @@ vtimer_cpuinit(void *arg)
 		printf("Unable to set up the virtual timer interrupt handler\n");
 
 	/*
-	 * Configure timer interrupts for the VCPU.
+	 * Configure physical timer interrupts for the VCPU.
 	 *
 	 * CNTP_CTL_IMASK: mask interrupts
 	 * ~CNTP_CTL_ENABLE: disable the timer
