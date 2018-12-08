@@ -12,6 +12,7 @@
 #define	GICR_FRAME_SGI	GICR_RD_BASE_SIZE
 
 #define	RES0	(0UL)
+#define	RES1	(~0UL)
 
 #define redist_simple_read(src, destp, vm, vcpuid)			\
 do {									\
@@ -682,45 +683,24 @@ redist_waker_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 	return (0);
 }
 
+/* Only group 1 interrupts are supported. Treat IGROUPR0 as RA0/WI. */
 static int
 redist_igroupr0_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
     int size, void *arg)
 {
-	struct hyp *hyp;
-	struct vgic_v3_redist *redist;
 	bool *retu = arg;
 
-	hyp = vm_get_cookie(vm);
-	redist = &hyp->ctx[vcpuid].vgic_redist;
-
-	*rval = redist->gicr_igroupr0;
-
-#if (DEBUG > 0)
-	eprintf("\n");
-#endif
-
+	*rval = RES1;
 	*retu = false;
 	return (0);
 }
 
+/* Only group 1 interrupts are supported. Treat IGROUPR0 as RA0/WI. */
 static int
 redist_igroupr0_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
     int size, void *arg)
 {
-	struct hyp *hyp;
-	struct vgic_v3_redist *redist;
 	bool *retu = arg;
-
-	hyp = vm_get_cookie(vm);
-	redist = &hyp->ctx[vcpuid].vgic_redist;
-
-	mmio_update_int_group((uint32_t)wval, redist->gicr_igroupr0, 0,
-	    hyp, vcpuid);
-	redist->gicr_igroupr0 = (uint32_t)wval;
-
-#if (DEBUG > 0)
-	eprintf("\n");
-#endif
 
 	*retu = false;
 	return (0);
@@ -1046,7 +1026,7 @@ redist_mmio_init_regions(struct hyp *hyp, int vcpuid)
 
 	start = redist->start + GICR_FRAME_SGI + GICR_IGROUPR0;
 	init_mmio_region(hyp, VGIC_GICR_IGROUPR0, start,
-	    sizeof(redist->gicr_igroupr0), redist_igroupr0_read, redist_igroupr0_write);
+	    sizeof(uint32_t), redist_igroupr0_read, redist_igroupr0_write);
 
 	start = redist->start + GICR_FRAME_SGI + GICR_ISENABLER0;
 	init_mmio_region(hyp, VGIC_GICR_ISENABLER0, start,
