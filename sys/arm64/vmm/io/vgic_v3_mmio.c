@@ -106,12 +106,6 @@ dist_ctlr_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 		else
 			vgic_v3_irq_toggle_group_enabled(1, true, hyp);
 	}
-	if (reg_changed(wval, dist->gicd_ctlr, GICD_CTLR_G1)) {
-		if (!(wval & GICD_CTLR_G1))
-			vgic_v3_irq_toggle_group_enabled(0, false, hyp);
-		else
-			vgic_v3_irq_toggle_group_enabled(0, true, hyp);
-	}
 	dist->gicd_ctlr = wval;
 
 	mtx_unlock_spin(&dist->dist_mtx);
