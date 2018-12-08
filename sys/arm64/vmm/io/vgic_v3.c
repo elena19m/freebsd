@@ -447,21 +447,10 @@ vgic_v3_intid_enabled(uint32_t irq, struct hypctx *hypctx)
 	return (true);
 }
 
-/* Check in the Distributor that the interrupt group hasn't been disabled */
-static bool
-vgic_v3_group_enabled(struct hypctx *hypctx)
+static inline bool
+dist_group_enabled(struct vgic_v3_dist *dist)
 {
-	struct vgic_v3_dist *dist;
-
-	dist = &hypctx->hyp->vgic_dist;
-
 	return ((dist->gicd_ctlr & GICD_CTLR_G1A) != 0);
-}
-
-static inline int
-vgic_v3_get_int_group(unsigned int irq, struct hypctx *hypctx)
-{
-	return (1);
 }
 
 //static int lr_cnt;
@@ -487,7 +476,7 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 	error = 0;
 	mtx_lock_spin(&dist->dist_mtx);
 
-	enabled = vgic_v3_group_enabled(hypctx) &&
+	enabled = dist_group_enabled(&hypctx->hyp->vgic_dist) &&
 	    vgic_v3_intid_enabled(irq, hypctx) &&
 	    vgic_v3_int_target(irq, hypctx);
 	priority = vgic_v3_get_priority(irq, hypctx);
@@ -553,19 +542,6 @@ vgic_v3_irq_set_priority(uint32_t irq, uint8_t priority,
 	}
 }
 
-static void
-vgic_v3_irq_set_group_vcpu(uint32_t irq, uint8_t group,
-    struct vgic_v3_cpu_if *cpu_if)
-{
-	return;
-}
-
-void
-vgic_v3_irq_set_group(uint32_t irq, uint8_t group, struct hyp *hyp, int vcpuid)
-{
-	return;
-}
-
 void
 vgic_v3_irq_toggle_group_enabled(int group, bool enabled, struct hyp *hyp)
 {
@@ -590,6 +566,12 @@ vgic_v3_irq_toggle_group_enabled(int group, bool enabled, struct hyp *hyp)
 
 		mtx_unlock_spin(&cpu_if->lr_mtx);
 	}
+}
+
+void
+vgic_v3_irq_set_group(uint32_t irq, uint8_t group, struct hyp *hyp, int vcpuid)
+{
+	return;
 }
 
 static int
@@ -669,7 +651,7 @@ vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
 		if (irq == IRQ_SCHEDULED)
 			continue;
 
-		if (!vgic_v3_group_enabled(hypctx))
+		if (!dist_group_enabled(&hypctx->hyp->vgic_dist))
 			continue;
 		if (!vgic_v3_int_target(irq, hypctx))
 			continue;
@@ -697,13 +679,19 @@ vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
 	return (&cpu_if->irqbuf[max_idx]);
 }
 
+static inline bool
+cpu_if_group_enabled(struct vgic_v3_cpu_if *cpu_if)
+{
+	return ((cpu_if->ich_vmcr_el2 & ICH_VMCR_EL2_VENG1) != 0);
+}
+
 static inline int
 vgic_v3_irqbuf_next_enabled(struct vgic_v3_irq *irqbuf, int start, int end,
     struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if)
 {
 	int i;
 
-	if (!(cpu_if->ich_vmcr_el2 & ICH_VMCR_EL2_VENG1))
+	if (!cpu_if_group_enabled(cpu_if))
 		return (-1);
 
 	for (i = start; i < end; i++)
