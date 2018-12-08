@@ -81,8 +81,6 @@ struct vgic_v3_dist {
 	uint32_t 	gicd_pidr2;	/* Distributor Peripheral ID2 Register */
 	/* Interrupt Configuration Registers. */
 	uint32_t	*gicd_icfgr;
-	/* Interrupt Group Register. */
-	uint32_t 	*gicd_igroupr;
 	/* Interrupt Priority Registers. */
 	uint32_t	*gicd_ipriorityr;
 	/* Interrupt Routing Registers. */
