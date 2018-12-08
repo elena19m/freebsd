@@ -104,7 +104,6 @@ struct vgic_v3_ro_regs {
 struct vgic_v3_irq {
 	uint32_t irq;
 	enum vgic_v3_irqtype irqtype;
-	uint8_t group;
 	uint8_t enabled;
 	uint8_t priority;
 };
@@ -112,7 +111,7 @@ struct vgic_v3_irq {
 #define	vip_to_lr(vip, lr)						\
 do {									\
 	lr = ICH_LR_EL2_STATE_PENDING;					\
-	lr |= (uint64_t)vip->group << ICH_LR_EL2_GROUP_SHIFT;		\
+	lr |= ICH_LR_EL2_GROUP1;					\
 	lr |= (uint64_t)vip->priority << ICH_LR_EL2_PRIO_SHIFT;		\
 	lr |= vip->irq;							\
 } while (0)
@@ -122,7 +121,6 @@ do {									\
 	(vip)->irq = ICH_LR_EL2_VINTID(lr);				\
 	(vip)->priority = \
 	    (uint8_t)(((lr) & ICH_LR_EL2_PRIO_MASK) >> ICH_LR_EL2_PRIO_SHIFT); \
-	(vip)->group = (uint8_t)(((lr) >> ICH_LR_EL2_GROUP_SHIFT) & 0x1); \
 } while (0)
 
 static struct vgic_v3_virt_features virt_features;
@@ -367,7 +365,7 @@ vgic_v3_int_target(uint32_t irq, struct hypctx *hypctx)
 	uint64_t irouter;
 	uint64_t aff;
 	uint32_t irq_off, irq_mask;
-	int n, group;
+	int n;
 
 	if (irq <= GIC_LAST_PPI)
 		return (true);
@@ -380,22 +378,11 @@ vgic_v3_int_target(uint32_t irq, struct hypctx *hypctx)
 	irq_mask = 1 << irq_off;
 	n = irq / 32;
 
-	if (n == 0)
-		group = (redist->gicr_igroupr0 & irq_mask) ? 1 : 0;
-	else
-		group = (dist->gicd_igroupr[n] & irq_mask) ? 1 : 0;
-
 	irouter = dist->gicd_irouter[irq];
 	/* Check if 1-of-N routing is active */
-	if (irouter & GICD_IROUTER_IRM) {
+	if (irouter & GICD_IROUTER_IRM)
 		/* Check if the VCPU is participating */
-		switch (group) {
-		case (0):
-			return (redist->gicr_ctlr & GICR_CTLR_DPG0 ? true : false);
-		case (1):
-			return (redist->gicr_ctlr & GICR_CTLR_DPG1NS ? true : false);
-		}
-	}
+		return (redist->gicr_ctlr & GICR_CTLR_DPG1NS ? true : false);
 
 	aff = redist->gicr_typer >> GICR_TYPER_AFF_SHIFT;
 	/* Affinity in format for comparison with irouter */
@@ -462,40 +449,19 @@ vgic_v3_intid_enabled(uint32_t irq, struct hypctx *hypctx)
 
 /* Check in the Distributor that the interrupt group hasn't been disabled */
 static bool
-vgic_v3_group_enabled(int group, struct hypctx *hypctx)
+vgic_v3_group_enabled(struct hypctx *hypctx)
 {
-	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
+	struct vgic_v3_dist *dist;
 
-	if (group == 1 && !(dist->gicd_ctlr & GICD_CTLR_G1A))
-		return (false);
+	dist = &hypctx->hyp->vgic_dist;
 
-	if (group == 0 && !(dist->gicd_ctlr & GICD_CTLR_G1))
-		return (false);
-
-	return (true);
+	return ((dist->gicd_ctlr & GICD_CTLR_G1A) != 0);
 }
 
 static inline int
 vgic_v3_get_int_group(unsigned int irq, struct hypctx *hypctx)
 {
-	struct vgic_v3_dist *dist;
-	struct vgic_v3_redist *redist;
- 	uint32_t irq_mask;
-	int n;
-	int group;
-
-	irq_mask = 1 << irq;
-	n = irq / 32;
-
- 	if (irq <= GIC_LAST_PPI) {
-		redist = &hypctx->vgic_redist;
-		group = (redist->gicr_igroupr0 & irq_mask) ? 1 : 0;
-	} else {
-		dist = &hypctx->hyp->vgic_dist;
-		group = (dist->gicd_igroupr[n] & irq_mask) ? 1 : 0;
-	}
-
-	return group;
+	return (1);
 }
 
 //static int lr_cnt;
@@ -507,7 +473,6 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 	struct vgic_v3_dist *dist = &hypctx->hyp->vgic_dist;
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	struct vgic_v3_irq *vip;
-	int group;
 	int error;
 	uint8_t priority;
 	bool enabled;
@@ -522,9 +487,7 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 	error = 0;
 	mtx_lock_spin(&dist->dist_mtx);
 
-	/* XXX GIC{R, D}_IGROUPMODR set the secure/non-secure bit */
-	group  = vgic_v3_get_int_group(irq, hypctx);
-	enabled = vgic_v3_group_enabled(group, hypctx) &&
+	enabled = vgic_v3_group_enabled(hypctx) &&
 	    vgic_v3_intid_enabled(irq, hypctx) &&
 	    vgic_v3_int_target(irq, hypctx);
 	priority = vgic_v3_get_priority(irq, hypctx);
@@ -539,7 +502,6 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 	}
 	vip->irq = irq;
 	vip->irqtype = irqtype;
-	vip->group = group;
 	vip->enabled = enabled;
 	vip->priority = priority;
 
@@ -595,40 +557,13 @@ static void
 vgic_v3_irq_set_group_vcpu(uint32_t irq, uint8_t group,
     struct vgic_v3_cpu_if *cpu_if)
 {
-	int i;
-
-	mtx_lock_spin(&cpu_if->lr_mtx);
-
-	for (i = 0; i < cpu_if->irqbuf_num; i++)
-		if (cpu_if->irqbuf[i].irq == irq)
-			cpu_if->irqbuf[i].group = group;
-
-	for (i = 0; i < cpu_if->ich_lr_num; i++)
-		if (lr_pending(cpu_if->ich_lr_el2[i])) {
-			cpu_if->ich_lr_el2[i] &= ~(1UL << ICH_LR_EL2_GROUP_SHIFT);
-			cpu_if->ich_lr_el2[i] |= \
-			    (uint64_t)group << ICH_LR_EL2_GROUP_SHIFT;
-		}
-
-	mtx_unlock_spin(&cpu_if->lr_mtx);
+	return;
 }
 
 void
 vgic_v3_irq_set_group(uint32_t irq, uint8_t group, struct hyp *hyp, int vcpuid)
 {
-	struct vgic_v3_cpu_if *cpu_if;
-	int i;
-
-	if (irq <= GIC_LAST_PPI) {
-		cpu_if = &hyp->ctx[vcpuid].vgic_cpu_if;
-		vgic_v3_irq_set_group_vcpu(irq, group, cpu_if);
-	} else {
-		/* TODO: Update irqbuf for all VCPUs, not just VCPU 0 */
-		for (i = 0; i < 1; i++) {
-			cpu_if = &hyp->ctx[i].vgic_cpu_if;
-			vgic_v3_irq_set_group_vcpu(irq, group, cpu_if);
-		}
-	}
+	return;
 }
 
 void
@@ -647,8 +582,6 @@ vgic_v3_irq_toggle_group_enabled(int group, bool enabled, struct hyp *hyp)
 
 		for (j = 0; j < cpu_if->irqbuf_num; j++) {
 			vip = &cpu_if->irqbuf[j];
-			if (vip->group != group)
-				continue;
 			if (!enabled)
 				vip->enabled = 0;
 			else if (vgic_v3_intid_enabled(vip->irq, hypctx))
@@ -664,7 +597,6 @@ vgic_v3_irq_toggle_enabled_vcpu(uint32_t irq, bool enabled,
     struct vgic_v3_cpu_if *cpu_if)
 {
 	//struct vgic_v3_irq *vip;
-	//int group;
 	int i;
 
 	mtx_lock_spin(&cpu_if->lr_mtx);
@@ -675,11 +607,8 @@ vgic_v3_irq_toggle_enabled_vcpu(uint32_t irq, bool enabled,
 		 * disabled
 		 */
 		for (i = 0; i < cpu_if->irqbuf_num; i++)
-			if (cpu_if->irqbuf[i].irq == irq) {
-				/* TODO: Check if group is enabled */
-				//group = vgic_v3_get_int_group(irq, cpu_if);
+			if (cpu_if->irqbuf[i].irq == irq)
 				cpu_if->irqbuf[i].enabled = true;
-			}
 	} else {
 		/* Remove the disabled IRQ from the LR regs if it is pending */
 		for (i = 0; i < cpu_if->ich_lr_num; i++)
@@ -725,7 +654,7 @@ vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
     struct hypctx *hypctx)
 {
 	uint32_t irq;
-	int i, max_idx, group;
+	int i, max_idx;
 	uint8_t priority, max_priority;
 	uint8_t vpmr;
 
@@ -740,12 +669,8 @@ vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
 		if (irq == IRQ_SCHEDULED)
 			continue;
 
-		group = vgic_v3_get_int_group(irq, hypctx);
-		if (!vgic_v3_group_enabled(group, hypctx))
+		if (!vgic_v3_group_enabled(hypctx))
 			continue;
-		if (!vgic_v3_intid_enabled(irq, hypctx))
-			continue;
-
 		if (!vgic_v3_int_target(irq, hypctx))
 			continue;
 
@@ -776,19 +701,14 @@ static inline int
 vgic_v3_irqbuf_next_enabled(struct vgic_v3_irq *irqbuf, int start, int end,
     struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if)
 {
-	int group;
 	int i;
 
-	for (i = start; i < end; i++) {
-		if (!irqbuf[i].enabled)
-			continue;
-		group = vgic_v3_get_int_group(irqbuf[i].irq, hypctx);
-		if (group == 1 && !(cpu_if->ich_vmcr_el2 & ICH_VMCR_EL2_VENG1))
-			continue;
-		if (group == 0 && !(cpu_if->ich_vmcr_el2 & ICH_VMCR_EL2_VENG0))
-			continue;
-		break;
-	}
+	if (!(cpu_if->ich_vmcr_el2 & ICH_VMCR_EL2_VENG1))
+		return (-1);
+
+	for (i = start; i < end; i++)
+		if (irqbuf[i].enabled)
+			break;
 
 	if (i < end)
 		return (i);
