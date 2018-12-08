@@ -543,7 +543,7 @@ vgic_v3_irq_set_priority(uint32_t irq, uint8_t priority,
 }
 
 void
-vgic_v3_irq_toggle_group_enabled(bool enabled, struct hyp *hyp)
+vgic_v3_group_toggle_enabled(bool enabled, struct hyp *hyp)
 {
 	struct hypctx *hypctx;
 	struct vgic_v3_cpu_if *cpu_if;
