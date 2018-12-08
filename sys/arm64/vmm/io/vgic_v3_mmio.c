@@ -144,32 +144,14 @@ dist_typer_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 	return (0);
 }
 
-static void
-mmio_update_int_group(uint32_t new_igroupr, uint32_t old_igroupr,
-    uint32_t irq, struct hyp *hyp, int vcpuid)
-{
-	uint32_t irq_mask;
-	int i;
-	uint8_t group;
-
-	irq_mask = 0x1;
-	for (i = 0; i < 32; i++) {
-		if (reg_changed(new_igroupr, old_igroupr, irq_mask)) {
-			group = (uint8_t)((new_igroupr >> i) & 0x1);
-			vgic_v3_irq_set_group(irq, group, hyp, vcpuid);
-		}
-		irq++;
-		irq_mask <<= 1;
-	}
-}
-
+/* Only group 1 interrupts are supported. Treat IGROUPR as RA0/WI. */
 static int
 dist_igroupr_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
     int size, void *arg)
 {
 	struct hyp *hyp;
 	struct vgic_v3_dist *dist;
-	size_t n;
+	int n;
 	bool *retu = arg;
 
 	hyp = vm_get_cookie(vm);
@@ -177,49 +159,28 @@ dist_igroupr_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
 
 	n = reg32_idx(fault_ipa, hyp->vgic_mmio_regions[VGIC_GICD_IGROUPR]);
 	/*
-	 * GIC Architecture specification, p 8-477: "When ARE is 1 for the
-	 * Security state of an interrupt, the field for that interrupt is RES0
-	 * and an implementation is permitted to* make the field RAZ/WI in this
-	 * case".
+	 * GIC Architecture specification, p 8-477: "For SGIs and PPIs: When
+	 * ARE is 1 for the Security state of an interrupt, the field for that
+	 * interrupt is RES0 and an implementation is permitted to make the
+	 * field RAZ/WI in this case".
 	 */
 	if (n == 0 && aff_routing_en(dist)) {
 		*rval = RES0;
-		goto out;
+	} else {
+		*rval = RES1;
 	}
 
-	mtx_lock_spin(&dist->dist_mtx);
-	*rval = dist->gicd_igroupr[n];
-	mtx_unlock_spin(&dist->dist_mtx);
-
-out:
 	*retu = false;
 	return (0);
 }
 
+/* Only group 1 interrupts are supported. Treat IGROUPR as RA0/WI. */
 static int
 dist_igroupr_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
     int size, void *arg)
 {
-	struct hyp *hyp;
-	struct vgic_v3_dist *dist;
-	size_t n;
 	bool *retu = arg;
 
-	hyp = vm_get_cookie(vm);
-	dist = &hyp->vgic_dist;
-
-	n = reg32_idx(fault_ipa, hyp->vgic_mmio_regions[VGIC_GICD_IGROUPR]);
-	/* See dist_igroupr_read() */
-	if (n == 0 && aff_routing_en(dist))
-		/* Ignore writes */
-		goto out;
-
-	mtx_lock_spin(&dist->dist_mtx);
-	mmio_update_int_group(wval, dist->gicd_igroupr[n], n * 32, hyp, vcpuid);
-	dist->gicd_igroupr[n] = wval;
-	mtx_unlock_spin(&dist->dist_mtx);
-
-out:
 	*retu = false;
 	return (0);
 }
@@ -954,10 +915,8 @@ dist_mmio_init_regions(struct vgic_v3_dist *dist, struct hyp *hyp)
 	    sizeof(dist->gicd_typer), dist_typer_read, dist_typer_write);
 
 	n = div_round_up(dist->nirqs, 32);
-	alloc_registers(dist->gicd_igroupr, n, region_size);
 	init_mmio_region(hyp, VGIC_GICD_IGROUPR, dist->start + GICD_IGROUPR_BASE,
-	    region_size, dist_igroupr_read, dist_igroupr_write);
-
+	    n * sizeof(uint32_t), dist_igroupr_read, dist_igroupr_write);
 
 	/* ARM GIC Architecture Specification, page 8-471. */
 	n = (dist->gicd_typer & GICD_TYPER_ITLINESNUM_MASK) + 1;
@@ -977,11 +936,6 @@ dist_mmio_init_regions(struct vgic_v3_dist *dist, struct hyp *hyp)
 	alloc_registers(dist->gicd_icfgr, n, region_size);
 	init_mmio_region(hyp, VGIC_GICD_ICFGR, dist->start + GICD_ICFGR_BASE,
 	    region_size, dist_icfgr_read, dist_icfgr_write);
-
-	n = div_round_up(dist->nirqs, 32);
-	alloc_registers(dist->gicd_igroupr, n, region_size);
-	init_mmio_region(hyp, VGIC_GICD_IGROUPR, dist->start + GICD_IGROUPR_BASE,
-	    region_size, dist_igroupr_read, dist_igroupr_write);
 
 	/* ARM GIC Architecture Specification, page 8-485. */
 	n = 32 * (dist->gicd_typer & GICD_TYPER_ITLINESNUM_MASK + 1) - 1;
@@ -1084,7 +1038,6 @@ vgic_v3_mmio_destroy(struct hyp *hyp)
 		return;
 	free(hyp->vgic_mmio_regions, M_VGIC_V3_MMIO);
 
-	free(dist->gicd_igroupr, M_VGIC_V3_MMIO);
 	free(dist->gicd_ixenabler, M_VGIC_V3_MMIO);
 	free(dist->gicd_ipriorityr, M_VGIC_V3_MMIO);
 	free(dist->gicd_icfgr, M_VGIC_V3_MMIO);
