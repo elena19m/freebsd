@@ -99,7 +99,6 @@ struct vgic_v3_redist {
 
 	uint64_t	gicr_typer;	/* Redistributor Type Register */
 	uint32_t	gicr_ctlr;	/* Redistributor Control Regiser */
-	uint32_t	gicr_igroupr0;	/* Interrupt Group Register 0 */
 	uint32_t	gicr_ixenabler0;
 	/* Interrupt Priority Registers. */
 	uint32_t	gicr_ipriorityr[VGIC_PRV_I_NUM / 4];
