@@ -498,6 +498,8 @@ vgic_v3_get_int_group(unsigned int irq, struct hypctx *hypctx)
 	return group;
 }
 
+//static int lr_cnt;
+
 int
 vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 {
@@ -517,61 +519,14 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 		return (1);
 	}
 
-#if 0
-	/* Make there aren't two timer interrupts scheduled at the same time */
-	uint64_t lr;
-	int i;
-	if (irqtype == VGIC_IRQ_CLK) {
-		for (i = 0; i < cpu_if->ich_lr_num; i++) {
-			lr = cpu_if->ich_lr_el2[i];
-			if (ICH_LR_EL2_VINTID(lr) == irq) {
-				if (lr_pending(lr)) {
-					/*
-					 * Guest lagging behind timer interrupts. Do not
-					 * speed it up by injecting interrupts one right
-					 * after the other.
-					 */
-					eprintf("WARNING: Timer interrupt already pending. Skipping\n");
-					return (0);
-				}
-			}
-		}
-	}
-#endif
-
-	int i;
-	if (irqtype == VGIC_IRQ_CLK) {
-		for (i = 0; i < cpu_if->irqbuf_num; i++)
-			if (cpu_if->irqbuf[i].irq == irq) {
-				eprintf("WARNING: Timer interrupt already buffered. Skipping\n");
-				return (0);
-			}
-	}
-
-#if DEBUG_ME == 1
-	int cnt = 0;
-	for (i = 0; i < cpu_if->irqbuf_num; i++)
-		if (cpu_if->irqbuf[i].irq == irq)
-			cnt++;
-	if (cnt > 0)
-		eprintf("Injecting IRQ %u, in buffer = %d\n", irq, cnt);
-
-	cnt = 0;
-	for (i = 0; i < cpu_if->ich_lr_num; i++)
-		if ((cpu_if->ich_lr_el2[i] & (uint64_t)0xffffffff) == (uint64_t)irq)
-			cnt++;
-	if (irq == 27)
-		eprintf("Injecting %u, lr pending = %d\n", irq, cnt);
-#endif
-
 	error = 0;
 	mtx_lock_spin(&dist->dist_mtx);
 
 	/* XXX GIC{R, D}_IGROUPMODR set the secure/non-secure bit */
 	group  = vgic_v3_get_int_group(irq, hypctx);
-	enabled = vgic_v3_group_enabled(group, hypctx);
-	enabled = enabled && vgic_v3_intid_enabled(irq, hypctx);
-	enabled = enabled && vgic_v3_int_target(irq, hypctx);
+	enabled = vgic_v3_group_enabled(group, hypctx) &&
+	    vgic_v3_intid_enabled(irq, hypctx) &&
+	    vgic_v3_int_target(irq, hypctx);
 	priority = vgic_v3_get_priority(irq, hypctx);
 
 	mtx_lock_spin(&cpu_if->lr_mtx);
@@ -587,10 +542,6 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 	vip->group = group;
 	vip->enabled = enabled;
 	vip->priority = priority;
-
-#if DEBUG_ME == 1
-	eprintf("Injecting IRQ %u\n", irq);
-#endif
 
 out_unlock:
 	mtx_unlock_spin(&cpu_if->lr_mtx);
@@ -821,7 +772,7 @@ vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
 	return (&cpu_if->irqbuf[max_idx]);
 }
 
-static int
+static inline int
 vgic_v3_irqbuf_next_enabled(struct vgic_v3_irq *irqbuf, int start, int end,
     struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if)
 {
@@ -867,12 +818,36 @@ vgic_v3_irqbuf_to_lr(struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if)
 	uint64_t lr;
 	int irqbuf_idx;
 	int lr_idx;
-	bool clk_active;
+	bool clk_injected;
 
+	clk_injected = false;
 	for (lr_idx = 0; lr_idx < cpu_if->ich_lr_num; lr_idx++) {
 		lr = cpu_if->ich_lr_el2[lr_idx];
-		if (lr_active(lr) || lr_pending_active(lr)) {
-			clk_active = true;
+		/*
+		 * There are two cases in which the virtual timer interrupt is
+		 * in the list registers:
+		 *
+		 * 1. The virtual interrupt is active. The guest is executing
+		 * the interrupt handler, and the timer fired before the guest
+		 * has written to the EOR register (the interrupt handler hasn't
+		 * finished executing).
+		 *
+		 * 2. The virtual interrupt is pending. Because the virtual timer
+		 * handler disables the timer, this can only happen if there
+		 * were two or more timer interrupts in the buffer (see the case
+		 * above), and one of them was added to the List Registers as
+		 * pending in the previous world switch.
+		 *
+		 * Injecting the interrupt in these cases would mean that
+		 * another timer interrupt is asserted as soon as the guest
+		 * writes to the EOR register. This can lead to the guest being
+		 * stuck servicing timer interrupts and doing nothing else. So
+		 * do not inject a timer interrupt while one is active or
+		 * pending. Buffered interrupts will be injected after the next
+		 * world switch.
+		 */
+		if (ICH_LR_EL2_VINTID(lr) == 27 && !lr_inactive(lr)) {
+			clk_injected = true;
 			break;
 		}
 	}
@@ -892,19 +867,14 @@ vgic_v3_irqbuf_to_lr(struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if)
 			break;
 
 		vip = &cpu_if->irqbuf[irqbuf_idx];
-		if (vip->irqtype == VGIC_IRQ_CLK && clk_active) {
+		if (vip->irqtype == VGIC_IRQ_CLK && clk_injected) {
+			/* Do not swamp guest with timer interrupts. */
 			irqbuf_idx++;
 			continue;
 		}
 
 		/* Copy the IRQ to the LR register */
 		vip_to_lr(vip, cpu_if->ich_lr_el2[lr_idx]);
-
-#if DEBUG_ME == 1
-		eprintf("irqbuf_idx = %d\n", irqbuf_idx);
-		eprintf("lr_idx = %d\n", lr_idx);
-		eprintf("irq = %u\n", vip->irq);
-#endif
 
 		/* Mark the buffered interrupt as scheduled... */
 		vip->irq = IRQ_SCHEDULED;
@@ -914,10 +884,7 @@ vgic_v3_irqbuf_to_lr(struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if)
 		lr_idx++;
 	}
 
-	/* Remove all interrupts that were scheduled now */
-#if DEBUG_ME == 1
-	eprintf("Done\n\n");
-#endif
+	/* Remove all interrupts that were just scheduled. */
 	vgic_v3_irqbuf_remove_nolock(IRQ_SCHEDULED, cpu_if);
 }
 
