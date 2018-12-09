@@ -21,6 +21,11 @@
 		serial3 = &v2m_serial3;
 	};
 
+	psci {
+		compatible = "arm,psci-1.0";
+		method="hvc";
+	};
+
 	cpus {
 		#address-cells = <2>;
 		#size-cells = <0>;
