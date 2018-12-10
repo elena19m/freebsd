@@ -102,37 +102,27 @@ hyp_init_vectors:
 ENTRY(handle_hyp_init)
 	/* Install the new exception vectors */
 	msr	vbar_el2, x0
-
 	/* Set the stack top address */
 	mov	sp, x2
-
 	/* Use the host VTTBR_EL2 to tell the host and the guests apart */
 	mov	x9, #VTTBR_HOST
 	msr	vttbr_el2, x9
-
 	/* Load the base address for the translation tables */
 	msr	ttbr0_el2, x1
-
 	/* Invalidate the TLB */
 	tlbi	alle2
-
 	/* Use the same memory attributes as EL1 */
 	mrs	x9, mair_el1
 	msr	mair_el2, x9
-
 	/* Configure address translation */
 	msr	tcr_el2, x3
 	isb
-
 	/* Set the system control register for EL2 */
 	msr	sctlr_el2, x4
-
 	/* Set the Stage 2 translation control register */
 	msr	vtcr_el2, x5
-
 	/* Return success */
 	mov	x0, #0
-
 	/* MMU is up and running */
 	eret
 END(handle_hyp_init)
@@ -177,28 +167,28 @@ hyp_vectors:
 	SAVE_EXIT_INFO()
 
 	/* Restore host VTTBR */
-	mov	x1, #VTTBR_HOST
-	msr	vttbr_el2, x1
+	mov	x9, #VTTBR_HOST
+	msr	vttbr_el2, x9
 .endm
 
 
 .macro handle_el2_excp type
 	.align 	7
 	/* Save registers before modifying so we can restore them */
-	str	x1, [sp, #-16]!
+	str	x9, [sp, #-16]!
 
 	/* Test if the exception happened when the host was running */
-	mrs	x1, vttbr_el2
-	cmp	x1, #VTTBR_HOST
+	mrs	x9, vttbr_el2
+	cmp	x9, #VTTBR_HOST
 	beq	1f
 
 	/* We got the exception while the guest was running */
-	ldr	x1, [sp], #16
+	ldr	x9, [sp], #16
 	do_world_switch_to_host
 	b	2f
 1:
 	/* We got the exception while the host was running */
-	ldr	x1, [sp], #16
+	ldr	x9, [sp], #16
 2:
 	mov	x0, \type
 	eret
@@ -224,15 +214,15 @@ END(handle_el2_el2h_sync)
 
 ENTRY(handle_el2_el1_sync64)
 	/* Save registers before modifying so we can restore them */
-	str	x19, [sp, #-16]!
+	str	x9, [sp, #-16]!
 
 	/* Check for host hypervisor call */
-	mrs	x19, vttbr_el2
-	cmp	x19, #VTTBR_HOST
+	mrs	x9, vttbr_el2
+	cmp	x9, #VTTBR_HOST
 	beq	1f
 
 	/* Restore register */
-	ldr	x19, [sp], #16
+	ldr	x9, [sp], #16
 
 	/* Guest exception taken to EL2 */
 	do_world_switch_to_host
@@ -241,7 +231,7 @@ ENTRY(handle_el2_el1_sync64)
 
 1:
 	/* Restore register */
-	ldr	x19, [sp], #16
+	ldr	x9, [sp], #16
 
 	cmp 	x0, #HYP_GET_VECTOR_TABLE
 	beq 	2f
