@@ -60,8 +60,9 @@
 
 #include "vmm_stat.h"
 #include "vmm_mem.h"
-#include "mmu.h"
 #include "arm64.h"
+#include "mmu.h"
+#include "psci.h"
 
 #include "io/vgic_v3.h"
 #include "io/vtimer.h"
@@ -422,6 +423,21 @@ out_user:
 	return (0);
 }
 
+static int
+vm_handle_hvc(struct vm *vm, int vcpuid, bool *retu)
+{
+	struct hyp *hyp;
+	struct hypctx *hypctx;
+	int error;
+
+	hyp = vm->cookie;
+	hypctx = &hyp->ctx[vcpuid];
+
+	error = handle_psci_call(hypctx, retu);
+
+	return (error);
+}
+
 int
 vm_run(struct vm *vm, struct vm_run *vmrun)
 {
@@ -458,6 +474,15 @@ restart:
 		case VM_EXITCODE_REG_EMUL:
 			pc = vme->pc + vme->inst_length;
 			error = vm_handle_reg_emul(vm, vcpuid, &retu);
+			break;
+
+		case VM_EXITCODE_HVC:
+			/*
+			 * The HVC instruction saves the address for the
+			 * next instruction as the return address.
+			 */
+			pc = vme->pc;
+			error = vm_handle_hvc(vm, vcpuid, &retu);
 			break;
 
 		case VM_EXITCODE_WFI:

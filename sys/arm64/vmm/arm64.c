@@ -284,7 +284,6 @@ arm_vminit(struct vm *vm)
 		 * HCR_RW: use AArch64 for EL1
 		 * HCR_BSU_IS: barrier instructions apply to the inner shareable
 		 * domain
-		 * HCR_HCD: disable the HVC instruction from EL1 ** HVC ENABLED FOR NOW **
 		 * HCR_SWIO: turn set/way invalidate into set/way clean and
 		 * invalidate
 		 * HCR_FB: broadcast maintenance operations
@@ -473,6 +472,8 @@ arm64_gen_reg_emul_data(uint32_t esr_iss, struct vm_exit *vme_ret)
 	vre->reg = get_vm_reg_name(reg_num, UNUSED);
 }
 
+static bool print_stuff = false;
+
 static int
 handle_el1_sync_excp(struct hyp *hyp, int vcpu, struct vm_exit *vme_ret)
 {
@@ -487,13 +488,9 @@ handle_el1_sync_excp(struct hyp *hyp, int vcpu, struct vm_exit *vme_ret)
 		arm64_print_hyp_regs(vme_ret);
 		vme_ret->exitcode = VM_EXITCODE_HYP;
 		break;
-
 	case EXCP_HVC:
-		eprintf("Unsupported HVC call from guest\n");
-		arm64_print_hyp_regs(vme_ret);
-		vme_ret->exitcode = VM_EXITCODE_HYP;
+		vme_ret->exitcode = VM_EXITCODE_HVC;
 		break;
-
 	case EXCP_MSR:
 		arm64_gen_reg_emul_data(esr_iss, vme_ret);
 		vme_ret->exitcode = VM_EXITCODE_REG_EMUL;
@@ -596,7 +593,6 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 
 	for (;;) {
 		daif = intr_disable();
-
 		vgic_v3_sync_hwstate(hypctx);
 		excp_type = vmm_call_hyp((void *)ktohyp(vmm_enter_guest),
 		    ktohyp(hypctx));
