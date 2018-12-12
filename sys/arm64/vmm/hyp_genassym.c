@@ -104,6 +104,7 @@ ASSYM(HYPCTX_HYP, offsetof(struct hypctx, hyp));
 
 ASSYM(HYP_VTTBR_EL2, offsetof(struct hyp, vttbr_el2));
 ASSYM(HYP_VTIMER_CNTHCTL_EL2, offsetof(struct hyp, vtimer.cnthctl_el2));
+ASSYM(HYP_VTIMER_CNTVOFF_EL2, offsetof(struct hyp, vtimer.cntvoff_el2));
 
 ASSYM(HYPCTX_EXIT_INFO_ESR_EL2, offsetof(struct hypctx, exit_info.esr_el2));
 ASSYM(HYPCTX_EXIT_INFO_FAR_EL2, offsetof(struct hypctx, exit_info.far_el2));

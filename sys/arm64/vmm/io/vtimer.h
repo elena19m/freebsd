@@ -68,6 +68,7 @@
 struct vtimer
 {
 	uint64_t	cnthctl_el2;
+	uint64_t	cntvoff_el2;
 	int		phys_ns_irq;
 	bool		attached;
 };
