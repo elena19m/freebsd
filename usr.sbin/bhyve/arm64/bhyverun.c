@@ -225,12 +225,32 @@ vmexit_inst_emul(struct vmctx *ctx, struct vm_exit *vmexit, int *pvcpu)
 	return (VMEXIT_CONTINUE);
 }
 
+static int
+vmexit_suspend(struct vmctx *ctx, struct vm_exit *vmexit, int *pvcpu)
+{
+	enum vm_suspend_how how;
+
+	how = vmexit->u.suspended.how;
+
+	switch (how) {
+	case VM_SUSPEND_POWEROFF:
+		return (VMEXIT_RESET);
+	case VM_SUSPEND_RESET:
+	case VM_SUSPEND_HALT:
+	case VM_SUSPEND_TRIPLEFAULT:
+	default:
+		fprintf(stderr, "vmexit_suspend: invalid or unimplemented reason %d\n", how);
+		exit(100);
+	}
+
+}
 
 static vmexit_handler_t handler[VM_EXITCODE_MAX] = {
-	[VM_EXITCODE_HYP]    = vmexit_hyp,
 	[VM_EXITCODE_BOGUS]  = vmexit_bogus,
 	[VM_EXITCODE_INST_EMUL] = vmexit_inst_emul,
 	[VM_EXITCODE_REG_EMUL] = vmexit_hyp,
+	[VM_EXITCODE_SUSPENDED] = vmexit_suspend,
+	[VM_EXITCODE_HYP]    = vmexit_hyp,
 };
 
 static void
