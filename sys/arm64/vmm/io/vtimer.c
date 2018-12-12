@@ -114,6 +114,7 @@ void
 vtimer_vminit(void *arg)
 {
 	struct hyp *hyp;
+	uint64_t now;
 
 	hyp = (struct hyp *)arg;
 	/*
@@ -124,6 +125,9 @@ vtimer_vminit(void *arg)
 	 */
 	hyp->vtimer.cnthctl_el2 = cnthctl_el2_reg & ~CNTHCTL_EL1PCEN;
 	hyp->vtimer.cnthctl_el2 |= CNTHCTL_EL1PCTEN;
+
+	now = READ_SPECIALREG(cntpct_el0);
+	hyp->vtimer.cntvoff_el2 = now;
 
 	return;
 }
