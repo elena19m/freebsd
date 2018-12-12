@@ -472,7 +472,7 @@ arm64_gen_reg_emul_data(uint32_t esr_iss, struct vm_exit *vme_ret)
 	vre->reg = get_vm_reg_name(reg_num, UNUSED);
 }
 
-static bool print_stuff = false;
+//static bool print_stuff = false;
 
 static int
 handle_el1_sync_excp(struct hyp *hyp, int vcpu, struct vm_exit *vme_ret)
