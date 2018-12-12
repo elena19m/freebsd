@@ -5,10 +5,7 @@
 .include <src.opts.mk>
 
 PROG=	bhyvectl
-SRCS=	bhyvectl.c
 PACKAGE=	bhyve
-
-MAN=	bhyvectl.8
 
 LIBADD=	vmmapi util
 
@@ -20,4 +17,5 @@ CFLAGS+= -I${SRCTOP}/sys/amd64/vmm
 CFLAGS+= -DBHYVE_SNAPSHOT
 .endif
 
+.include "${.CURDIR}/${MACHINE}/Makefile.inc"
 .include <bsd.prog.mk>

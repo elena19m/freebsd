@@ -8,4 +8,5 @@ SUBDIR+=	ofwdump
 .if ${MK_BHYVE} != "no"
 SUBDIR+=	bhyve
 SUBDIR+=	bhyveload
+SUBDIR+=	bhyvectl
 .endif
