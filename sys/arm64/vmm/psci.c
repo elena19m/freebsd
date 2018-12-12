@@ -36,12 +36,37 @@
 
 #define PSCI_VERSION_0_2	0x2
 
-int
-handle_psci_call(struct hypctx *hypctx, bool *retu)
+static int
+psci_version(struct hypctx *hypctx, bool *retu)
 {
+
+	hypctx->regs.x[0] = PSCI_VERSION_0_2;
+
+	*retu = false;
+	return (0);
+}
+
+static int
+psci_system_off(struct vm_exit *vme, bool *retu)
+{
+	vme->u.suspended.how = VM_SUSPEND_POWEROFF;
+	vme->exitcode = VM_EXITCODE_SUSPENDED;
+
+	*retu = true;
+	return (0);
+}
+
+int
+psci_handle_call(struct vm *vm, int vcpuid, struct vm_exit *vme, bool *retu)
+{
+	struct hyp *hyp;
+	struct hypctx *hypctx;
 	uint64_t func_id;
 	uint32_t esr_el2, esr_iss;
 	int error;
+
+	hyp = vm_get_cookie(vm);
+	hypctx = &hyp->ctx[vcpuid];
 
 	esr_el2 = hypctx->exit_info.esr_el2;
 	esr_iss = esr_el2 & ESR_ELx_ISS_MASK;
@@ -54,11 +79,12 @@ handle_psci_call(struct hypctx *hypctx, bool *retu)
 	}
 
 	func_id = hypctx->regs.x[0];
-
-	error = 0;
 	switch (func_id) {
 	case PSCI_FNID_VERSION:
-		hypctx->regs.x[0] = PSCI_VERSION_0_2;
+		error = psci_version(hypctx, retu);
+		break;
+	case PSCI_FNID_SYSTEM_OFF:
+		error = psci_system_off(vme, retu);
 		break;
 	default:
 		eprintf("Unimplemented PSCI function: 0x%016lx\n", func_id);
@@ -67,6 +93,5 @@ handle_psci_call(struct hypctx *hypctx, bool *retu)
 	}
 
 out:
-	*retu = false;
 	return (error);
 }

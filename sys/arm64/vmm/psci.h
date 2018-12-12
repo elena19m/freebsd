@@ -29,6 +29,7 @@
 
 #include "arm64.h"
 
-int	handle_psci_call(struct hypctx *hypctx, bool *retu);
+int	psci_handle_call(struct vm *vm, int vcpuid, struct vm_exit *vme,
+    bool *retu);
 
 #endif
