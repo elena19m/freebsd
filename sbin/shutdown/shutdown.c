@@ -343,7 +343,7 @@ timewarn(int timeleft)
 	if (!setjmp(alarmbuf)) {
 		(void)signal(SIGALRM, timeout);
 		(void)alarm((u_int)30);
-		(void)pclose(pf);
+		//(void)pclose(pf);
 		(void)alarm((u_int)0);
 		(void)signal(SIGALRM, SIG_DFL);
 	}
