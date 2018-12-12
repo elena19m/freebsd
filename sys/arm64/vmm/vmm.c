@@ -423,21 +423,6 @@ out_user:
 	return (0);
 }
 
-static int
-vm_handle_hvc(struct vm *vm, int vcpuid, bool *retu)
-{
-	struct hyp *hyp;
-	struct hypctx *hypctx;
-	int error;
-
-	hyp = vm->cookie;
-	hypctx = &hyp->ctx[vcpuid];
-
-	error = handle_psci_call(hypctx, retu);
-
-	return (error);
-}
-
 int
 vm_run(struct vm *vm, struct vm_run *vmrun)
 {
@@ -482,7 +467,11 @@ restart:
 			 * next instruction as the return address.
 			 */
 			pc = vme->pc;
-			error = vm_handle_hvc(vm, vcpuid, &retu);
+			/*
+			 * The PSCI call can change the exit information in the
+			 * case of suspend/reset/poweroff/cpu off/cpu on.
+			 */
+			error = psci_handle_call(vm, vcpuid, vme, &retu);
 			break;
 
 		case VM_EXITCODE_WFI:
