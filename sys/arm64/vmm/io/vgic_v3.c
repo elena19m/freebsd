@@ -258,11 +258,21 @@ vgic_v3_attach_to_vm(void *arg, uint64_t dist_start, size_t dist_size,
 	return (0);
 }
 
-/* TODO: call this on VM destroy. */
 void
 vgic_v3_detach_from_vm(void *arg)
 {
-	struct hyp *hyp = arg;
+	struct hyp *hyp;
+	struct hypctx *hypctx;
+	struct vgic_v3_cpu_if *cpu_if;
+	int i;
+
+	hyp = arg;
+
+	for (i = 0; i < VM_MAXCPU; i++) {
+		hypctx = & hyp->ctx[i];
+		cpu_if = &hypctx->vgic_cpu_if;
+		free(cpu_if->irqbuf, M_VGIC_V3);
+	}
 
 	vgic_v3_mmio_destroy(hyp);
 }
