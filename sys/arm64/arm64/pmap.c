@@ -1709,10 +1709,12 @@ _pmap_unwire_l3(pmap_t pmap, vm_offset_t va, vm_page_t m, struct spglist *free)
 	 */
 	if (m->pindex >= (NUL2E + NUL1E)) {
 		/* l1 page */
-		pd_entry_t *l0;
+		if (pmap->pm_type == PT_STAGE1) {
+			pd_entry_t *l0;
 
-		l0 = pmap_l0(pmap, va);
-		pmap_clear(l0);
+			l0 = pmap_l0(pmap, va);
+			pmap_clear(l0);
+		}
 	} else if (m->pindex >= NUL2E) {
 		/* l2 page */
 		pd_entry_t *l1;
@@ -1738,12 +1740,16 @@ _pmap_unwire_l3(pmap_t pmap, vm_offset_t va, vm_page_t m, struct spglist *free)
 		pmap_unwire_l3(pmap, va, l2pg, free);
 	} else if (m->pindex < (NUL2E + NUL1E)) {
 		/* We just released an l2, unhold the matching l1 */
-		pd_entry_t *l0, tl0;
 		vm_page_t l1pg;
+		pd_entry_t *l0, tl0;
 
-		l0 = pmap_l0(pmap, va);
-		tl0 = pmap_load(l0);
-		l1pg = PHYS_TO_VM_PAGE(tl0 & ~ATTR_MASK);
+		if (pmap->pm_type == PT_STAGE1) {
+			l0 = pmap_l0(pmap, va);
+			tl0 = pmap_load(l0);
+			l1pg = PHYS_TO_VM_PAGE(tl0 & ~ATTR_MASK);
+		} else {
+			l1pg = pmap_l1pg(pmap, va);
+		}
 		pmap_unwire_l3(pmap, va, l1pg, free);
 	}
 	pmap_invalidate_page(pmap, va);
