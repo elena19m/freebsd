@@ -373,6 +373,7 @@ main(int argc, char *argv[])
 
 	vmname = argv[0];
 
+	/* The VM must be created by bhyveload first. */
 	ctx = vm_open(vmname);
 	if (ctx == NULL) {
 		perror("vm_open");
