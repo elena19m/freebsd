@@ -63,6 +63,8 @@ __FBSDID("$FreeBSD$");
 #define	NO_ARG		no_argument
 #define	OPT_ARG		optional_argument
 
+#define	eprintf(fmt, ...)	printf("%s:%d " fmt, __func__, __LINE__, ##__VA_ARGS__)
+
 static const char *progname;
 
 static void
@@ -83,63 +85,11 @@ enum {
 	VMNAME = 1000,	/* avoid collision with return values from getopt */
 };
 
-static struct option *
-setup_options(bool cpu_intel)
-{
-	const struct option common_opts[] = {
-		{ "vm",		REQ_ARG,	NULL,		VMNAME },
-		{ "destroy",	NO_ARG,		&destroy,	1 },
-	};
-	const struct option null_opt = {
-		NULL, 0, NULL, 0
-	};
-	struct option *all_opts;
-	char *cp;
-	int optlen;
-
-	optlen = sizeof(common_opts);
-	optlen += sizeof(null_opt);
-	all_opts = malloc(optlen);
-	if (all_opts == NULL) {
-		perror("malloc");
-		exit(1);
-	}
-
-	cp = (char *)all_opts;
-	memcpy(cp, common_opts, sizeof(common_opts));
-	cp += sizeof(common_opts);
-	memcpy(cp, &null_opt, sizeof(null_opt));
-	cp += sizeof(null_opt);
-
-	return (all_opts);
-}
-
-static const char *
-wday_str(int idx)
-{
-	static const char *weekdays[] = {
-		"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
-	};
-
-	if (idx >= 0 && idx < 7)
-		return (weekdays[idx]);
-	else
-		return ("UNK");
-}
-
-static const char *
-mon_str(int idx)
-{
-	static const char *months[] = {
-		"Jan", "Feb", "Mar", "Apr", "May", "Jun",
-		"Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-	};
-
-	if (idx >= 0 && idx < 12)
-		return (months[idx]);
-	else
-		return ("UNK");
-}
+const struct option opts[] = {
+	{ "vm",		REQ_ARG,	NULL,		VMNAME },
+	{ "destroy",	NO_ARG,		&destroy,	1 },
+	{ NULL,		0,		NULL,		1 },
+};
 
 int
 main(int argc, char *argv[])
@@ -147,7 +97,6 @@ main(int argc, char *argv[])
 	char *vmname;
 	int error, ch;
 	struct vmctx *ctx;
-	struct option *opts;
 
 	vmname = NULL;
 	progname = basename(argv[0]);
@@ -187,6 +136,5 @@ main(int argc, char *argv[])
 	if (!error && destroy)
 		vm_destroy(ctx);
 
-	free (opts);
 	exit(error);
 }
