@@ -622,6 +622,13 @@ arm_vmcleanup(void *arg)
 {
 	struct hyp *hyp = arg;
 
+	/*
+	 * Detach the vtimer first, so the virtual timer interrupt handler won't
+	 * try to inject an interrupt when the vgic is detached.
+	 */
+	vtimer_detach_from_vm(arg);
+	vgic_v3_detach_from_vm(arg);
+
 	/* Unmap the VM hyp struct from the hyp mode translation table */
 	hypmap_map(hyp_pmap, (vm_offset_t)hyp, sizeof(struct hyp),
 	    VM_PROT_NONE);
