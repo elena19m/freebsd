@@ -53,6 +53,9 @@
 static uint64_t cnthctl_el2_reg;
 static uint32_t tmr_frq;
 
+bool intr_handler_installed;
+struct hypctx *intr_arg;
+
 int
 vtimer_attach_to_vm(void *arg, int phys_ns_irq)
 {
@@ -78,6 +81,7 @@ vtimer_detach_from_vm(void *arg)
 	vtimer = &hyp->vtimer;
 
 	vtimer->attached = false;
+	intr_arg = NULL;
 
 	/* TODO: move this to vtimer_cleanup() */
 	cntv_ctl = READ_SPECIALREG(cntv_ctl_el0);
@@ -87,7 +91,10 @@ vtimer_detach_from_vm(void *arg)
 	for (i = 0; i < VM_MAXCPU; i++) {
 		vtimer_cpu = &hyp->ctx[i].vtimer_cpu;
 		callout_drain(&vtimer_cpu->callout);
+		/* TODO: call teardown intr here */
 	}
+	/* TODO: uncomment this once the handler is teared down */
+	//intr_handler_installed = false;
 }
 
 static inline void
@@ -154,7 +161,8 @@ vtimer_virtual_timer_intr(void *arg)
 	struct hypctx *hypctx;
 	uint32_t cntv_ctl;
 
-	hypctx = arg;
+	//hypctx = arg;
+	hypctx = intr_arg;
 	hyp = hypctx->hyp;
 	cntv_ctl = READ_SPECIALREG(cntv_ctl_el0);
 
@@ -203,9 +211,23 @@ vtimer_cpuinit(void *arg)
 	hypctx = (struct hypctx *)arg;
 	vtimer_cpu = &hypctx->vtimer_cpu;
 
-	error = arm_tmr_setup_intr(GT_VIRT, vtimer_virtual_timer_intr, NULL, hypctx);
-	if (error)
-		printf("Unable to set up the virtual timer interrupt handler\n");
+	/*
+	 * TODO: move it somewhere else, this is called for each vcpu, but it
+	 * will be run on the same CPU.
+	 *
+	 * This works because VM_MAXCPU == 1.
+	 */
+	if (!intr_handler_installed) {
+		intr_arg = hypctx;
+		error = arm_tmr_setup_intr(GT_VIRT, vtimer_virtual_timer_intr,
+		    NULL, NULL);
+		if (error) {
+			printf("WARNING: Error installing the virtual timer handler: %d\n");
+			printf("WARNING: Expect reduced performance\n");
+		} else {
+			intr_handler_installed = true;
+		}
+	}
 
 	/*
 	 * Configure physical timer interrupts for the VCPU.
