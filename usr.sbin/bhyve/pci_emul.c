@@ -1936,175 +1936,6 @@ INOUT_PORT(pci_cfgdata, CONF1_DATA_PORT+1, IOPORT_F_INOUT, pci_emul_cfgdata);
 INOUT_PORT(pci_cfgdata, CONF1_DATA_PORT+2, IOPORT_F_INOUT, pci_emul_cfgdata);
 INOUT_PORT(pci_cfgdata, CONF1_DATA_PORT+3, IOPORT_F_INOUT, pci_emul_cfgdata);
 
-#define PCI_EMUL_TEST
-#ifdef PCI_EMUL_TEST
-/*
- * Define a dummy test device
- */
-#define DIOSZ	8
-#define DMEMSZ	4096
-struct pci_emul_dsoftc {
-	uint8_t   ioregs[DIOSZ];
-	uint8_t	  memregs[2][DMEMSZ];
-};
-
-#define	PCI_EMUL_MSI_MSGS	 4
-#define	PCI_EMUL_MSIX_MSGS	16
-
-static int
-pci_emul_dinit(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
-{
-	int error;
-	struct pci_emul_dsoftc *sc;
-
-	sc = calloc(1, sizeof(struct pci_emul_dsoftc));
-
-	pi->pi_arg = sc;
-
-	pci_set_cfgdata16(pi, PCIR_DEVICE, 0x0001);
-	pci_set_cfgdata16(pi, PCIR_VENDOR, 0x10DD);
-	pci_set_cfgdata8(pi, PCIR_CLASS, 0x02);
-
-	error = pci_emul_add_msicap(pi, PCI_EMUL_MSI_MSGS);
-	assert(error == 0);
-
-	error = pci_emul_alloc_bar(pi, 0, PCIBAR_IO, DIOSZ);
-	assert(error == 0);
-
-	error = pci_emul_alloc_bar(pi, 1, PCIBAR_MEM32, DMEMSZ);
-	assert(error == 0);
-
-	error = pci_emul_alloc_bar(pi, 2, PCIBAR_MEM32, DMEMSZ);
-	assert(error == 0);
-
-	return (0);
-}
-
-static void
-pci_emul_diow(struct vmctx *ctx, int vcpu, struct pci_devinst *pi, int baridx,
-	      uint64_t offset, int size, uint64_t value)
-{
-	int i;
-	struct pci_emul_dsoftc *sc = pi->pi_arg;
-
-	if (baridx == 0) {
-		if (offset + size > DIOSZ) {
-			printf("diow: iow too large, offset %ld size %d\n",
-			       offset, size);
-			return;
-		}
-
-		if (size == 1) {
-			sc->ioregs[offset] = value & 0xff;
-		} else if (size == 2) {
-			*(uint16_t *)&sc->ioregs[offset] = value & 0xffff;
-		} else if (size == 4) {
-			*(uint32_t *)&sc->ioregs[offset] = value;
-		} else {
-			printf("diow: iow unknown size %d\n", size);
-		}
-
-		/*
-		 * Special magic value to generate an interrupt
-		 */
-		if (offset == 4 && size == 4 && pci_msi_enabled(pi))
-			pci_generate_msi(pi, value % pci_msi_maxmsgnum(pi));
-
-		if (value == 0xabcdef) {
-			for (i = 0; i < pci_msi_maxmsgnum(pi); i++)
-				pci_generate_msi(pi, i);
-		}
-	}
-
-	if (baridx == 1 || baridx == 2) {
-		if (offset + size > DMEMSZ) {
-			printf("diow: memw too large, offset %ld size %d\n",
-			       offset, size);
-			return;
-		}
-
-		i = baridx - 1;		/* 'memregs' index */
-
-		if (size == 1) {
-			sc->memregs[i][offset] = value;
-		} else if (size == 2) {
-			*(uint16_t *)&sc->memregs[i][offset] = value;
-		} else if (size == 4) {
-			*(uint32_t *)&sc->memregs[i][offset] = value;
-		} else if (size == 8) {
-			*(uint64_t *)&sc->memregs[i][offset] = value;
-		} else {
-			printf("diow: memw unknown size %d\n", size);
-		}
-		
-		/*
-		 * magic interrupt ??
-		 */
-	}
-
-	if (baridx > 2 || baridx < 0) {
-		printf("diow: unknown bar idx %d\n", baridx);
-	}
-}
-
-static uint64_t
-pci_emul_dior(struct vmctx *ctx, int vcpu, struct pci_devinst *pi, int baridx,
-	      uint64_t offset, int size)
-{
-	struct pci_emul_dsoftc *sc = pi->pi_arg;
-	uint32_t value;
-	int i;
-
-	if (baridx == 0) {
-		if (offset + size > DIOSZ) {
-			printf("dior: ior too large, offset %ld size %d\n",
-			       offset, size);
-			return (0);
-		}
-	
-		value = 0;
-		if (size == 1) {
-			value = sc->ioregs[offset];
-		} else if (size == 2) {
-			value = *(uint16_t *) &sc->ioregs[offset];
-		} else if (size == 4) {
-			value = *(uint32_t *) &sc->ioregs[offset];
-		} else {
-			printf("dior: ior unknown size %d\n", size);
-		}
-	}
-
-	if (baridx == 1 || baridx == 2) {
-		if (offset + size > DMEMSZ) {
-			printf("dior: memr too large, offset %ld size %d\n",
-			       offset, size);
-			return (0);
-		}
-		
-		i = baridx - 1;		/* 'memregs' index */
-
-		if (size == 1) {
-			value = sc->memregs[i][offset];
-		} else if (size == 2) {
-			value = *(uint16_t *) &sc->memregs[i][offset];
-		} else if (size == 4) {
-			value = *(uint32_t *) &sc->memregs[i][offset];
-		} else if (size == 8) {
-			value = *(uint64_t *) &sc->memregs[i][offset];
-		} else {
-			printf("dior: ior unknown size %d\n", size);
-		}
-	}
-
-
-	if (baridx > 2 || baridx < 0) {
-		printf("dior: unknown bar idx %d\n", baridx);
-		return (0);
-	}
-
-	return (value);
-}
-
 /*
  * Saves PCI device emulated state. Returns < 0 on error or 0 on success.
  */
@@ -2300,6 +2131,175 @@ pci_restore(struct vmctx *ctx, const char *dev_name, void *buffer,
 
 	fprintf(stderr, "%s: no such name: %s\n", __func__, dev_name);
 	return (-1);
+}
+
+#define PCI_EMUL_TEST
+#ifdef PCI_EMUL_TEST
+/*
+ * Define a dummy test device
+ */
+#define DIOSZ	8
+#define DMEMSZ	4096
+struct pci_emul_dsoftc {
+	uint8_t   ioregs[DIOSZ];
+	uint8_t	  memregs[2][DMEMSZ];
+};
+
+#define	PCI_EMUL_MSI_MSGS	 4
+#define	PCI_EMUL_MSIX_MSGS	16
+
+static int
+pci_emul_dinit(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
+{
+	int error;
+	struct pci_emul_dsoftc *sc;
+
+	sc = calloc(1, sizeof(struct pci_emul_dsoftc));
+
+	pi->pi_arg = sc;
+
+	pci_set_cfgdata16(pi, PCIR_DEVICE, 0x0001);
+	pci_set_cfgdata16(pi, PCIR_VENDOR, 0x10DD);
+	pci_set_cfgdata8(pi, PCIR_CLASS, 0x02);
+
+	error = pci_emul_add_msicap(pi, PCI_EMUL_MSI_MSGS);
+	assert(error == 0);
+
+	error = pci_emul_alloc_bar(pi, 0, PCIBAR_IO, DIOSZ);
+	assert(error == 0);
+
+	error = pci_emul_alloc_bar(pi, 1, PCIBAR_MEM32, DMEMSZ);
+	assert(error == 0);
+
+	error = pci_emul_alloc_bar(pi, 2, PCIBAR_MEM32, DMEMSZ);
+	assert(error == 0);
+
+	return (0);
+}
+
+static void
+pci_emul_diow(struct vmctx *ctx, int vcpu, struct pci_devinst *pi, int baridx,
+	      uint64_t offset, int size, uint64_t value)
+{
+	int i;
+	struct pci_emul_dsoftc *sc = pi->pi_arg;
+
+	if (baridx == 0) {
+		if (offset + size > DIOSZ) {
+			printf("diow: iow too large, offset %ld size %d\n",
+			       offset, size);
+			return;
+		}
+
+		if (size == 1) {
+			sc->ioregs[offset] = value & 0xff;
+		} else if (size == 2) {
+			*(uint16_t *)&sc->ioregs[offset] = value & 0xffff;
+		} else if (size == 4) {
+			*(uint32_t *)&sc->ioregs[offset] = value;
+		} else {
+			printf("diow: iow unknown size %d\n", size);
+		}
+
+		/*
+		 * Special magic value to generate an interrupt
+		 */
+		if (offset == 4 && size == 4 && pci_msi_enabled(pi))
+			pci_generate_msi(pi, value % pci_msi_maxmsgnum(pi));
+
+		if (value == 0xabcdef) {
+			for (i = 0; i < pci_msi_maxmsgnum(pi); i++)
+				pci_generate_msi(pi, i);
+		}
+	}
+
+	if (baridx == 1 || baridx == 2) {
+		if (offset + size > DMEMSZ) {
+			printf("diow: memw too large, offset %ld size %d\n",
+			       offset, size);
+			return;
+		}
+
+		i = baridx - 1;		/* 'memregs' index */
+
+		if (size == 1) {
+			sc->memregs[i][offset] = value;
+		} else if (size == 2) {
+			*(uint16_t *)&sc->memregs[i][offset] = value;
+		} else if (size == 4) {
+			*(uint32_t *)&sc->memregs[i][offset] = value;
+		} else if (size == 8) {
+			*(uint64_t *)&sc->memregs[i][offset] = value;
+		} else {
+			printf("diow: memw unknown size %d\n", size);
+		}
+		
+		/*
+		 * magic interrupt ??
+		 */
+	}
+
+	if (baridx > 2 || baridx < 0) {
+		printf("diow: unknown bar idx %d\n", baridx);
+	}
+}
+
+static uint64_t
+pci_emul_dior(struct vmctx *ctx, int vcpu, struct pci_devinst *pi, int baridx,
+	      uint64_t offset, int size)
+{
+	struct pci_emul_dsoftc *sc = pi->pi_arg;
+	uint32_t value;
+	int i;
+
+	if (baridx == 0) {
+		if (offset + size > DIOSZ) {
+			printf("dior: ior too large, offset %ld size %d\n",
+			       offset, size);
+			return (0);
+		}
+	
+		value = 0;
+		if (size == 1) {
+			value = sc->ioregs[offset];
+		} else if (size == 2) {
+			value = *(uint16_t *) &sc->ioregs[offset];
+		} else if (size == 4) {
+			value = *(uint32_t *) &sc->ioregs[offset];
+		} else {
+			printf("dior: ior unknown size %d\n", size);
+		}
+	}
+
+	if (baridx == 1 || baridx == 2) {
+		if (offset + size > DMEMSZ) {
+			printf("dior: memr too large, offset %ld size %d\n",
+			       offset, size);
+			return (0);
+		}
+		
+		i = baridx - 1;		/* 'memregs' index */
+
+		if (size == 1) {
+			value = sc->memregs[i][offset];
+		} else if (size == 2) {
+			value = *(uint16_t *) &sc->memregs[i][offset];
+		} else if (size == 4) {
+			value = *(uint32_t *) &sc->memregs[i][offset];
+		} else if (size == 8) {
+			value = *(uint64_t *) &sc->memregs[i][offset];
+		} else {
+			printf("dior: ior unknown size %d\n", size);
+		}
+	}
+
+
+	if (baridx > 2 || baridx < 0) {
+		printf("dior: unknown bar idx %d\n", baridx);
+		return (0);
+	}
+
+	return (value);
 }
 
 int
