@@ -2013,18 +2013,18 @@ pci_restore_pci_dev(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
 	return (snap_size);
 }
 
-int
-pci_snapshot(struct vmctx *ctx, const char *dev_name, void *buffer,
-	     size_t buf_size, size_t *snapshot_size)
+static int
+pci_find_slotted_dev(const char *dev_name, struct pci_devemu **pde,
+		     struct pci_devinst **pdi)
 {
-	struct pci_devemu *pde;
 	struct businfo *bi;
 	struct slotinfo *si;
 	struct funcinfo *fi;
-	int bus, slot, func, ret;
-	size_t snap_size;
+	int bus, slot, func;
 
 	assert(dev_name != NULL);
+	assert(pde != NULL);
+	assert(pdi != NULL);
 
 	for (bus = 0; bus < MAXBUSES; bus++) {
 		if ((bi = pci_businfo[bus]) == NULL)
@@ -2039,44 +2039,58 @@ pci_snapshot(struct vmctx *ctx, const char *dev_name, void *buffer,
 				if (strcmp(dev_name, fi->fi_name))
 					continue;
 
-				pde = pci_emul_finddev(fi->fi_name);
-				assert(pde != NULL);
+				*pde = pci_emul_finddev(fi->fi_name);
+				assert(*pde != NULL);
 
-				if (pde->pe_snapshot == NULL) {
-					fprintf(stderr, "%s: not implemented "
-						"yet for: %s\r\n", __func__,
-						dev_name);
-					return (-1);
-				}
-
-				ret = pci_snapshot_pci_dev(ctx, fi->fi_devi,
-					    buffer, buf_size, &snap_size);
-				if (ret < 0) {
-					fprintf(stderr, "%s: failed to "
-						"snapshot pci dev\r\n",
-						__func__);
-					return (-1);
-				}
-
-				assert(snap_size < buf_size);
-				*snapshot_size = snap_size;
-
-				ret = (*pde->pe_snapshot)(ctx, fi->fi_devi,
-					   buffer + snap_size,
-					   buf_size - snap_size,
-					   &snap_size);
-
-				*snapshot_size += snap_size;
-				return (ret);
+				*pdi = fi->fi_devi;
+				return (0);
 			}
 		}
 	}
 
-	fprintf(stderr, "%s: no such name: %s\r\n", __func__, dev_name);
-	*snapshot_size = 0;
-	memset(buffer, 0, buf_size);
+	return (EINVAL);
+}
 
-	return (0);
+int
+pci_snapshot(struct vmctx *ctx, const char *dev_name, void *buffer,
+	     size_t buf_size, size_t *snapshot_size)
+{
+	struct pci_devemu *pde;
+	struct pci_devinst *pdi;
+	int ret;
+	size_t snap_size;
+
+	assert(dev_name != NULL);
+
+	ret = pci_find_slotted_dev(dev_name, &pde, &pdi);
+	if (ret != 0) {
+		fprintf(stderr, "%s: no such name: %s\r\n", __func__, dev_name);
+		*snapshot_size = 0;
+		memset(buffer, 0, buf_size);
+		return (0);
+	}
+
+	if (pde->pe_snapshot == NULL) {
+		fprintf(stderr, "%s: not implemented yet for: %s\r\n",
+			__func__, dev_name);
+		return (-1);
+	}
+
+	ret = pci_snapshot_pci_dev(ctx, pdi, buffer, buf_size, &snap_size);
+	if (ret < 0) {
+		fprintf(stderr, "%s: failed to snapshot pci dev\r\n",
+			__func__);
+		return (-1);
+	}
+
+	assert(snap_size < buf_size);
+	*snapshot_size = snap_size;
+
+	ret = (*pde->pe_snapshot)(ctx, pdi, buffer + snap_size,
+				  buf_size - snap_size, &snap_size);
+
+	*snapshot_size += snap_size;
+	return (ret);
 }
 
 int
@@ -2084,53 +2098,30 @@ pci_restore(struct vmctx *ctx, const char *dev_name, void *buffer,
 	    size_t buf_size)
 {
 	struct pci_devemu *pde;
-	struct businfo *bi;
-	struct slotinfo *si;
-	struct funcinfo *fi;
-	int bus, slot, func, ret;
+	struct pci_devinst *pdi;
+	int ret;
 
 	assert(dev_name != NULL);
 
-	for (bus = 0; bus < MAXBUSES; bus++) {
-		if ((bi = pci_businfo[bus]) == NULL)
-			continue;
-
-		for (slot = 0; slot < MAXSLOTS; slot++) {
-			si = &bi->slotinfo[slot];
-			for (func = 0; func < MAXFUNCS; func++) {
-				fi = &si->si_funcs[func];
-				if (fi->fi_name == NULL)
-					continue;
-				if (strcmp(dev_name, fi->fi_name))
-					continue;
-
-				pde = pci_emul_finddev(fi->fi_name);
-				assert(pde != NULL);
-
-				if (pde->pe_restore == NULL) {
-					fprintf(stderr, "%s: not implemented "
-						"yet for: %s\n", __func__,
-						dev_name);
-					return (-1);
-				}
-
-				ret = pci_restore_pci_dev(ctx, fi->fi_devi,
-					    buffer, buf_size);
-				if (ret < 0) {
-					fprintf(stderr, "%s: failed to "
-						"restore pci dev\r\n",
-						__func__);
-					return (-1);
-				}
-
-				return (*pde->pe_restore)(ctx, fi->fi_devi,
-					    buffer + ret, buf_size - ret);
-			}
-		}
+	ret = pci_find_slotted_dev(dev_name, &pde, &pdi);
+	if (ret != 0) {
+		fprintf(stderr, "%s: no such name: %s\n", __func__, dev_name);
+		return (-1);
 	}
 
-	fprintf(stderr, "%s: no such name: %s\n", __func__, dev_name);
-	return (-1);
+	if (pde->pe_restore == NULL) {
+		fprintf(stderr, "%s: not implemented yet for: %s\n",
+			__func__, dev_name);
+		return (-1);
+	}
+
+	ret = pci_restore_pci_dev(ctx, pdi, buffer, buf_size);
+	if (ret < 0) {
+		fprintf(stderr, "%s: failed to restore pci dev\r\n", __func__);
+		return (-1);
+	}
+
+	return (*pde->pe_restore)(ctx, pdi, buffer + ret, buf_size - ret);
 }
 
 #define PCI_EMUL_TEST
