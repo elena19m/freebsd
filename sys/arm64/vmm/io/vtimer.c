@@ -74,7 +74,7 @@ vtimer_attach_to_vm(void *arg, int phys_ns_irq)
 /* TODO  Add vtimer_cleanup() function to teardown the interrupt filter */
 
 void
-vtimer_detach_from_vm(void *arg)
+vtimer_vmcleanup(void *arg)
 {
 	struct hyp *hyp;
 	struct vtimer *vtimer;
