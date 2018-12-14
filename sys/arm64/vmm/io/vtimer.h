@@ -98,10 +98,10 @@ struct vtimer_cpu
 };
 
 int	vtimer_attach_to_vm(void *arg, int phys_ns_irq);
-void	vtimer_detach_from_vm(void *arg);
 int 	vtimer_init(uint64_t cnthctl_el2);
 void 	vtimer_vminit(void *arg);
 void 	vtimer_cpuinit(void *arg);
+void	vtimer_vmcleanup(void *arg);
 
 int 	vtimer_phys_ctl_read(void *vm, int vcpuid, uint64_t *rval, void *arg);
 int 	vtimer_phys_ctl_write(void *vm, int vcpuid, uint64_t wval, void *arg);

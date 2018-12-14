@@ -636,11 +636,7 @@ arm_vmcleanup(void *arg)
 	if (active_vcpu == hypctx)
 		active_vcpu = NULL;
 
-	/*
-	 * Detach the vtimer first, so the virtual timer interrupt handler won't
-	 * try to inject an interrupt when the vgic is detached.
-	 */
-	vtimer_detach_from_vm(arg);
+	vtimer_vmcleanup(arg);
 	vgic_v3_detach_from_vm(arg);
 
 	/* Unmap the VM hyp struct from the hyp mode translation table */
