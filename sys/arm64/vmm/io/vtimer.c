@@ -56,13 +56,106 @@
 static uint64_t cnthctl_el2_reg;
 static uint32_t tmr_frq;
 
-bool intr_handler_installed;
+#define timer_condition_met(ctl)	((ctl) & CNTP_CTL_ISTATUS)
 
-/*
- * TODO Add vtimer_init() to install the interrupt filter. Always use IRQ 30
- * (phys) and IRQ 27 (virt)
- */
-/* TODO  Add vtimer_cleanup() function to teardown the interrupt filter */
+static int
+vtimer_virtual_timer_intr(void *arg)
+{
+	struct hypctx *hypctx;
+	uint32_t cntv_ctl;
+
+	cntv_ctl = READ_SPECIALREG(cntv_ctl_el0);
+	hypctx = arm64_active_vcpu();
+
+	if (!hypctx)
+		goto out;
+	if (!timer_enabled(cntv_ctl))
+		goto out;
+	if (!timer_condition_met(cntv_ctl))
+		goto out;
+
+	vgic_v3_inject_irq(hypctx, GT_VIRT_IRQ, VGIC_IRQ_CLK);
+
+out:
+	/*
+	 * Disable the timer interrupt. This will prevent the interrupt from
+	 * being reasserted as soon as we exit the handler and getting stuck
+	 * in an infinite loop.
+	 *
+	 * This is safe to do because the guest disabled the timer, and then
+	 * enables it as part of the interrupt handling routine.
+	 */
+	cntv_ctl &= ~CNTP_CTL_ENABLE;
+	WRITE_SPECIALREG(cntv_ctl_el0, cntv_ctl);
+
+	return (FILTER_HANDLED);
+}
+
+int
+vtimer_init(uint64_t cnthctl_el2)
+{
+	int error;
+
+	cnthctl_el2_reg = cnthctl_el2;
+	/*
+	 * The guest *MUST* use the same timer frequency as the host. The
+	 * register CNTFRQ_EL0 is accessible to the guest and a different value
+	 * in the guest dts file might have unforseen consequences.
+	 */
+	tmr_frq = READ_SPECIALREG(cntfrq_el0);
+
+	error = arm_tmr_setup_intr(GT_VIRT, vtimer_virtual_timer_intr, NULL, NULL);
+	if (error) {
+		printf("WARNING: Error installing the virtual timer handler: %d\n", error);
+		printf("WARNING: Expect reduced performance\n");
+	}
+
+	return (0);
+}
+
+void
+vtimer_vminit(void *arg)
+{
+	struct hyp *hyp;
+	uint64_t now;
+
+	hyp = (struct hyp *)arg;
+	/*
+	 * Configure the Counter-timer Hypervisor Control Register for the VM.
+	 *
+	 * ~CNTHCTL_EL1PCEN: trap access to CNTP_{CTL, CVAL, TVAL}_EL0 from EL1
+	 * CNTHCTL_EL1PCTEN: don't trap access to CNTPCT_EL0
+	 */
+	hyp->vtimer.cnthctl_el2 = cnthctl_el2_reg & ~CNTHCTL_EL1PCEN;
+	hyp->vtimer.cnthctl_el2 |= CNTHCTL_EL1PCTEN;
+
+	now = READ_SPECIALREG(cntpct_el0);
+	hyp->vtimer.cntvoff_el2 = now;
+
+	return;
+}
+
+void
+vtimer_cpuinit(void *arg)
+{
+	struct hypctx *hypctx;
+	struct vtimer_cpu *vtimer_cpu;
+
+	hypctx = (struct hypctx *)arg;
+	vtimer_cpu = &hypctx->vtimer_cpu;
+	/*
+	 * Configure physical timer interrupts for the VCPU.
+	 *
+	 * CNTP_CTL_IMASK: mask interrupts
+	 * ~CNTP_CTL_ENABLE: disable the timer
+	 */
+	vtimer_cpu->cntp_ctl_el0 = CNTP_CTL_IMASK & ~CNTP_CTL_ENABLE;
+	/*
+	 * Callout function is MP_SAFE because the VGIC uses a spin
+	 * mutex when modifying the list registers.
+	 */
+	callout_init(&vtimer_cpu->callout, 1);
+}
 
 void
 vtimer_vmcleanup(void *arg)
@@ -95,130 +188,6 @@ vtimer_inject_irq_callout_func(void *context)
 	vgic_v3_inject_irq(hypctx, GT_PHYS_NS_IRQ, VGIC_IRQ_CLK);
 }
 
-int
-vtimer_init(uint64_t cnthctl_el2)
-{
-	cnthctl_el2_reg = cnthctl_el2;
-	/*
-	 * The guest *MUST* use the same timer frequency as the host. The
-	 * register CNTFRQ_EL0 is accessible to the guest and a different value
-	 * in the guest dts file might have unforseen consequences.
-	 */
-	tmr_frq = READ_SPECIALREG(cntfrq_el0);
-
-	return (0);
-}
-
-void
-vtimer_vminit(void *arg)
-{
-	struct hyp *hyp;
-	uint64_t now;
-
-	hyp = (struct hyp *)arg;
-	/*
-	 * Configure the Counter-timer Hypervisor Control Register for the VM.
-	 *
-	 * ~CNTHCTL_EL1PCEN: trap access to CNTP_{CTL, CVAL, TVAL}_EL0 from EL1
-	 * CNTHCTL_EL1PCTEN: don't trap access to CNTPCT_EL0
-	 */
-	hyp->vtimer.cnthctl_el2 = cnthctl_el2_reg & ~CNTHCTL_EL1PCEN;
-	hyp->vtimer.cnthctl_el2 |= CNTHCTL_EL1PCTEN;
-
-	now = READ_SPECIALREG(cntpct_el0);
-	hyp->vtimer.cntvoff_el2 = now;
-
-	return;
-}
-
-#define timer_condition_met(ctl)	((ctl) & CNTP_CTL_ISTATUS)
-
-static int count = 0;
-
-static int
-vtimer_virtual_timer_intr(void *arg)
-{
-	struct hyp *hyp;
-	struct hypctx *hypctx;
-	uint32_t cntv_ctl;
-
-	cntv_ctl = READ_SPECIALREG(cntv_ctl_el0);
-
-	hypctx = arm64_active_vcpu();
-	if (!hypctx)
-		goto out;
-	hyp = hypctx->hyp;
-
-	/*
-	 * This can happen if we change the virtual machine running on the cpu
-	 * and a timer set by the previous guest fires before the current guest
-	 * has been initialized.
-	 */
-	if (!timer_enabled(cntv_ctl))
-		goto out;
-	if (!timer_condition_met(cntv_ctl))
-		goto out;
-
-	vgic_v3_inject_irq(hypctx, GT_VIRT_IRQ, VGIC_IRQ_CLK);
-	count++;
-
-out:
-	/*
-	 * Disable the timer interrupt. This will prevent the interrupt from
-	 * being reasserted as soon as we exit the handler and getting stuck
-	 * in an infinite loop.
-	 *
-	 * This is safe to do because the guest disabled the timer, and then
-	 * enables it as part of the interrupt handling routine.
-	 */
-	cntv_ctl &= ~CNTP_CTL_ENABLE;
-	WRITE_SPECIALREG(cntv_ctl_el0, cntv_ctl);
-
-	return (FILTER_HANDLED);
-}
-
-void
-vtimer_cpuinit(void *arg)
-{
-	struct hypctx *hypctx;
-	struct vtimer_cpu *vtimer_cpu;
-	int error;
-
-	hypctx = (struct hypctx *)arg;
-	vtimer_cpu = &hypctx->vtimer_cpu;
-
-	/*
-	 * TODO: move it somewhere else, this is called for each vcpu, but it
-	 * will be run on the same CPU.
-	 *
-	 * This works because VM_MAXCPU == 1.
-	 */
-	if (!intr_handler_installed) {
-		error = arm_tmr_setup_intr(GT_VIRT, vtimer_virtual_timer_intr,
-		    NULL, NULL);
-		if (error) {
-			printf("WARNING: Error installing the virtual timer handler: %d\n",
-			    error);
-			printf("WARNING: Expect reduced performance\n");
-		} else {
-			intr_handler_installed = true;
-		}
-	}
-
-	/*
-	 * Configure physical timer interrupts for the VCPU.
-	 *
-	 * CNTP_CTL_IMASK: mask interrupts
-	 * ~CNTP_CTL_ENABLE: disable the timer
-	 */
-	vtimer_cpu->cntp_ctl_el0 = CNTP_CTL_IMASK & ~CNTP_CTL_ENABLE;
-
-	/*
-	 * Callout function is MP_SAFE because the VGIC uses a spin
-	 * mutex when modifying the list registers.
-	 */
-	callout_init(&vtimer_cpu->callout, 1);
-}
 
 static void
 vtimer_schedule_irq(struct vtimer_cpu *vtimer_cpu, struct hypctx *hypctx)
