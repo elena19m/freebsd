@@ -105,7 +105,6 @@ vmmdev_ioctl(struct cdev *cdev, u_long cmd, caddr_t data, int fflag,
 	struct vm_register *vmreg;
 	struct vm_activate_cpu *vac;
 	struct vm_attach_vgic *vav;
-	struct vm_attach_vtimer *vat;
 	struct vm_irq *vi;
 
 	sc = vmmdev_lookup2(cdev);
@@ -142,7 +141,6 @@ vmmdev_ioctl(struct cdev *cdev, u_long cmd, caddr_t data, int fflag,
 
 	case VM_MAP_MEMORY:
 	case VM_ATTACH_VGIC:
-	case VM_ATTACH_VTIMER:
 		/*
 		 * ioctls that operate on the entire virtual machine must
 		 * prevent all vcpus from running.
@@ -210,10 +208,6 @@ vmmdev_ioctl(struct cdev *cdev, u_long cmd, caddr_t data, int fflag,
 		vav = (struct vm_attach_vgic *)data;
 		error = vm_attach_vgic(sc->vm, vav->dist_start, vav->dist_size,
 				vav->redist_start, vav->redist_size);
-		break;
-	case VM_ATTACH_VTIMER:
-		vat = (struct vm_attach_vtimer *)data;
-		error = vm_attach_vtimer(sc->vm, vat->phys_ns_irq);
 		break;
 	default:
 		error = ENOTTY;

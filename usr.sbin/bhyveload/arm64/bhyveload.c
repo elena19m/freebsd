@@ -395,12 +395,6 @@ main(int argc, char** argv)
 		exit(1);
 	}
 
-	error = vm_attach_vtimer(ctx, 30);
-	if (error) {
-		fprintf(stderr, "Error attaching vtimer to the virtual machine\n");
-		exit(1);
-	}
-
 	munmap(addr, st.st_size);
 
 	guest_setreg(VM_REG_ELR_EL2, kernel_load_address + bootparams.entry_off);

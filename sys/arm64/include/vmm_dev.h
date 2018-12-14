@@ -102,10 +102,6 @@ struct vm_attach_vgic {
 	size_t		redist_size;
 };
 
-struct vm_attach_vtimer {
-	int		phys_ns_irq;
-};
-
 struct vm_irq {
 	uint32_t irq;
 };
@@ -146,9 +142,6 @@ enum {
 
 	/* vm_attach_vgic */
 	IOCNUM_ATTACH_VGIC = 110,
-
-	/* vm_attach_vtimer */
-	IOCNUM_ATTACH_VTIMER = 120,
 };
 
 #define	VM_RUN		\
@@ -185,7 +178,4 @@ enum {
 	_IOW('v', IOCNUM_GET_CPUSET, struct vm_cpuset)
 #define	VM_ATTACH_VGIC	\
 	_IOW('v', IOCNUM_ATTACH_VGIC, struct vm_attach_vgic)
-#define	VM_ATTACH_VTIMER	\
-	_IOW('v', IOCNUM_ATTACH_VTIMER, struct vm_attach_vtimer)
-
 #endif
