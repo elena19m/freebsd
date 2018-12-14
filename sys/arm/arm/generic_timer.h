@@ -39,5 +39,6 @@
 
 int	arm_tmr_setup_intr(int gt_type, driver_filter_t filter,
     driver_intr_t handler, void *arg);
+int	arm_tmr_teardown_intr(int gt_type);
 
 #endif

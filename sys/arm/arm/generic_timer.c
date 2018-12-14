@@ -386,6 +386,22 @@ arm_tmr_setup_intr(int gt_type, driver_filter_t filter, driver_intr_t handler,
 	    INTR_TYPE_CLK, filter, handler, arg, &arm_tmr_sc->ihl[gt_type]));
 }
 
+int
+arm_tmr_teardown_intr(int gt_type)
+{
+	if (gt_type != GT_PHYS_SECURE &&
+	    gt_type != GT_PHYS_NONSECURE &&
+	    gt_type != GT_VIRT &&
+	    gt_type != GT_HYP)
+		return (ENXIO);
+
+	if (arm_tmr_sc->res[gt_type] == NULL)
+		return (ENXIO);
+
+	return (bus_teardown_intr(arm_tmr_dev, arm_tmr_sc->res[gt_type],
+	    arm_tmr_sc->ihl[gt_type]));
+}
+
 #ifdef FDT
 static int
 arm_tmr_fdt_probe(device_t dev)
