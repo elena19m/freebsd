@@ -54,8 +54,8 @@ static uint64_t cnthctl_el2_reg;
 static uint32_t tmr_frq;
 
 bool intr_handler_installed;
-struct hypctx *intr_arg;
 
+/* TODO Remove this function, not needed */
 int
 vtimer_attach_to_vm(void *arg, int phys_ns_irq)
 {
@@ -67,6 +67,11 @@ vtimer_attach_to_vm(void *arg, int phys_ns_irq)
 
 	return (0);
 }
+/*
+ * TODO Add vtimer_init() to install the interrupt filter. Always use IRQ 30
+ * (phys) and IRQ 27 (virt)
+ */
+/* TODO  Add vtimer_cleanup() function to teardown the interrupt filter */
 
 void
 vtimer_detach_from_vm(void *arg)
@@ -80,10 +85,9 @@ vtimer_detach_from_vm(void *arg)
 	hyp = arg;
 	vtimer = &hyp->vtimer;
 
+	/* TODO Remove the attached variable */
 	vtimer->attached = false;
-	intr_arg = NULL;
 
-	/* TODO: move this to vtimer_cleanup() */
 	cntv_ctl = READ_SPECIALREG(cntv_ctl_el0);
 	cntv_ctl &= ~CNTP_CTL_ENABLE;
 	WRITE_SPECIALREG(cntv_ctl_el0, cntv_ctl);
@@ -91,10 +95,7 @@ vtimer_detach_from_vm(void *arg)
 	for (i = 0; i < VM_MAXCPU; i++) {
 		vtimer_cpu = &hyp->ctx[i].vtimer_cpu;
 		callout_drain(&vtimer_cpu->callout);
-		/* TODO: call teardown intr here */
 	}
-	/* TODO: uncomment this once the handler is teared down */
-	//intr_handler_installed = false;
 }
 
 static inline void
@@ -161,10 +162,12 @@ vtimer_virtual_timer_intr(void *arg)
 	struct hypctx *hypctx;
 	uint32_t cntv_ctl;
 
-	//hypctx = arg;
-	hypctx = intr_arg;
-	hyp = hypctx->hyp;
 	cntv_ctl = READ_SPECIALREG(cntv_ctl_el0);
+
+	hypctx = arm64_active_vcpu();
+	if (!hypctx)
+		goto out;
+	hyp = hypctx->hyp;
 
 	/*
 	 * There is still a race here - what if hyp is freed before the
@@ -183,7 +186,7 @@ vtimer_virtual_timer_intr(void *arg)
 	if (!timer_condition_met(cntv_ctl))
 		goto out;
 
-	vgic_v3_inject_irq(arg, 27, VGIC_IRQ_CLK);
+	vgic_v3_inject_irq(hypctx, 27, VGIC_IRQ_CLK);
 	count++;
 
 out:
@@ -218,11 +221,11 @@ vtimer_cpuinit(void *arg)
 	 * This works because VM_MAXCPU == 1.
 	 */
 	if (!intr_handler_installed) {
-		intr_arg = hypctx;
 		error = arm_tmr_setup_intr(GT_VIRT, vtimer_virtual_timer_intr,
 		    NULL, NULL);
 		if (error) {
-			printf("WARNING: Error installing the virtual timer handler: %d\n");
+			printf("WARNING: Error installing the virtual timer handler: %d\n",
+			    error);
 			printf("WARNING: Expect reduced performance\n");
 		} else {
 			intr_handler_installed = true;
