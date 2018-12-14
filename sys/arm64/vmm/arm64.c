@@ -76,6 +76,14 @@ pmap_t hyp_pmap;
 static uint64_t vmid_generation = 0;
 static struct mtx vmid_generation_mtx;
 
+static struct hypctx *active_vcpu = NULL;
+
+struct hypctx *
+arm64_active_vcpu(void)
+{
+	return (active_vcpu);
+}
+
 static void arm64_set_vttbr(struct hyp *hyp)
 {
 	if (hyp->vmid_generation != 0 &&
@@ -591,6 +599,7 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	hypctx = &hyp->ctx[vcpu];
 	hypctx->elr_el2 = (uint64_t)pc;
 
+	active_vcpu = hypctx;
 	for (;;) {
 		daif = intr_disable();
 		vgic_v3_sync_hwstate(hypctx);
@@ -621,6 +630,11 @@ static void
 arm_vmcleanup(void *arg)
 {
 	struct hyp *hyp = arg;
+	struct hypctx *hypctx;
+
+	hypctx = &hyp->ctx[0];
+	if (active_vcpu == hypctx)
+		active_vcpu = NULL;
 
 	/*
 	 * Detach the vtimer first, so the virtual timer interrupt handler won't

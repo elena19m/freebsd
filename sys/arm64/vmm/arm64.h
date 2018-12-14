@@ -129,4 +129,6 @@ uint64_t 	vmm_read_tcr_el2(void);
 
 #define	DEBUG_ME	0
 
+struct hypctx	*arm64_active_vcpu(void);
+
 #endif /* !_VMM_ARM64_H_ */
