@@ -70,7 +70,6 @@ struct vtimer
 	uint64_t	cnthctl_el2;
 	uint64_t	cntvoff_el2;
 	int		phys_ns_irq;
-	bool		attached;
 };
 
 struct vtimer_cpu
@@ -97,7 +96,6 @@ struct vtimer_cpu
 	uint32_t	cntv_ctl_el0;
 };
 
-int	vtimer_attach_to_vm(void *arg, int phys_ns_irq);
 int 	vtimer_init(uint64_t cnthctl_el2);
 void 	vtimer_vminit(void *arg);
 void 	vtimer_cpuinit(void *arg);

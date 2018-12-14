@@ -76,6 +76,4 @@ int	vcpu_reset(struct vmctx *ctx, int vcpu);
 
 int	vm_attach_vgic(struct vmctx *ctx, uint64_t dist_start, size_t dist_size,
 		uint64_t redist_start, size_t redist_size);
-int 	vm_attach_vtimer(struct vmctx *ctx, int phys_ns_irq);
-
 #endif	/* _VMMAPI_H_ */

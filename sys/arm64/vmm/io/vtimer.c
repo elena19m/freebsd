@@ -47,6 +47,9 @@
 
 #define	RES1		0xffffffffffffffffUL
 
+#define	GT_PHYS_NS_IRQ	30
+#define	GT_VIRT_IRQ	27
+
 #define timer_enabled(ctl)	\
     (!((ctl) & CNTP_CTL_IMASK) && ((ctl) & CNTP_CTL_ENABLE))
 
@@ -55,18 +58,6 @@ static uint32_t tmr_frq;
 
 bool intr_handler_installed;
 
-/* TODO Remove this function, not needed */
-int
-vtimer_attach_to_vm(void *arg, int phys_ns_irq)
-{
-	struct hyp *hyp = arg;
-	struct vtimer *vtimer = &hyp->vtimer;
-
-	vtimer->phys_ns_irq = phys_ns_irq;
-	vtimer->attached = true;
-
-	return (0);
-}
 /*
  * TODO Add vtimer_init() to install the interrupt filter. Always use IRQ 30
  * (phys) and IRQ 27 (virt)
@@ -85,9 +76,6 @@ vtimer_vmcleanup(void *arg)
 	hyp = arg;
 	vtimer = &hyp->vtimer;
 
-	/* TODO Remove the attached variable */
-	vtimer->attached = false;
-
 	cntv_ctl = READ_SPECIALREG(cntv_ctl_el0);
 	cntv_ctl &= ~CNTP_CTL_ENABLE;
 	WRITE_SPECIALREG(cntv_ctl_el0, cntv_ctl);
@@ -98,21 +86,13 @@ vtimer_vmcleanup(void *arg)
 	}
 }
 
-static inline void
-vtimer_inject_irq(struct hypctx *hypctx)
-{
-	struct hyp *hyp = hypctx->hyp;
-
-	vgic_v3_inject_irq(hypctx, hyp->vtimer.phys_ns_irq, VGIC_IRQ_CLK);
-}
-
 static void
 vtimer_inject_irq_callout_func(void *context)
 {
 	struct hypctx *hypctx;
 
-	hypctx = (struct hypctx *)context;
-	vtimer_inject_irq(hypctx);
+	hypctx = context;
+	vgic_v3_inject_irq(hypctx, GT_PHYS_NS_IRQ, VGIC_IRQ_CLK);
 }
 
 int
@@ -170,13 +150,6 @@ vtimer_virtual_timer_intr(void *arg)
 	hyp = hypctx->hyp;
 
 	/*
-	 * There is still a race here - what if hyp is freed before the
-	 * interrupt fires?
-	 */
-	if (!hyp->vtimer.attached)
-		goto out;
-
-	/*
 	 * This can happen if we change the virtual machine running on the cpu
 	 * and a timer set by the previous guest fires before the current guest
 	 * has been initialized.
@@ -186,7 +159,7 @@ vtimer_virtual_timer_intr(void *arg)
 	if (!timer_condition_met(cntv_ctl))
 		goto out;
 
-	vgic_v3_inject_irq(hypctx, 27, VGIC_IRQ_CLK);
+	vgic_v3_inject_irq(hypctx, GT_VIRT_IRQ, VGIC_IRQ_CLK);
 	count++;
 
 out:
@@ -257,7 +230,7 @@ vtimer_schedule_irq(struct vtimer_cpu *vtimer_cpu, struct hypctx *hypctx)
 	cntpct_el0 = READ_SPECIALREG(cntpct_el0);
 	if (vtimer_cpu->cntp_cval_el0 < cntpct_el0) {
 		/* Timer set in the past, trigger interrupt */
-		vtimer_inject_irq(hypctx);
+		vgic_v3_inject_irq(hypctx, GT_PHYS_NS_IRQ, VGIC_IRQ_CLK);
 	} else {
 		diff = vtimer_cpu->cntp_cval_el0 - cntpct_el0;
 		time = diff * SBT_1S / tmr_frq;
@@ -270,10 +243,8 @@ static void
 vtimer_remove_irq(struct hypctx *hypctx)
 {
 	struct vtimer_cpu *vtimer_cpu;
-	uint32_t irq;
 
 	vtimer_cpu = &hypctx->vtimer_cpu;
-	irq = hypctx->hyp->vtimer.phys_ns_irq;
 
 	callout_drain(&vtimer_cpu->callout);
 	/*
@@ -282,7 +253,7 @@ vtimer_remove_irq(struct hypctx *hypctx)
 	 * the CNTP_CTL_EL0.IMASK bit instead of reading the IAR register.
 	 * Masking the interrupt doesn't remove it from the list registers.
 	 */
-	vgic_v3_remove_irq(hypctx, irq, true);
+	vgic_v3_remove_irq(hypctx, GT_PHYS_NS_IRQ, true);
 }
 
 /*

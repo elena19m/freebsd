@@ -370,17 +370,6 @@ vm_attach_vgic(struct vmctx *ctx, uint64_t dist_start, size_t dist_size,
 }
 
 int
-vm_attach_vtimer(struct vmctx *ctx, int phys_ns_irq)
-{
-	struct vm_attach_vtimer vat;
-
-	bzero(&vat, sizeof(vat));
-	vat.phys_ns_irq = phys_ns_irq;
-
-	return (ioctl(ctx->fd, VM_ATTACH_VTIMER, &vat));
-}
-
-int
 vm_assert_irq(struct vmctx *ctx, uint32_t irq)
 {
 	struct vm_irq vi;

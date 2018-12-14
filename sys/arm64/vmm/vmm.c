@@ -342,9 +342,6 @@ vm_handle_reg_emul(struct vm *vm, int vcpuid, bool *retu)
 	int error;
 
 	hyp = (struct hyp *)vm->cookie;
-	if (!hyp->vtimer.attached)
-		goto out_user;
-
 	vme = vm_exitinfo(vm, vcpuid);
 	vre = &vme->u.reg_emul.vre;
 
@@ -807,16 +804,6 @@ vm_attach_vgic(struct vm *vm, uint64_t dist_start, size_t dist_size,
 
 	error = vgic_v3_attach_to_vm(vm->cookie, dist_start, dist_size,
 	    redist_start, redist_size);
-
-	return (error);
-}
-
-int
-vm_attach_vtimer(struct vm *vm, int phys_ns_irq)
-{
-	int error;
-
-	error = vtimer_attach_to_vm(vm->cookie, phys_ns_irq);
 
 	return (error);
 }
