@@ -106,7 +106,7 @@ vtimer_init(uint64_t cnthctl_el2)
 
 	error = arm_tmr_setup_intr(GT_VIRT, vtimer_virtual_timer_intr, NULL, NULL);
 	if (error) {
-		printf("WARNING: Error installing the virtual timer handler: %d\n", error);
+		printf("WARNING: arm_tmr_setup_intr() error: %d\n", error);
 		printf("WARNING: Expect reduced performance\n");
 	}
 
@@ -177,6 +177,17 @@ vtimer_vmcleanup(void *arg)
 		vtimer_cpu = &hyp->ctx[i].vtimer_cpu;
 		callout_drain(&vtimer_cpu->callout);
 	}
+}
+
+void
+vtimer_cleanup(void)
+{
+	int error;
+
+	error = arm_tmr_teardown_intr(GT_VIRT);
+	if (error)
+		printf("WARNING: arm_tmr_teardown_intr() error: %d\n", error);
+
 }
 
 static void

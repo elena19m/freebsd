@@ -69,13 +69,11 @@ struct vtimer
 {
 	uint64_t	cnthctl_el2;
 	uint64_t	cntvoff_el2;
-	int		phys_ns_irq;
 };
 
 struct vtimer_cpu
 {
 	struct callout	callout;
-	uint64_t	tmr_freq;
 	uint32_t	cntkctl_el1;
 	/*
 	 * Emulated registers:
@@ -100,6 +98,7 @@ int 	vtimer_init(uint64_t cnthctl_el2);
 void 	vtimer_vminit(void *arg);
 void 	vtimer_cpuinit(void *arg);
 void	vtimer_vmcleanup(void *arg);
+void	vtimer_cleanup(void);
 
 int 	vtimer_phys_ctl_read(void *vm, int vcpuid, uint64_t *rval, void *arg);
 int 	vtimer_phys_ctl_write(void *vm, int vcpuid, uint64_t wval, void *arg);

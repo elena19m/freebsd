@@ -252,6 +252,8 @@ arm_cleanup(void)
 	vmm_call_hyp((void *)vtophys(vmm_cleanup), vtophys(hyp_stub_vectors));
 	intr_restore(daif);
 
+	vtimer_cleanup();
+
 	hypmap_cleanup(hyp_pmap);
 	free(hyp_pmap, M_HYP);
 	free(stack, M_HYP);
