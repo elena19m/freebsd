@@ -601,9 +601,13 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 	hypctx = &hyp->ctx[vcpu];
 	hypctx->elr_el2 = (uint64_t)pc;
 
-	active_vcpu = hypctx;
 	for (;;) {
 		daif = intr_disable();
+		/*
+		 * TODO: What happens if a timer interrupt is asserted exactly
+		 * here, but for the previous VM?
+		 */
+		active_vcpu = hypctx;
 		vgic_v3_sync_hwstate(hypctx);
 		excp_type = vmm_call_hyp((void *)ktohyp(vmm_enter_guest),
 		    ktohyp(hypctx));
