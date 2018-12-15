@@ -420,6 +420,41 @@ out_user:
 	return (0);
 }
 
+static int
+vm_handle_poweroff(struct vm *vm, int vcpuid)
+{
+	return (0);
+}
+
+static int
+vm_handle_psci_call(struct vm *vm, int vcpuid, bool *retu)
+{
+	struct vm_exit *vme;
+	enum vm_suspend_how how;
+	int error;
+
+	vme = vm_exitinfo(vm, vcpuid);
+
+	error = psci_handle_call(vm, vcpuid, vme, retu);
+	if (error)
+		goto out;
+
+	if (vme->exitcode == VM_EXITCODE_SUSPENDED) {
+		how = vme->u.suspended.how;
+		switch (how) {
+		case VM_SUSPEND_POWEROFF:
+			vm_handle_poweroff(vm, vcpuid);
+			break;
+		default:
+			/* Nothing to do */
+			;
+		}
+	}
+
+out:
+	return (error);
+}
+
 int
 vm_run(struct vm *vm, struct vm_run *vmrun)
 {
