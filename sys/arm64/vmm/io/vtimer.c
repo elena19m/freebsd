@@ -64,17 +64,28 @@ vtimer_virtual_timer_intr(void *arg)
 	struct hypctx *hypctx;
 	uint32_t cntv_ctl;
 
-	cntv_ctl = READ_SPECIALREG(cntv_ctl_el0);
 	hypctx = arm64_active_vcpu();
+	cntv_ctl = READ_SPECIALREG(cntv_ctl_el0);
 
-	if (!hypctx)
+	if (!hypctx) {
+		/* vm_destroy() was called. */
+		eprintf("No active vcpu\n");
+		cntv_ctl = READ_SPECIALREG(cntv_ctl_el0);
 		goto out;
-	if (!timer_enabled(cntv_ctl))
+	}
+	if (!timer_enabled(cntv_ctl)) {
+		eprintf("Timer not enabled\n");
 		goto out;
-	if (!timer_condition_met(cntv_ctl))
+	}
+	if (!timer_condition_met(cntv_ctl)) {
+		eprintf("Timer condition not met\n");
 		goto out;
+	}
 
 	vgic_v3_inject_irq(hypctx, GT_VIRT_IRQ, VGIC_IRQ_CLK);
+
+	hypctx->vtimer_cpu.cntv_ctl_el0 &= ~CNTP_CTL_ENABLE;
+	cntv_ctl = hypctx->vtimer_cpu.cntv_ctl_el0;
 
 out:
 	/*
