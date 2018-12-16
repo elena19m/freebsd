@@ -819,8 +819,6 @@ vgic_v3_sync_hwstate(void *arg)
 	struct hypctx *hypctx = arg;
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	struct vgic_v3_irq *vip;
-	uint64_t *lrp;
-	uint32_t irq;
 	int lr_free;
 	int i;
 
@@ -852,7 +850,6 @@ vgic_v3_sync_hwstate(void *arg)
 	    lr_free, cpu_if->irqbuf_num);
 
 	/* TODO: Update this part for better efficiency */
-	/* TODO: This cauuses a panic still? where? */
 
 	/*
 	 * Add all interrupts from the list registers that are not active to
@@ -878,38 +875,12 @@ vgic_v3_sync_hwstate(void *arg)
 			printf("%d: %lu\n", i, ICH_LR_EL2_VINTID(lr));
 	}
 
-	panic("reshuffled");
-
-	printf("Pending in List Registers:\n");
-	for (i = 0; i < cpu_if->ich_lr_num; i++)
-		if (lr_pending(cpu_if->ich_lr_el2[i])) {
-			lrp = &cpu_if->ich_lr_el2[i];
-			irq = ICH_LR_EL2_VINTID(*lrp);
-
-			printf("%d: %u\n", i, irq);
-
-			vip = vgic_v3_irqbuf_add_nolock(cpu_if);
-			if (!vip)
-				/* Pending list full, stop it */
-				break;
-			lr_to_vip(*lrp, vip);
-			/*
-			 * Interrupts from the LR regs are always enabled.
-			 * Distributor emulation will remove then if they become
-			 * disabled.
-			 */
-			vip->enabled = 1;
-			vip->irqtype = VGIC_IRQ_MAXPRIO;
-
-			/* Mark it as inactive */
-			lr_clear_irq(*lrp);
-		}
-
 	eprintf("before filling the list registers\n");
 	for (i = 0; i < cpu_if->ich_lr_num; i++) {
 		if (!lr_inactive(cpu_if->ich_lr_el2[i]))
 			continue;
 
+		/* TODO Take into account timer interrupts */
 		vip = vgic_v3_highest_priority_pending(cpu_if, hypctx);
 		if (vip == NULL)
 			/* No more pending interrupts */
@@ -921,11 +892,9 @@ vgic_v3_sync_hwstate(void *arg)
 	}
 
 	/* Remove all scheduled interrupts */
-	eprintf("before removing the scheduled interrupts\n");
 	vgic_v3_irqbuf_remove_nolock(IRQ_SCHEDULED, cpu_if);
 
 	/* TODO Enable maintenance interrupts if interrupts are still pending */
-	panic("reshuffled");
 
 out:
 	mtx_unlock_spin(&cpu_if->lr_mtx);
