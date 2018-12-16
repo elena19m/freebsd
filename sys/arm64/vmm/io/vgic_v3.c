@@ -463,8 +463,6 @@ dist_group_enabled(struct vgic_v3_dist *dist)
 	return ((dist->gicd_ctlr & GICD_CTLR_G1A) != 0);
 }
 
-//static int lr_cnt;
-
 int
 vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 {
@@ -473,6 +471,7 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
 	struct vgic_v3_irq *vip;
 	int error;
+	int i;
 	uint8_t priority;
 	bool enabled;
 
@@ -493,18 +492,32 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 
 	mtx_lock_spin(&cpu_if->lr_mtx);
 
+	/*
+	 * If the guest is running behind timer interrupts, don't swamp it with
+	 * one interrupt after another.
+	 */
+	if (irqtype == VGIC_IRQ_CLK) {
+		for (i = 0; i < cpu_if->ich_lr_num; i++)
+			if (ICH_LR_EL2_VINTID(cpu_if->ich_lr_el2[i]) == irq &&
+			    lr_pending(cpu_if->ich_lr_el2[i]))
+				goto out;
+		for (i = 0; i < cpu_if->irqbuf_num; i++)
+			if (cpu_if->irqbuf[i].irq == irq)
+				goto out;
+	}
+
 	vip = vgic_v3_irqbuf_add_nolock(cpu_if);
 	if (!vip) {
 		eprintf("Error adding IRQ %u to the IRQ buffer.\n", irq);
 		error = 1;
-		goto out_unlock;
+		goto out;
 	}
 	vip->irq = irq;
 	vip->irqtype = irqtype;
 	vip->enabled = enabled;
 	vip->priority = priority;
 
-out_unlock:
+out:
 	mtx_unlock_spin(&cpu_if->lr_mtx);
 	mtx_unlock_spin(&dist->dist_mtx);
 
