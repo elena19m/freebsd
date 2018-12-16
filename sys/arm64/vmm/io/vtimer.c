@@ -161,6 +161,7 @@ void
 vtimer_vmcleanup(void *arg)
 {
 	struct hyp *hyp;
+	struct hypctx *hypctx;
 	struct vtimer *vtimer;
 	struct vtimer_cpu *vtimer_cpu;
 	uint32_t cntv_ctl;
@@ -169,9 +170,13 @@ vtimer_vmcleanup(void *arg)
 	hyp = arg;
 	vtimer = &hyp->vtimer;
 
-	cntv_ctl = READ_SPECIALREG(cntv_ctl_el0);
-	cntv_ctl &= ~CNTP_CTL_ENABLE;
-	WRITE_SPECIALREG(cntv_ctl_el0, cntv_ctl);
+	hypctx = arm64_active_vcpu();
+	if (!hypctx) {
+		/* The active VM was destroyed, stop the timer. */
+		cntv_ctl = READ_SPECIALREG(cntv_ctl_el0);
+		cntv_ctl &= ~CNTP_CTL_ENABLE;
+		WRITE_SPECIALREG(cntv_ctl_el0, cntv_ctl);
+	}
 
 	for (i = 0; i < VM_MAXCPU; i++) {
 		vtimer_cpu = &hyp->ctx[i].vtimer_cpu;
