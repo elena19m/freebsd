@@ -25,11 +25,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD$
+ * $FreeBSD: head/usr.sbin/bhyve/pci_virtio_block.c 336162 2018-07-10 05:36:32Z araujo $
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
+__FBSDID("$FreeBSD: head/usr.sbin/bhyve/pci_virtio_block.c 336162 2018-07-10 05:36:32Z araujo $");
 
 #include <sys/param.h>
 #include <sys/linker_set.h>
@@ -61,7 +61,7 @@ __FBSDID("$FreeBSD$");
 #define VTBLK_S_IOERR	1
 #define	VTBLK_S_UNSUPP	2
 
-#define	VTBLK_BLK_ID_BYTES	20 + 1
+#define	VTBLK_BLK_ID_BYTES	20
 
 /* Capability bits */
 #define	VTBLK_F_SEG_MAX		(1 << 2)	/* Maximum request segments */
@@ -344,8 +344,7 @@ pci_vtblk_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 	MD5Init(&mdctx);
 	MD5Update(&mdctx, opts, strlen(opts));
 	MD5Final(digest, &mdctx);
-	snprintf(sc->vbsc_ident, VTBLK_BLK_ID_BYTES,
-	    "BHYVE-%02X%02X-%02X%02X-%02X%02X",
+	sprintf(sc->vbsc_ident, "BHYVE-%02X%02X-%02X%02X-%02X%02X",
 	    digest[0], digest[1], digest[2], digest[3], digest[4], digest[5]);
 
 	/* setup virtio block config space */

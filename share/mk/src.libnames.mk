@@ -1,4 +1,4 @@
-# $FreeBSD$
+# $FreeBSD: head/share/mk/src.libnames.mk 340373 2018-11-12 17:40:47Z oshogbo $
 #
 # The include file <src.libnames.mk> define library names suitable
 # for INTERNALLIB and PRIVATELIB definition
@@ -177,6 +177,7 @@ _LIBRARIES=	\
 		usbhid \
 		util \
 		uutil \
+		vdsk \
 		vmmapi \
 		wind \
 		wrap \
@@ -315,6 +316,7 @@ _DP_krb5+=	asn1 com_err crypt crypto hx509 roken wind heimbase heimipcc
 _DP_gssapi_krb5+=	gssapi krb5 crypto roken asn1 com_err
 _DP_lzma=	pthread
 _DP_ucl=	m
+_DP_vdsk=	pthread
 _DP_vmmapi=	util
 _DP_opencsd=	cxxrt
 _DP_ctf=	z

@@ -26,11 +26,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD$
+ * $FreeBSD: head/usr.sbin/bhyve/uart_emul.c 335104 2018-06-14 01:34:53Z araujo $
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
+__FBSDID("$FreeBSD: head/usr.sbin/bhyve/uart_emul.c 335104 2018-06-14 01:34:53Z araujo $");
 
 #include <sys/types.h>
 #include <dev/ic/ns16550.h>

@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
+__FBSDID("$FreeBSD: head/usr.sbin/bhyve/smbiostbl.c 326276 2017-11-27 15:37:16Z pfg $");
 
 #include <sys/param.h>
 

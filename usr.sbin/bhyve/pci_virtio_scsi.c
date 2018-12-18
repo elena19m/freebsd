@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
+__FBSDID("$FreeBSD: head/usr.sbin/bhyve/pci_virtio_scsi.c 334950 2018-06-11 14:45:34Z pfg $");
 
 #include <sys/param.h>
 #include <sys/linker_set.h>

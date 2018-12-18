@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
+__FBSDID("$FreeBSD: head/usr.sbin/bhyve/pci_virtio_console.c 335025 2018-06-13 03:22:08Z araujo $");
 
 #include <sys/param.h>
 #ifndef WITHOUT_CAPSICUM

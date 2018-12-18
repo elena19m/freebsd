@@ -51,7 +51,7 @@
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
+__FBSDID("$FreeBSD: head/usr.sbin/bhyve/pci_nvme.c 338182 2018-08-22 04:29:24Z chuck $");
 
 #include <sys/types.h>
 
@@ -251,13 +251,11 @@ static void pci_nvme_io_partial(struct blockif_req *br, int err);
 	 (NVME_STATUS_SC_MASK << NVME_STATUS_SC_SHIFT))
 
 static __inline void
-cpywithpad(char *dst, size_t dst_size, const char *src, char pad)
+cpywithpad(char *dst, int dst_size, const char *src, char pad)
 {
-	size_t len;
-
-	len = strnlen(src, dst_size);
-	memset(dst, pad, dst_size);
+	int len = strnlen(src, dst_size);
 	memcpy(dst, src, len);
+	memset(dst + len, pad, dst_size - len);
 }
 
 static __inline void

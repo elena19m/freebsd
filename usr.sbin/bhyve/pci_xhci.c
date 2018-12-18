@@ -33,7 +33,7 @@
      tablet             USB tablet mouse
  */
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
+__FBSDID("$FreeBSD: head/usr.sbin/bhyve/pci_xhci.c 335104 2018-06-14 01:34:53Z araujo $");
 
 #include <sys/param.h>
 #include <sys/uio.h>
@@ -2700,8 +2700,6 @@ pci_xhci_parse_opts(struct pci_xhci_softc *sc, char *opts)
 
 		sc->ndevices++;
 	}
-	if (uopt != NULL)
-		free(uopt);
 
 portsfinal:
 	sc->portregs = calloc(XHCI_MAX_DEVS, sizeof(struct pci_xhci_portregs));
@@ -2731,7 +2729,6 @@ done:
 			free(devices);
 		}
 	}
-	free(uopt);
 	return (sc->ndevices);
 }
 

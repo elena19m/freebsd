@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
+__FBSDID("$FreeBSD: head/usr.sbin/bhyve/pci_virtio_rnd.c 335025 2018-06-13 03:22:08Z araujo $");
 
 #include <sys/param.h>
 #ifndef WITHOUT_CAPSICUM
@@ -168,7 +168,6 @@ pci_vtrnd_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 	len = read(fd, &v, sizeof(v));
 	if (len <= 0) {
 		WPRINTF(("vtrnd: /dev/random not ready, read(): %d", len));
-		close(fd);
 		return (1);
 	}
 

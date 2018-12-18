@@ -1,5 +1,5 @@
 #
-# $FreeBSD$
+# $FreeBSD: head/usr.sbin/bhyve/Makefile 335974 2018-07-05 03:33:58Z araujo $
 #
 
 .include <src.opts.mk>
@@ -71,14 +71,8 @@ SRCS=	\
 .PATH:  ${BHYVE_SYSDIR}/sys/amd64/vmm
 SRCS+=	vmm_instruction_emul.c
 
-LIBADD=	vmmapi md pthread z util sbuf cam
+LIBADD=	vmmapi md pthread z util sbuf cam vdsk
 
-.if ${MK_INET_SUPPORT} != "no"
-CFLAGS+=-DINET
-.endif
-.if ${MK_INET6_SUPPORT} != "no"
-CFLAGS+=-DINET6
-.endif
 .if ${MK_OPENSSL} == "no"
 CFLAGS+=-DNO_OPENSSL
 .else
@@ -88,6 +82,7 @@ LIBADD+=	crypto
 CFLAGS+= -I${BHYVE_SYSDIR}/sys/dev/e1000
 CFLAGS+= -I${BHYVE_SYSDIR}/sys/dev/mii
 CFLAGS+= -I${BHYVE_SYSDIR}/sys/dev/usb/controller
+CFLAGS+= -I${BHYVE_SYSDIR}/lib/libvdsk
 
 .ifdef GDB_LOG
 CFLAGS+=-DGDB_LOG

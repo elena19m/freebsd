@@ -25,11 +25,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD$
+ * $FreeBSD: head/usr.sbin/bhyve/pci_fbuf.c 335025 2018-06-13 03:22:08Z araujo $
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
+__FBSDID("$FreeBSD: head/usr.sbin/bhyve/pci_fbuf.c 335025 2018-06-13 03:22:08Z araujo $");
 
 #include <sys/types.h>
 #include <sys/mman.h>
@@ -117,9 +117,8 @@ static void
 pci_fbuf_usage(char *opt)
 {
 
-	fprintf(stderr, "Invalid fbuf emulation option \"%s\"\r\n", opt);
-	fprintf(stderr, "fbuf: {wait,}{vga=on|io|off,}rfb=<ip>:port"
-	    "{,w=width}{,h=height}\r\n");
+	fprintf(stderr, "Invalid fbuf emulation \"%s\"\r\n", opt);
+	fprintf(stderr, "fbuf: {wait,}{vga=on|io|off,}rfb=<ip>:port\r\n");
 }
 
 static void
@@ -251,33 +250,13 @@ pci_fbuf_parse_opts(struct pci_fbuf_softc *sc, char *opts)
 		   xopts, config));
 
 		if (!strcmp(xopts, "tcp") || !strcmp(xopts, "rfb")) {
-			/*
-			 * IPv4 -- host-ip:port
-			 * IPv6 -- [host-ip%zone]:port
-			 * XXX for now port is mandatory.
-			 */
-			tmpstr = strsep(&config, "]");
-			if (config) {
-				if (tmpstr[0] == '[')
-					tmpstr++;
-				sc->rfb_host = tmpstr;
-				if (config[0] == ':')
-					config++;
-				else {
-					pci_fbuf_usage(xopts);
-					ret = -1;
-					goto done;
-				}
+			/* parse host-ip:port */
+		        tmpstr = strsep(&config, ":");
+			if (!config)
+				sc->rfb_port = atoi(tmpstr);
+			else {
 				sc->rfb_port = atoi(config);
-			} else {
-				config = tmpstr;
-				tmpstr = strsep(&config, ":");
-				if (!config)
-					sc->rfb_port = atoi(tmpstr);
-				else {
-					sc->rfb_port = atoi(config);
-					sc->rfb_host = tmpstr;
-				}
+				sc->rfb_host = tmpstr;
 			}
 	        } else if (!strcmp(xopts, "vga")) {
 			if (!strcmp(config, "off")) {
@@ -289,7 +268,7 @@ pci_fbuf_parse_opts(struct pci_fbuf_softc *sc, char *opts)
 				sc->vga_enabled = 1;
 				sc->vga_full = 1;
 			} else {
-				pci_fbuf_usage(xopts);
+				pci_fbuf_usage(opts);
 				ret = -1;
 				goto done;
 			}

@@ -3,4 +3,5 @@
 
 BINDIR?=	/usr/sbin
 
+SHLIB_MAJOR ?=᚛·5
 WARNS?=		6

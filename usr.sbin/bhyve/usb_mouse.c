@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
+__FBSDID("$FreeBSD: head/usr.sbin/bhyve/usb_mouse.c 335104 2018-06-14 01:34:53Z araujo $");
 
 #include <sys/time.h>
 

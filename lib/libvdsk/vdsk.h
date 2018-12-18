@@ -1,15 +1,13 @@
 /*-
- * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
- *
- * Copyright (c) 2016 Jakub Klama <jceel@FreeBSD.org>.
+ * Copyright (c) 2014 Marcel Moolenaar
+ * Copyright (c) 2018 Marcelo Araujo <araujo@FreeBSD.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
  * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer
- *    in this position and unchanged.
+ *    notice, this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
@@ -26,18 +24,29 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: head/usr.sbin/bhyve/iov.h 334940 2018-06-11 02:09:20Z araujo $
+ * $FreeBSD: user/marcel/libvdsk/libvdsk/vdsk.h 286996 2015-08-21 15:20:01Z marcel $
  */
 
-#ifndef _IOV_H_
-#define	_IOV_H_
+#ifndef __VDSK_H__
+#define	__VDSK_H__
 
-void seek_iov(struct iovec *iov1, size_t niov1, struct iovec *iov2,
-    size_t *niov2, size_t seek);
-size_t truncate_iov(struct iovec *iov, size_t niov, size_t length);
-size_t count_iov(struct iovec *iov, size_t niov);
-ssize_t iov_to_buf(struct iovec *iov, size_t niov, void **buf);
-ssize_t buf_to_iov(void *buf, size_t buflen, struct iovec *iov, size_t niov,
-    size_t seek);
+#include <sys/types.h>
+#include <sys/uio.h>
+#include <unistd.h>
 
-#endif	/* _IOV_H_ */
+#include "block_if.h"
+
+typedef void *vdskctx;
+
+vdskctx	vdsk_open(const char *, int, size_t);
+int	vdsk_close(vdskctx);
+
+off_t	vdsk_capacity(vdskctx);
+int	vdsk_sectorsize(vdskctx);
+
+int	vdsk_read(vdskctx, struct blockif_req *, uint8_t *);
+int	vdsk_write(vdskctx, struct blockif_req *, uint8_t *);
+int	vdsk_trim(vdskctx, unsigned long, off_t arg[2]);
+int	vdsk_flush(vdskctx, unsigned long);
+
+#endif /* __VDSK_H__ */
