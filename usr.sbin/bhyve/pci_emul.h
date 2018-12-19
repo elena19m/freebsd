@@ -78,6 +78,8 @@ struct pci_devemu {
 				size_t *snapshot_size);
 	int	(*pe_restore)(struct vmctx *ctx, struct pci_devinst *pi,
 				void *buffer, size_t buf_size);
+	int	(*pe_pause)(struct vmctx *ctx, struct pci_devinst *pi);
+	int	(*pe_resume)(struct vmctx *ctx, struct pci_devinst *pi);
 };
 #define PCI_EMUL_SET(x)   DATA_SET(pci_devemu_set, x);
 
@@ -256,6 +258,8 @@ int	pci_snapshot(struct vmctx *ctx, const char *dev_name, void *buffer,
 		     size_t buf_size, size_t *snapshot_size);
 int	pci_restore(struct vmctx *ctx, const char *dev_name, void *buffer,
 		    size_t buf_size);
+int	pci_pause(struct vmctx *ctx, const char *dev_name);
+int	pci_resume(struct vmctx *ctx, const char *dev_name);
 
 static __inline void 
 pci_set_cfgdata8(struct pci_devinst *pi, int offset, uint8_t val)

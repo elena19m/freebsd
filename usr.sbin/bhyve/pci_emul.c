@@ -2124,6 +2124,62 @@ pci_restore(struct vmctx *ctx, const char *dev_name, void *buffer,
 	return (*pde->pe_restore)(ctx, pdi, buffer + ret, buf_size - ret);
 }
 
+int
+pci_pause(struct vmctx *ctx, const char *dev_name)
+{
+	struct pci_devemu *pde;
+	struct pci_devinst *pdi;
+	int ret;
+
+	assert(dev_name != NULL);
+
+	ret = pci_find_slotted_dev(dev_name, &pde, &pdi);
+	if (ret != 0) {
+		/* it is possible to call this function without checking that
+		 * the device is inserted first
+		 */
+		fprintf(stderr, "%s: no such name: %s\n", __func__, dev_name);
+		return (0);
+	}
+
+	if (pde->pe_pause == NULL) {
+		/* The pause/resume functionality is optional */
+		fprintf(stderr, "%s: not implemented for: %s\n",
+			__func__, dev_name);
+		return (0);
+	}
+
+	return (*pde->pe_pause)(ctx, pdi);
+}
+
+int
+pci_resume(struct vmctx *ctx, const char *dev_name)
+{
+	struct pci_devemu *pde;
+	struct pci_devinst *pdi;
+	int ret;
+
+	assert(dev_name != NULL);
+
+	ret = pci_find_slotted_dev(dev_name, &pde, &pdi);
+	if (ret != 0) {
+		/* it is possible to call this function without checking that
+		 * the device is inserted first
+		 */
+		fprintf(stderr, "%s: no such name: %s\n", __func__, dev_name);
+		return (0);
+	}
+
+	if (pde->pe_resume == NULL) {
+		/* The pause/resume functionality is optional */
+		fprintf(stderr, "%s: not implemented for: %s\n",
+			__func__, dev_name);
+		return (0);
+	}
+
+	return (*pde->pe_resume)(ctx, pdi);
+}
+
 #define PCI_EMUL_TEST
 #ifdef PCI_EMUL_TEST
 /*

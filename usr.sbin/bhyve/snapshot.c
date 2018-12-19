@@ -87,16 +87,16 @@ extern int guest_ncpus;
 #define JSON_MEMFLAGS_KEY		"memflags"
 
 const struct vm_snapshot_dev_info snapshot_devs[] = {
-	{ "atkbdc",		atkbdc_snapshot,	atkbdc_restore	},
-	{ "virtio-net",		pci_snapshot,		pci_restore	},
-	{ "virtio-blk",		pci_snapshot,		pci_restore	},
-	{ "lpc",		pci_snapshot,		pci_restore	},
-	{ "fbuf",		pci_snapshot,		pci_restore	},
-	{ "xhci",		pci_snapshot,		pci_restore	},
-	{ "e1000",		pci_snapshot,		pci_restore	},
-	{ "ahci",		pci_snapshot,		pci_restore	},
-	{ "ahci-hd",		pci_snapshot,		pci_restore	},
-	{ "ahci-cd",		pci_snapshot,		pci_restore	},
+	{ "atkbdc",	atkbdc_snapshot,	atkbdc_restore,	NULL,		NULL		},
+	{ "virtio-net",	pci_snapshot,		pci_restore,	NULL,		NULL		},
+	{ "virtio-blk",	pci_snapshot,		pci_restore,	NULL,		NULL		},
+	{ "lpc",	pci_snapshot,		pci_restore,	NULL,		NULL		},
+	{ "fbuf",	pci_snapshot,		pci_restore,	NULL,		NULL		},
+	{ "xhci",	pci_snapshot,		pci_restore,	NULL,		NULL		},
+	{ "e1000",	pci_snapshot,		pci_restore,	NULL,		NULL		},
+	{ "ahci",	pci_snapshot,		pci_restore,	pci_pause,	pci_resume	},
+	{ "ahci-hd",	pci_snapshot,		pci_restore,	pci_pause,	pci_resume	},
+	{ "ahci-cd",	pci_snapshot,		pci_restore,	NULL,		NULL		},
 };
 
 const struct vm_snapshot_kern_info snapshot_kern_structs[] = {
@@ -606,7 +606,6 @@ restore_dev(struct vmctx *ctx, struct restore_state *rstate,
 	}
 
 	return (0);
-
 }
 
 
@@ -623,6 +622,46 @@ restore_devs(struct vmctx *ctx, struct restore_state *rstate)
 	}
 
 	return 0;
+}
+
+int
+pause_devs(struct vmctx *ctx)
+{
+	const struct vm_snapshot_dev_info *info;
+	int ret;
+	int i;
+
+	for (i = 0; i < nitems(snapshot_devs); i++) {
+		info = &snapshot_devs[i];
+		if (info->pause_cb == NULL)
+			continue;
+
+		ret = info->pause_cb(ctx, info->dev_name);
+		if (ret != 0)
+			return (ret);
+	}
+
+	return (0);
+}
+
+int
+resume_devs(struct vmctx *ctx)
+{
+	const struct vm_snapshot_dev_info *info;
+	int ret;
+	int i;
+
+	for (i = 0; i < nitems(snapshot_devs); i++) {
+		info = &snapshot_devs[i];
+		if (info->resume_cb == NULL)
+			continue;
+
+		ret = info->resume_cb(ctx, info->dev_name);
+		if (ret != 0)
+			return (ret);
+	}
+
+	return (0);
 }
 
 static int
@@ -913,6 +952,13 @@ vm_checkpoint(struct vmctx *ctx, char *checkpoint_file, bool stop_vm)
 		goto done;
 	}
 
+	ret = pause_devs(ctx);
+	if (ret != 0) {
+		fprintf(stderr, "Could not pause devices\r\n");
+		error = ret;
+		goto done;
+	}
+
 	vm_vcpu_lock_all(ctx);
 
 	ret = vm_snapshot_kern_data(ctx, kdata_fd, xop);
@@ -957,6 +1003,11 @@ vm_checkpoint(struct vmctx *ctx, char *checkpoint_file, bool stop_vm)
 			fprintf(stderr, "Failed to suspend vm\n");
 		}
 		vm_vcpu_unlock_all(ctx);
+
+		ret = resume_devs(ctx);
+		if (ret != 0)
+			fprintf(stderr, "Could not resume devices\r\n");
+
 		/* Wait for CPUs to suspend. TODO: write this properly. */
 		sleep(5);
 		vm_destroy(ctx);
@@ -966,6 +1017,9 @@ vm_checkpoint(struct vmctx *ctx, char *checkpoint_file, bool stop_vm)
 done_unlock:
 	vm_vcpu_unlock_all(ctx);
 done:
+	ret = resume_devs(ctx);
+	if (ret != 0)
+		fprintf(stderr, "Could not resume devices\r\n");
 	if (fd_checkpoint > 0)
 		close(fd_checkpoint);
 	if (mmap_checkpoint_file != MAP_FAILED)
