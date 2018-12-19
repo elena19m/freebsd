@@ -475,4 +475,6 @@ int	vi_pci_snapshot(struct vmctx *ctx, struct pci_devinst *pi,
 			void *buffer, size_t buf_size, size_t *snapshot_size);
 int	vi_pci_restore(struct vmctx *ctx, struct pci_devinst *pi,
 		       void *buffer, size_t buf_size);
+int	vi_pci_pause(struct pci_devinst *pi);
+int	vi_pci_resume(struct pci_devinst *pi);
 #endif	/* _VIRTIO_H_ */
