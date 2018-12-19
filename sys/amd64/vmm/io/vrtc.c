@@ -1063,12 +1063,16 @@ vrtc_restore(struct vrtc *vrtc, void *buffer, size_t buf_size)
 
 	old_vrtc = (struct vrtc *)buffer;
 
-	vrtc->mtx = old_vrtc->mtx;
-	vrtc->callout = old_vrtc->callout;
+	VRTC_LOCK(vrtc);
+
 	vrtc->addr = old_vrtc->addr;
-	vrtc->base_uptime = old_vrtc->base_uptime;
+	vrtc->base_uptime = sbinuptime();
 	vrtc->base_rtctime = old_vrtc->base_rtctime;
 	vrtc->rtcdev = old_vrtc->rtcdev;
+
+	vrtc_callout_reset(vrtc, vrtc_freq(vrtc));
+
+	VRTC_UNLOCK(vrtc);
 
 	return (0);
 }
