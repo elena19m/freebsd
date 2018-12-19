@@ -132,6 +132,7 @@ struct ahci_ioreq {
 	uint32_t done;
 	int slot;
 	int more;
+	int readop;
 };
 
 struct ahci_port {
@@ -725,6 +726,7 @@ ahci_handle_rw(struct ahci_port *p, int slot, uint8_t *cfis, uint32_t done)
 	aior->slot = slot;
 	aior->len = len;
 	aior->done = done;
+	aior->readop = readop;
 	breq = &aior->io_req;
 	breq->br_offset = lba + done;
 	ahci_build_iov(p, aior, prdt, hdr->prdtl);
@@ -1421,6 +1423,7 @@ atapi_read(struct ahci_port *p, int slot, uint8_t *cfis, uint32_t done)
 	aior->slot = slot;
 	aior->len = len;
 	aior->done = done;
+	aior->readop = 1;
 	breq = &aior->io_req;
 	breq->br_offset = lba + done;
 	ahci_build_iov(p, aior, prdt, hdr->prdtl);
@@ -2453,13 +2456,15 @@ pci_ahci_snapshot(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
 {
 	struct pci_ahci_softc *sc;
 	uint8_t *buf;
-	int i, j;
+	int i, j, ret;
 	struct ahci_port *port;
 	vm_paddr_t addr;
 	struct ahci_ioreq *ioreq, *aior;
 
 	sc = pi->pi_arg;
 	buf = buffer;
+
+	/* TODO: add mtx lock/unlock */
 
 	SNAPSHOT_PART_OR_RET(sc->ports, buf, buf_size, snapshot_len);
 	SNAPSHOT_PART_OR_RET(sc->cap, buf, buf_size, snapshot_len);
@@ -2526,7 +2531,8 @@ pci_ahci_snapshot(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
 
 			ioreq = &port->ioreq[j];
 
-			/* TODO Haven't implemented blockif_req save/restore */
+			/* blockif_req snapshot done only for busy requests */
+
 			addr = paddr_host2guest(ctx, ioreq->cfis);
 			SNAPSHOT_PART_OR_RET(addr, buf, buf_size, snapshot_len);
 
@@ -2534,6 +2540,7 @@ pci_ahci_snapshot(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
 			SNAPSHOT_PART_OR_RET(ioreq->done, buf, buf_size, snapshot_len);
 			SNAPSHOT_PART_OR_RET(ioreq->slot, buf, buf_size, snapshot_len);
 			SNAPSHOT_PART_OR_RET(ioreq->more, buf, buf_size, snapshot_len);
+			SNAPSHOT_PART_OR_RET(ioreq->readop, buf, buf_size, snapshot_len);
 		}
 
 		STAILQ_FOREACH(aior, &port->iofhd, io_flist) {
@@ -2547,10 +2554,31 @@ pci_ahci_snapshot(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
 		TAILQ_FOREACH(aior, &port->iobhd, io_blist) {
 			j = ((void *) aior - (void *) port->ioreq) / sizeof(*aior);
 			SNAPSHOT_PART_OR_RET(j, buf, buf_size, snapshot_len);
+
+			/* snapshot only the busy requests
+			 * other requests are not valid
+			 */
+			ret = blockif_snapshot_req(ctx, &aior->io_req, &buf,
+						   &buf_size, snapshot_len);
+			if (ret != 0) {
+				fprintf(stderr,
+					"%s: failed to snapshot req\r\n",
+					__func__);
+				return (-1);
+			}
 		}
 
 		j = -1;
 		SNAPSHOT_PART_OR_RET(j, buf, buf_size, snapshot_len);
+
+		ret = blockif_snapshot(ctx, port->bctx, &buf, &buf_size,
+				       snapshot_len);
+		if (ret != 0) {
+			fprintf(stderr, "%s: failed to snapshot blockif\r\n",
+				__func__);
+			return (-1);
+		}
+
 	}
 
 	return (0);
@@ -2562,7 +2590,7 @@ pci_ahci_restore(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
 {
 	struct pci_ahci_softc *sc;
 	uint8_t *buf;
-	int i, j;
+	int i, j, ret;
 	struct ahci_port *port;
 	vm_paddr_t addr;
 	struct ahci_ioreq *ioreq;
@@ -2587,7 +2615,6 @@ pci_ahci_restore(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
 	RESTORE_PART_OR_RET(sc->lintr, buf, buf_size);
 
 	for (i = 0; i < MAX_PORTS; i++) {
-
 		port = &sc->port[i];
 
 		RESTORE_PART_OR_RET(bctx, buf, buf_size);
@@ -2655,7 +2682,7 @@ pci_ahci_restore(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
 
 			ioreq = &port->ioreq[j];
 
-			/* TODO Haven't implemented blockif_req save/restore */
+			/* blockif_req restore done only for busy requests */
 
 			/* XXX: j may not be correct */
 			hdr = (struct ahci_cmd_hdr *)(port->cmd_lst + j * AHCI_CL_SIZE);
@@ -2667,10 +2694,14 @@ pci_ahci_restore(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
 			RESTORE_PART_OR_RET(ioreq->done, buf, buf_size);
 			RESTORE_PART_OR_RET(ioreq->slot, buf, buf_size);
 			RESTORE_PART_OR_RET(ioreq->more, buf, buf_size);
+			RESTORE_PART_OR_RET(ioreq->readop, buf, buf_size);
 		}
 
-		STAILQ_INIT(&port->iofhd);
+		/* empty the free queue before restoring */
+		while (!STAILQ_EMPTY(&port->iofhd))
+			STAILQ_REMOVE_HEAD(&port->iofhd, io_flist);
 
+		/* restore the free queue */
 		while (1) {
 			RESTORE_PART_OR_RET(j, buf, buf_size);
 
@@ -2680,15 +2711,89 @@ pci_ahci_restore(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
 			STAILQ_INSERT_TAIL(&port->iofhd, &port->ioreq[j], io_flist);
 		}
 
+		/* restore the busy queue */
 		while (1) {
 			RESTORE_PART_OR_RET(j, buf, buf_size);
 
 			if (j == -1)
 				break;
 
-			TAILQ_INSERT_TAIL(&port->iobhd, &port->ioreq[j], io_blist);
+			ioreq = &port->ioreq[j];
+			TAILQ_INSERT_TAIL(&port->iobhd, ioreq, io_blist);
+
+			/* restore only the busy requests
+			 * other requests are not valid
+			 */
+			ret = blockif_restore_req(ctx, &ioreq->io_req,
+						  &buf, &buf_size);
+			if (ret != 0) {
+				fprintf(stderr,
+					"%s: failed to restore request\r\n",
+					__func__);
+				return (-1);
+			}
+
+			/* re-enqueue the requests in the block interface */
+			if (ioreq->readop)
+				ret = blockif_read(port->bctx, &ioreq->io_req);
+			else
+				ret = blockif_write(port->bctx, &ioreq->io_req);
+
+			if (ret != 0) {
+				fprintf(stderr,
+					"%s: failed to re-enqueue request\r\n",
+					__func__);
+				return (-1);
+			}
 		}
 
+		ret = blockif_restore(ctx, port->bctx, &buf, &buf_size);
+		if (ret != 0) {
+			fprintf(stderr, "%s: failed to restore blockif\r\n",
+				__func__);
+			return (-1);
+		}
+
+	}
+
+	return (0);
+}
+
+static int
+pci_ahci_pause(struct vmctx *ctx, struct pci_devinst *pi)
+{
+	struct pci_ahci_softc *sc;
+	struct blockif_ctxt *bctxt;
+	int i;
+
+	sc = pi->pi_arg;
+
+	for (i = 0; i < MAX_PORTS; i++) {
+		bctxt = sc->port[i].bctx;
+		if (bctxt == NULL)
+			continue;
+
+		blockif_pause(bctxt);
+	}
+
+	return (0);
+}
+
+static int
+pci_ahci_resume(struct vmctx *ctx, struct pci_devinst *pi)
+{
+	struct pci_ahci_softc *sc;
+	struct blockif_ctxt *bctxt;
+	int i;
+
+	sc = pi->pi_arg;
+
+	for (i = 0; i < MAX_PORTS; i++) {
+		bctxt = sc->port[i].bctx;
+		if (bctxt == NULL)
+			continue;
+
+		blockif_resume(bctxt);
 	}
 
 	return (0);
@@ -2703,7 +2808,9 @@ struct pci_devemu pci_de_ahci = {
 	.pe_barwrite =	pci_ahci_write,
 	.pe_barread =	pci_ahci_read,
 	.pe_snapshot =	pci_ahci_snapshot,
-	.pe_restore =	pci_ahci_restore
+	.pe_restore =	pci_ahci_restore,
+	.pe_pause =	pci_ahci_pause,
+	.pe_resume =	pci_ahci_resume,
 };
 PCI_EMUL_SET(pci_de_ahci);
 
@@ -2713,7 +2820,9 @@ struct pci_devemu pci_de_ahci_hd = {
 	.pe_barwrite =	pci_ahci_write,
 	.pe_barread =	pci_ahci_read,
 	.pe_snapshot =	pci_ahci_snapshot,
-	.pe_restore =	pci_ahci_restore
+	.pe_restore =	pci_ahci_restore,
+	.pe_pause =	pci_ahci_pause,
+	.pe_resume =	pci_ahci_resume,
 };
 PCI_EMUL_SET(pci_de_ahci_hd);
 
@@ -2723,6 +2832,8 @@ struct pci_devemu pci_de_ahci_cd = {
 	.pe_barwrite =	pci_ahci_write,
 	.pe_barread =	pci_ahci_read,
 	.pe_snapshot =	pci_ahci_snapshot,
-	.pe_restore =	pci_ahci_restore
+	.pe_restore =	pci_ahci_restore,
+	.pe_pause =	pci_ahci_pause,
+	.pe_resume =	pci_ahci_resume,
 };
 PCI_EMUL_SET(pci_de_ahci_cd);

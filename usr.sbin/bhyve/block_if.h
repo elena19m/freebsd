@@ -70,5 +70,15 @@ int	blockif_cancel(struct blockif_ctxt *bc, struct blockif_req *breq);
 int	blockif_close(struct blockif_ctxt *bc);
 void	blockif_pause(struct blockif_ctxt *bc);
 void	blockif_resume(struct blockif_ctxt *bc);
+int	blockif_snapshot_req(struct vmctx *ctx, struct blockif_req *br,
+			     uint8_t **buf, size_t *buf_size,
+			     size_t *snapshot_len);
+int	blockif_restore_req(struct vmctx *ctx, struct blockif_req *br,
+			    uint8_t **buffer, size_t *buf_size);
+int	blockif_snapshot(struct vmctx *ctx, struct blockif_ctxt *bc,
+			 uint8_t **buffer, size_t *buf_size,
+			 size_t *snapshot_size);
+int	blockif_restore(struct vmctx *ctx, struct blockif_ctxt *bc,
+			uint8_t **buffer, size_t *buf_size);
 
 #endif /* _BLOCK_IF_H_ */

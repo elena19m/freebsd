@@ -58,11 +58,15 @@ __FBSDID("$FreeBSD$");
 #include "bhyverun.h"
 #include "mevent.h"
 #include "block_if.h"
+#include "snapshot.h"
 
 #define BLOCKIF_SIG	0xb109b109
 
 #define BLOCKIF_NUMTHR	8
 #define BLOCKIF_MAXREQ	(64 + BLOCKIF_NUMTHR)
+
+#define NO_THREAD_IDX		(-2)
+#define REQ_IDX_SEPARATOR	(-1)
 
 enum blockop {
 	BOP_READ,
@@ -101,9 +105,12 @@ struct blockif_ctxt {
 	int			bc_psectoff;
 	int			bc_closing;
 	int			bc_paused;
+	int			bc_work_count;
 	pthread_t		bc_btid[BLOCKIF_NUMTHR];
 	pthread_mutex_t		bc_mtx;
 	pthread_cond_t		bc_cond;
+	pthread_cond_t		bc_paused_cond;
+	pthread_cond_t		bc_work_done_cond;
 
 	/* Request elements and free/pending/busy queues */
 	TAILQ_HEAD(, blockif_elem) bc_freeq;       
@@ -144,6 +151,7 @@ blockif_enqueue(struct blockif_ctxt *bc, struct blockif_req *breq,
 		off = breq->br_offset;
 		for (i = 0; i < breq->br_iovcnt; i++)
 			off += breq->br_iov[i].iov_len;
+
 		break;
 	default:
 		off = OFF_MAX;
@@ -164,6 +172,7 @@ blockif_enqueue(struct blockif_ctxt *bc, struct blockif_req *breq,
 	else
 		be->be_status = BST_BLOCK;
 	TAILQ_INSERT_TAIL(&bc->bc_pendq, be, be_link);
+
 	return (be->be_status == BST_PEND);
 }
 
@@ -352,15 +361,34 @@ blockif_thr(void *arg)
 
 	pthread_mutex_lock(&bc->bc_mtx);
 	for (;;) {
-		while (blockif_dequeue(bc, t, &be)) {
+		bc->bc_work_count++;
+
+		/* We cannot process work if the interface is paused */
+		while (!bc->bc_paused && blockif_dequeue(bc, t, &be)) {
 			pthread_mutex_unlock(&bc->bc_mtx);
 			blockif_proc(bc, be, buf);
 			pthread_mutex_lock(&bc->bc_mtx);
 			blockif_complete(bc, be);
 		}
-		/* Check ctxt status here to see if exit requested */
+
+		bc->bc_work_count--;
+
+		/* If none of the workers is busy, notify the main thread */
+		if (bc->bc_work_count == 0)
+			pthread_cond_broadcast(&bc->bc_work_done_cond);
+
+		/*
+		 * Check ctxt status here to see if exit requested
+		 *
+		 * No sense to wait while paused if closing anyway
+		 */
 		if (bc->bc_closing)
 			break;
+
+		/* Make all worker threads wait here if the device is paused */
+		while (bc->bc_paused)
+			pthread_cond_wait(&bc->bc_paused_cond, &bc->bc_mtx);
+
 		pthread_cond_wait(&bc->bc_cond, &bc->bc_mtx);
 	}
 	pthread_mutex_unlock(&bc->bc_mtx);
@@ -564,6 +592,10 @@ blockif_open(const char *optstr, const char *ident)
 	bc->bc_psectoff = psectoff;
 	pthread_mutex_init(&bc->bc_mtx, NULL);
 	pthread_cond_init(&bc->bc_cond, NULL);
+	bc->bc_paused = 0;
+	bc->bc_work_count = 0;
+	pthread_cond_init(&bc->bc_paused_cond, NULL);
+	pthread_cond_init(&bc->bc_work_done_cond, NULL);
 	TAILQ_INIT(&bc->bc_freeq);
 	TAILQ_INIT(&bc->bc_pendq);
 	TAILQ_INIT(&bc->bc_busyq);
@@ -597,7 +629,8 @@ blockif_request(struct blockif_ctxt *bc, struct blockif_req *breq,
 	err = 0;
 
 	pthread_mutex_lock(&bc->bc_mtx);
-	if (!bc->bc_paused && !TAILQ_EMPTY(&bc->bc_freeq)) {
+	/* should make thread wait if interface paused ? */
+	if (!TAILQ_EMPTY(&bc->bc_freeq)) {
 		/*
 		 * Enqueue and inform the block i/o thread
 		 * that there is work available
@@ -658,6 +691,8 @@ blockif_cancel(struct blockif_ctxt *bc, struct blockif_req *breq)
 	assert(bc->bc_magic == BLOCKIF_SIG);
 
 	pthread_mutex_lock(&bc->bc_mtx);
+	/* XXX: not waiting while paused */
+
 	/*
 	 * Check pending requests.
 	 */
@@ -857,34 +892,19 @@ blockif_candelete(struct blockif_ctxt *bc)
 	return (bc->bc_candelete);
 }
 
-static void
-blockif_waitall(struct blockif_ctxt *bc)
-{
-	assert(bc->bc_magic == BLOCKIF_SIG);
-
-	while (1) {
-		pthread_mutex_lock(&bc->bc_mtx);
-		if (TAILQ_EMPTY(&bc->bc_pendq) && TAILQ_EMPTY(&bc->bc_busyq)) {
-			pthread_mutex_unlock(&bc->bc_mtx);
-			break;
-		}
-		pthread_mutex_unlock(&bc->bc_mtx);
-		usleep(10000);
-	}
-}
-
 void
 blockif_pause(struct blockif_ctxt *bc)
 {
+	assert(bc != NULL);
 	assert(bc->bc_magic == BLOCKIF_SIG);
 
 	pthread_mutex_lock(&bc->bc_mtx);
 	bc->bc_paused = 1;
+	/* The interface is paused. Wait for workers to finish their work */
+	while (bc->bc_work_count)
+		pthread_cond_wait(&bc->bc_work_done_cond, &bc->bc_mtx);
 	pthread_mutex_unlock(&bc->bc_mtx);
 
-	blockif_waitall(bc);
-
-	/* Sync backing file to disk. */
 	if (blockif_flush_bc(bc))
 		fprintf(stderr, "%s: [WARN] failed to flush backing file.\r\n",
 			__func__);
@@ -893,9 +913,132 @@ blockif_pause(struct blockif_ctxt *bc)
 void
 blockif_resume(struct blockif_ctxt *bc)
 {
+	assert(bc != NULL);
 	assert(bc->bc_magic == BLOCKIF_SIG);
 
 	pthread_mutex_lock(&bc->bc_mtx);
 	bc->bc_paused = 0;
+	/* resume the threads waiting for paused */
+	pthread_cond_broadcast(&bc->bc_paused_cond);
+	/* kick the threads after restore */
+	pthread_cond_broadcast(&bc->bc_cond);
 	pthread_mutex_unlock(&bc->bc_mtx);
+}
+
+int
+blockif_snapshot_req(struct vmctx *ctx, struct blockif_req *br,
+		     uint8_t **buf, size_t *buf_size, size_t *snapshot_len)
+{
+	int i;
+	struct iovec *iov;
+	vm_paddr_t addr;
+
+	SNAPSHOT_PART_OR_RET(br->br_iovcnt, buf, buf_size, snapshot_len);
+	SNAPSHOT_PART_OR_RET(br->br_offset, buf, buf_size, snapshot_len);
+	SNAPSHOT_PART_OR_RET(br->br_resid, buf, buf_size, snapshot_len);
+
+	/* XXX: The callback and parameter must be filled by the virtualized
+	 * device that uses the interface, during its init; we're not touching
+	 * them here
+	 */
+
+	/* Snapshot the iovecs */
+	for (i = 0; i < nitems(br->br_iov); i++) {
+		iov = &br->br_iov[i];
+
+		SNAPSHOT_PART_OR_RET(iov->iov_len, buf, buf_size, snapshot_len);
+		/* we assume the iov is a guest-mapped address */
+		addr = paddr_host2guest(ctx, iov->iov_base);
+		SNAPSHOT_PART_OR_RET(addr, buf, buf_size, snapshot_len);
+	}
+
+	return (0);
+}
+
+int
+blockif_snapshot(struct vmctx *ctx, struct blockif_ctxt *bc,
+		 uint8_t **buffer, size_t *buf_size, size_t *snapshot_len)
+{
+	if (bc->bc_paused == 0) {
+		fprintf(stderr, "%s: Snapshot failed: "
+			"interface not paused.\r\n", __func__);
+		return (ENXIO);
+	}
+
+	pthread_mutex_lock(&bc->bc_mtx);
+
+	SNAPSHOT_PART_OR_RET(bc->bc_magic, buffer, buf_size, snapshot_len);
+	SNAPSHOT_PART_OR_RET(bc->bc_ischr, buffer, buf_size, snapshot_len);
+	SNAPSHOT_PART_OR_RET(bc->bc_isgeom, buffer, buf_size, snapshot_len);
+	SNAPSHOT_PART_OR_RET(bc->bc_candelete, buffer, buf_size, snapshot_len);
+	SNAPSHOT_PART_OR_RET(bc->bc_rdonly, buffer, buf_size, snapshot_len);
+	SNAPSHOT_PART_OR_RET(bc->bc_size, buffer, buf_size, snapshot_len);
+	SNAPSHOT_PART_OR_RET(bc->bc_sectsz, buffer, buf_size, snapshot_len);
+	SNAPSHOT_PART_OR_RET(bc->bc_psectsz, buffer, buf_size, snapshot_len);
+	SNAPSHOT_PART_OR_RET(bc->bc_psectoff, buffer, buf_size, snapshot_len);
+	SNAPSHOT_PART_OR_RET(bc->bc_closing, buffer, buf_size, snapshot_len);
+
+	pthread_mutex_unlock(&bc->bc_mtx);
+	return (0);
+}
+
+int
+blockif_restore_req(struct vmctx *ctx, struct blockif_req *br,
+		    uint8_t **buffer, size_t *buf_size)
+{
+	struct iovec *iov;
+	int i;
+	vm_paddr_t addr;
+
+	RESTORE_PART_OR_RET(br->br_iovcnt, buffer, buf_size);
+	RESTORE_PART_OR_RET(br->br_offset, buffer, buf_size);
+	RESTORE_PART_OR_RET(br->br_resid, buffer, buf_size);
+
+	/* XXX: The callback and parameter must be filled by the virtualized
+	 * device that uses the interface, during its init; we're not touching
+	 * them here
+	 */
+
+	/* Snapshot the iovecs */
+	for (i = 0; i < nitems(br->br_iov); i++) {
+		iov = &br->br_iov[i];
+
+		RESTORE_PART_OR_RET(iov->iov_len, buffer, buf_size);
+		RESTORE_PART_OR_RET(addr, buffer, buf_size);
+		/* we assume that iov_base is a guest-mapped address */
+		if (addr == (vm_paddr_t)-1) {
+			fprintf(stderr, "%s: Invalid address\r\n", __func__);
+			return (EINVAL);
+		}
+		iov->iov_base = paddr_guest2host(ctx, addr, iov->iov_len);
+	}
+
+	return (0);
+}
+
+int
+blockif_restore(struct vmctx *ctx, struct blockif_ctxt *bc,
+		uint8_t **buffer, size_t *buf_size)
+{
+	if (bc->bc_paused == 0) {
+		fprintf(stderr, "%s: Restore failed: "
+			"interface not paused.\r\n", __func__);
+		return (ENXIO);
+	}
+
+	pthread_mutex_lock(&bc->bc_mtx);
+
+	RESTORE_PART_OR_RET(bc->bc_magic, buffer, buf_size);
+	RESTORE_PART_OR_RET(bc->bc_ischr, buffer, buf_size);
+	RESTORE_PART_OR_RET(bc->bc_isgeom, buffer, buf_size);
+	RESTORE_PART_OR_RET(bc->bc_candelete, buffer, buf_size);
+	RESTORE_PART_OR_RET(bc->bc_rdonly, buffer, buf_size);
+	RESTORE_PART_OR_RET(bc->bc_size, buffer, buf_size);
+	RESTORE_PART_OR_RET(bc->bc_sectsz, buffer, buf_size);
+	RESTORE_PART_OR_RET(bc->bc_psectsz, buffer, buf_size);
+	RESTORE_PART_OR_RET(bc->bc_psectoff, buffer, buf_size);
+	RESTORE_PART_OR_RET(bc->bc_closing, buffer, buf_size);
+
+	pthread_mutex_unlock(&bc->bc_mtx);
+	return (0);
 }
