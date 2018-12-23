@@ -47,6 +47,12 @@
 #include "mem.h"
 #include "mevent.h"
 
+/* Exit codes. */
+#define	EXIT_REBOOT	0
+#define EXIT_POWEROFF	1
+#define	EXIT_HALT	2
+#define EXIT_ERROR	4
+
 #define GUEST_NIO_PORT	0x488	/* guest upcalls via i/o port */
 
 #define	VMEXIT_SWITCH	0	/* force vcpu switch in mux mode */
@@ -135,7 +141,6 @@ fbsdrun_start_thread(void *param)
 	vm_loop(mtp->mt_ctx, vcpu, vmexit[vcpu].pc);
 
 	/* not reached */
-	exit(1);
 	return (NULL);
 }
 
@@ -147,7 +152,7 @@ fbsdrun_addcpu(struct vmctx *ctx, int vcpu, uint64_t pc)
 	if (cpumask & (1 << vcpu)) {
 		fprintf(stderr, "addcpu: attempting to add existing cpu %d\n",
 		    vcpu);
-		exit(1);
+		exit(4);
 	}
 
 	cpumask |= 1 << vcpu;
@@ -234,10 +239,14 @@ vmexit_suspend(struct vmctx *ctx, struct vm_exit *vmexit, int *pvcpu)
 
 	switch (how) {
 	case VM_SUSPEND_POWEROFF:
-		return (VMEXIT_RESET);
+		exit(EXIT_POWEROFF);
 	case VM_SUSPEND_RESET:
+		exit(EXIT_REBOOT);
 	case VM_SUSPEND_HALT:
+		exit(EXIT_HALT);
 	case VM_SUSPEND_TRIPLEFAULT:
+		/* Not implemented yet. */
+		exit(EXIT_ERROR);
 	default:
 		fprintf(stderr, "vmexit_suspend: invalid or unimplemented reason %d\n", how);
 		exit(100);
@@ -291,7 +300,7 @@ vm_loop(struct vmctx *ctx, int vcpu, uint64_t pc)
 		if (exitcode >= VM_EXITCODE_MAX || handler[exitcode] == NULL) {
 			fprintf(stderr, "vm_loop: unexpected exitcode 0x%x\n",
 			    exitcode);
-			exit(1);
+			exit(4);
 		}
 
                 rc = (*handler[exitcode])(ctx, &vmexit[vcpu], &vcpu);
@@ -306,7 +315,7 @@ vm_loop(struct vmctx *ctx, int vcpu, uint64_t pc)
 		case VMEXIT_RESET:
 			exit(0);
 		default:
-			exit(1);
+			exit(4);
 		}
 	}
 	fprintf(stderr, "vm_run error %d, errno %d\n", error, errno);
@@ -362,14 +371,14 @@ main(int argc, char *argv[])
 		case 'h':
 			usage(0);
 		default:
-			usage(1);
+			usage(4);
 		}
 	}
 	argc -= optind;
 	argv += optind;
 
 	if (argc != 1)
-		usage(1);
+		usage(4);
 
 	vmname = argv[0];
 
