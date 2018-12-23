@@ -30,13 +30,16 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <stdbool.h>
 #include <libgen.h>
 #include <unistd.h>
 #include <assert.h>
 #include <errno.h>
+#include <err.h>
 #include <pthread.h>
 #include <pthread_np.h>
+#include <sysexits.h>
 #include <vmmapi.h>
 
 #include <machine/vmm.h>
@@ -70,13 +73,11 @@ char *vmname;
 
 int guest_ncpus;
 
-static int pincpu = -1;
-
 static int foundcpus;
 
 static char *progname;
 static const int BSP = 0;
-
+/* TODO Change this to cpuset_t */
 static int cpumask;
 
 static void vm_loop(struct vmctx *ctx, int vcpu, uint64_t pc);
@@ -94,6 +95,8 @@ struct mt_vmm_info {
 	int		mt_vcpu;
 } mt_vmm_info[VM_MAXCPU];
 
+static cpuset_t *vcpumap[VM_MAXCPU] = { NULL };
+
 static void
 usage(int code)
 {
@@ -109,6 +112,39 @@ usage(int code)
 		progname);
 
 	exit(code);
+}
+
+static int
+pincpu_parse(const char *opt)
+{
+	int vcpu, pcpu;
+
+	if (sscanf(opt, "%d:%d", &vcpu, &pcpu) != 2) {
+		fprintf(stderr, "invalid format: %s\n", opt);
+		return (-1);
+	}
+
+	if (vcpu < 0 || vcpu >= VM_MAXCPU) {
+		fprintf(stderr, "vcpu '%d' outside valid range from 0 to %d\n",
+		    vcpu, VM_MAXCPU - 1);
+		return (-1);
+	}
+
+	if (pcpu < 0 || pcpu >= CPU_SETSIZE) {
+		fprintf(stderr, "hostcpu '%d' outside valid range from "
+		    "0 to %d\n", pcpu, CPU_SETSIZE - 1);
+		return (-1);
+	}
+
+	if (vcpumap[vcpu] == NULL) {
+		if ((vcpumap[vcpu] = malloc(sizeof(cpuset_t))) == NULL) {
+			perror("malloc");
+			return (-1);
+		}
+		CPU_ZERO(vcpumap[vcpu]);
+	}
+	CPU_SET(pcpu, vcpumap[vcpu]);
+	return (0);
 }
 
 void *
@@ -265,17 +301,15 @@ static vmexit_handler_t handler[VM_EXITCODE_MAX] = {
 static void
 vm_loop(struct vmctx *ctx, int vcpu, uint64_t pc)
 {
-	cpuset_t mask;
 	int error, rc, prevcpu;
 	enum vm_exitcode exitcode;
 
-	if (pincpu >= 0) {
-		CPU_ZERO(&mask);
-		CPU_SET(pincpu + vcpu, &mask);
+	if (vcpumap[vcpu] != NULL) {
 		error = pthread_setaffinity_np(pthread_self(),
-					       sizeof(mask), &mask);
+		    sizeof(cpuset_t), vcpumap[vcpu]);
 		assert(error == 0);
 	}
+
 	while (1) {
 
 		error = vm_run(ctx, vcpu, pc, &vmexit[vcpu]);
@@ -352,7 +386,10 @@ main(int argc, char *argv[])
 			memory_base_address = strtoul(optarg, NULL, 0);
 			break;
 		case 'p':
-			pincpu = atoi(optarg);
+                        if (pincpu_parse(optarg) != 0) {
+                            errx(EX_USAGE, "invalid vcpu pinning "
+                                 "configuration '%s'", optarg);
+                        }
 			break;
                 case 'c':
 			guest_ncpus = atoi(optarg);
