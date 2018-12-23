@@ -647,8 +647,8 @@ vgic_v3_irq_toggle_enabled(uint32_t irq, bool enabled,
 	return (0);
 }
 
-static struct vgic_v3_irq *
-vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
+static int
+irqbuf_highest_priority(struct vgic_v3_cpu_if *cpu_if, int start, int end,
     struct hypctx *hypctx)
 {
 	uint32_t irq;
@@ -661,7 +661,7 @@ vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
 
 	max_idx = -1;
 	max_priority = 0xff;
-	for (i = 0; i < cpu_if->irqbuf_num; i++) {
+	for (i = start; i < end; i++) {
 		irq = cpu_if->irqbuf[i].irq;
 		/* Check that the interrupt hasn't been already scheduled */
 		if (irq == IRQ_SCHEDULED)
@@ -672,7 +672,6 @@ vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
 		if (!vgic_v3_int_target(irq, hypctx))
 			continue;
 
-		//priority = vgic_v3_get_priority(irq, hypctx);
 		priority = cpu_if->irqbuf[i].priority;
 		if (priority >= vpmr)
 			continue;
@@ -690,9 +689,7 @@ vgic_v3_highest_priority_pending(struct vgic_v3_cpu_if *cpu_if,
 		}
 	}
 
-	if (max_idx == -1)
-		return (NULL);
-	return (&cpu_if->irqbuf[max_idx]);
+	return (max_idx);
 }
 
 static inline bool
@@ -770,7 +767,8 @@ clk_irq_in_lr(struct vgic_v3_cpu_if *cpu_if)
 }
 
 static void
-vgic_v3_irqbuf_to_lr(struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if)
+vgic_v3_irqbuf_to_lr(struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if,
+    bool by_priority)
 {
 	struct vgic_v3_irq *vip;
 	int irqbuf_idx;
@@ -782,9 +780,12 @@ vgic_v3_irqbuf_to_lr(struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if)
 	irqbuf_idx = 0;
 	lr_idx = 0;
 	for (;;) {
-		/* Find the first enabled buffered interrupt */
-		irqbuf_idx = vgic_v3_irqbuf_next_enabled(cpu_if->irqbuf,
-		    irqbuf_idx, cpu_if->irqbuf_num, hypctx, cpu_if);
+		if (by_priority)
+			irqbuf_idx = irqbuf_highest_priority(cpu_if,
+			    irqbuf_idx, cpu_if->irqbuf_num, hypctx);
+		else
+			irqbuf_idx = irqbuf_next_enabled(cpu_if->irqbuf,
+			    irqbuf_idx, cpu_if->irqbuf_num, hypctx, cpu_if);
 		if (irqbuf_idx == -1)
 			break;
 
@@ -813,17 +814,22 @@ vgic_v3_irqbuf_to_lr(struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if)
 void
 vgic_v3_sync_hwstate(void *arg)
 {
-	struct hypctx *hypctx = arg;
-	struct vgic_v3_cpu_if *cpu_if = &hypctx->vgic_cpu_if;
-	struct vgic_v3_irq *vip;
+	struct hypctx *hypctx;
+	struct vgic_v3_cpu_if *cpu_if;
 	int lr_free;
 	int i;
+	bool by_priority;
+
+	hypctx = arg;
+	cpu_if =  &hypctx->vgic_cpu_if;
 
 	/*
 	 * All Distributor writes have been executed at this point, do not
-	 * protect reads with a  mutex.
+	 * protect Distributor reads with a mutex.
+	 *
+	 * This is callled with all interrupts disabled, so there is no need for
+	 * a List Register spinlock either.
 	 */
-
 	mtx_lock_spin(&cpu_if->lr_mtx);
 
 	/* Exit early if there are no buffered interrupts */
@@ -836,60 +842,8 @@ vgic_v3_sync_hwstate(void *arg)
 		if (cpu_if->ich_elsr_el2 & (1U << i))
 			lr_free++;
 
-	/* Move buffered interrupts to the LR regs and exit early */
-	if (cpu_if->irqbuf_num <= lr_free) {
-		vgic_v3_irqbuf_to_lr(hypctx, cpu_if);
-		goto out;
-	}
-
-	/* This is bad. This shouldn't happen */
-	eprintf("RESHUFFLING! lr_free = %d, irqbuf_num = %zu\n",
-	    lr_free, cpu_if->irqbuf_num);
-
-	/* TODO: Update this part for better efficiency */
-
-	/*
-	 * Add all interrupts from the list registers that are not active to
-	 * the pending buffer to be rescheduled in the next step.
-	 */
-	uint64_t lr;
-	printf("Pending in List Registers:\n");
-	for (i = 0; i < cpu_if->ich_lr_num; i++) {
-		lr = cpu_if->ich_lr_el2[i];
-		if (lr_pending(lr))
-			printf("%d: %lu\n", i, ICH_LR_EL2_VINTID(lr));
-	}
-
-	printf("Active in List Registers:\n");
-	for (i = 0; i < cpu_if->ich_lr_num; i++)
-		if (lr_active(cpu_if->ich_lr_el2[i]))
-			printf("%d: %lu\n", i, ICH_LR_EL2_VINTID(cpu_if->ich_lr_el2[i]));
-
-	printf("Pending and Active in List Registers:\n");
-	for (i = 0; i < cpu_if->ich_lr_num; i++) {
-		lr = cpu_if->ich_lr_el2[i];
-		if (lr_pending_active(lr))
-			printf("%d: %lu\n", i, ICH_LR_EL2_VINTID(lr));
-	}
-
-	eprintf("before filling the list registers\n");
-	for (i = 0; i < cpu_if->ich_lr_num; i++) {
-		if (!lr_inactive(cpu_if->ich_lr_el2[i]))
-			continue;
-
-		/* TODO Take into account timer interrupts */
-		vip = vgic_v3_highest_priority_pending(cpu_if, hypctx);
-		if (vip == NULL)
-			/* No more pending interrupts */
-			break;
-		vip_to_lr(vip, cpu_if->ich_lr_el2[i]);
-
-		/* Mark the scheduled pending interrupt as invalid */
-		vip->irq = IRQ_SCHEDULED;
-	}
-
-	/* Remove all scheduled interrupts */
-	vgic_v3_irqbuf_remove_nolock(IRQ_SCHEDULED, cpu_if);
+	by_priority = (lr_free <= cpu_if->ich_lr_num);
+	vgic_v3_irqbuf_to_lr(hypctx, cpu_if, by_priority);
 
 	/* TODO Enable maintenance interrupts if interrupts are still pending */
 
