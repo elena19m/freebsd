@@ -736,46 +736,49 @@ vgic_v3_lr_next_inactive(uint64_t *ich_lr_el2, int start, int end)
 		return (-1);
 }
 
+/*
+ * There are two cases in which the virtual timer interrupt is in the list
+ * registers:
+ *
+ * 1. The virtual interrupt is active. The guest is executing the interrupt
+ * handler, and the timer fired before the guest had the chance to write to
+ * the EOIR1 register (the interrupt handler hasn't finished executing).
+ *
+ * 2. The virtual interrupt is pending. Because the virtual timer handler
+ * disables the timer, this can only happen if there were two or more timer
+ * interrupts in the buffer (see the case above), and one of them was added
+ * to the List Registers as pending in the previous world switch.
+ *
+ * Injecting the interrupt in these cases would mean that another timer
+ * interrupt is asserted as soon as the guest writes to the EOIR1 register.
+ * This can lead to the guest being stuck servicing timer interrupts and doing
+ * nothing else. So do not inject a timer interrupt while one is active or
+ * pending. Buffered interrupts will be injected after the next world switch.
+ */
+static bool
+clk_irq_in_lr(struct vgic_v3_cpu_if *cpu_if)
+{
+	uint64_t lr;
+	int i;
+
+	for (i = 0; i < cpu_if->ich_lr_num; i++) {
+		lr = cpu_if->ich_lr_el2[i];
+		if (ICH_LR_EL2_VINTID(lr) == 27 && !lr_inactive(lr))
+			return (true);
+	}
+
+	return (false);
+}
+
 static void
 vgic_v3_irqbuf_to_lr(struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if)
 {
 	struct vgic_v3_irq *vip;
-	uint64_t lr;
 	int irqbuf_idx;
 	int lr_idx;
-	bool clk_injected;
+	bool clk_present;
 
-	clk_injected = false;
-	for (lr_idx = 0; lr_idx < cpu_if->ich_lr_num; lr_idx++) {
-		lr = cpu_if->ich_lr_el2[lr_idx];
-		/*
-		 * There are two cases in which the virtual timer interrupt is
-		 * in the list registers:
-		 *
-		 * 1. The virtual interrupt is active. The guest is executing
-		 * the interrupt handler, and the timer fired before the guest
-		 * has written to the EOR register (the interrupt handler hasn't
-		 * finished executing).
-		 *
-		 * 2. The virtual interrupt is pending. Because the virtual timer
-		 * handler disables the timer, this can only happen if there
-		 * were two or more timer interrupts in the buffer (see the case
-		 * above), and one of them was added to the List Registers as
-		 * pending in the previous world switch.
-		 *
-		 * Injecting the interrupt in these cases would mean that
-		 * another timer interrupt is asserted as soon as the guest
-		 * writes to the EOR register. This can lead to the guest being
-		 * stuck servicing timer interrupts and doing nothing else. So
-		 * do not inject a timer interrupt while one is active or
-		 * pending. Buffered interrupts will be injected after the next
-		 * world switch.
-		 */
-		if (ICH_LR_EL2_VINTID(lr) == 27 && !lr_inactive(lr)) {
-			clk_injected = true;
-			break;
-		}
-	}
+	clk_present = clk_irq_in_lr(cpu_if);
 
 	irqbuf_idx = 0;
 	lr_idx = 0;
@@ -792,19 +795,14 @@ vgic_v3_irqbuf_to_lr(struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if)
 			break;
 
 		vip = &cpu_if->irqbuf[irqbuf_idx];
-		if (vip->irqtype == VGIC_IRQ_CLK && clk_injected) {
-			/* Do not swamp guest with timer interrupts. */
+		if (vip->irqtype == VGIC_IRQ_CLK && clk_present) {
+			/* Skip injecting timer interrupt. */
 			irqbuf_idx++;
 			continue;
 		}
 
-		/* Copy the IRQ to the LR register */
 		vip_to_lr(vip, cpu_if->ich_lr_el2[lr_idx]);
-
-		/* Mark the buffered interrupt as scheduled... */
 		vip->irq = IRQ_SCHEDULED;
-
-		/* Proceed to the next interrupt. */
 		irqbuf_idx++;
 		lr_idx++;
 	}
