@@ -595,7 +595,6 @@ static int
 vgic_v3_irq_toggle_enabled_vcpu(uint32_t irq, bool enabled,
     struct vgic_v3_cpu_if *cpu_if)
 {
-	//struct vgic_v3_irq *vip;
 	int i;
 
 	mtx_lock_spin(&cpu_if->lr_mtx);
@@ -703,7 +702,7 @@ cpu_if_group_enabled(struct vgic_v3_cpu_if *cpu_if)
 }
 
 static inline int
-vgic_v3_irqbuf_next_enabled(struct vgic_v3_irq *irqbuf, int start, int end,
+irqbuf_next_enabled(struct vgic_v3_irq *irqbuf, int start, int end,
     struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if)
 {
 	int i;
@@ -722,12 +721,12 @@ vgic_v3_irqbuf_next_enabled(struct vgic_v3_irq *irqbuf, int start, int end,
 }
 
 static inline int
-vgic_v3_lr_next_inactive(uint64_t *ich_lr_el2, int start, int end)
+vgic_v3_lr_next_empty(uint32_t ich_elsr_el2, int start, int end)
 {
 	int i;
 
 	for (i = start; i < end; i++)
-		if (lr_inactive(ich_lr_el2[i]))
+		if (ich_elsr_el2 & (1U << i))
 			break;
 
 	if (i < end)
@@ -789,7 +788,7 @@ vgic_v3_irqbuf_to_lr(struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if)
 		if (irqbuf_idx == -1)
 			break;
 
-		lr_idx = vgic_v3_lr_next_inactive(cpu_if->ich_lr_el2,
+		lr_idx = vgic_v3_lr_next_empty(cpu_if->ich_elsr_el2,
 		    lr_idx, cpu_if->ich_lr_num);
 		if (lr_idx == -1)
 			break;
@@ -834,7 +833,7 @@ vgic_v3_sync_hwstate(void *arg)
 	/* Test if all buffered interrupts can fit in the LR regs */
 	lr_free = 0;
 	for (i = 0; i < cpu_if->ich_lr_num; i++)
-		if (lr_inactive(cpu_if->ich_lr_el2[i]))
+		if (cpu_if->ich_elsr_el2 & (1U << i))
 			lr_free++;
 
 	/* Move buffered interrupts to the LR regs and exit early */
