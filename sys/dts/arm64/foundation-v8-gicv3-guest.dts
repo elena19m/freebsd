@@ -62,10 +62,10 @@
 
 	timer {
 		compatible = "arm,armv8-timer";
-		interrupts = <1 13 0xf08>,
-			     <1 14 0xf08>,
-			     <1 11 0xf08>,
-			     <1 10 0xf08>;
+		interrupts = <1 13 0xf08>,		/* Secure Physical Timer */
+			     <1 14 0xf08>,		/* Non-secure Physical Timer*/
+			     <1 11 0xf08>,		/* Virtual Timer */
+			     <1 10 0xf08>;		/* EL2 Timer */
 		interrupt-parrent = <&gic>;
 		clock-frequency = <100000000>;
 	};
