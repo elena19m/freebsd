@@ -60,11 +60,6 @@
 		interrupts = <1 9 4>;
 	};
 
-	/*
-	 * Don't advertise virtual timer interrupts in the guest because on
-	 * ARMv8.0 there's only support for trapping access to the physical
-	 * timer registers.
-	 */
 	timer {
 		compatible = "arm,armv8-timer";
 		interrupts = <1 13 0xf08>,
