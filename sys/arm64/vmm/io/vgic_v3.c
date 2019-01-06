@@ -913,18 +913,24 @@ vgic_v3_init(uint64_t ich_vtr_el2) {
 }
 
 static int
-arm_vgic_detach(device_t dev)
+vgic_v3_maint_intr(void *arg)
 {
-	gic_sc = NULL;
+	eprintf("MAINTENANCE INTERRUPT\n");
 
-	return (0);
+	return (FILTER_HANDLED);
 }
 
-static int
-arm_vgic_attach(device_t dev)
-{
-	return (0);
-}
+/*
+ * TODO: Look at how gic_v3_fdt.c adds the gic driver.
+ *
+ * 1. In probe they set the device description.
+ * 2. In attach they create children devices for the GIC (in
+ * gic_v3_ofw_bus_attach).
+ * 3. There is no identify function being called.
+ *
+ * On the other hand, in man 9 DEVICE_IDENTIFY it is stated that a new device
+ * instance is created by the identify function.
+ */
 
 static void
 arm_vgic_identify(driver_t *driver, device_t parent)
@@ -951,6 +957,32 @@ arm_vgic_probe(device_t dev)
 	}
 
 	return (ENXIO);
+}
+
+static int
+arm_vgic_attach(device_t dev)
+{
+	int error;
+
+	error = gic_v3_setup_maint_intr(vgic_v3_maint_intr, NULL, NULL);
+	if (error)
+		device_printf(dev, "Could not setup maintenance interrupt\n");
+
+	return (0);
+}
+
+static int
+arm_vgic_detach(device_t dev)
+{
+	int error;
+
+	error = gic_v3_teardown_maint_intr();
+	if (error)
+		device_printf(dev, "Could not teardown maintenance interrupt\n");
+
+	gic_sc = NULL;
+
+	return (0);
 }
 
 static device_method_t arm_vgic_methods[] = {
