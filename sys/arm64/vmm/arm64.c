@@ -613,6 +613,9 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 		    ktohyp(hypctx));
 		intr_restore(daif);
 
+		if (excp_type == EXCP_TYPE_MAINT_IRQ)
+			continue;
+
 		vme->pc = hypctx->elr_el2;
 		vme->inst_length = INSN_SIZE;
 		vme->u.hyp.exception_nr = excp_type;
