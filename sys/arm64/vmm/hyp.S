@@ -277,7 +277,16 @@ END(call_function)
 
 ENTRY(handle_el2_el1_irq64)
 	do_world_switch_to_host
+	str	x9, [sp, #-16]!
+	mrs	x9, ich_misr_el2
+	cmp	x9, xzr
+	beq	1f
+	mov	x0, #EXCP_TYPE_MAINT_IRQ
+	b	2f
+1:
 	mov	x0, #EXCP_TYPE_EL1_IRQ
+2:
+	ldr	x9, [sp], #16
 	eret
 END(handle_el2_el1_irq)
 

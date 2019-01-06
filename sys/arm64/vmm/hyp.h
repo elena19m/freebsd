@@ -90,6 +90,8 @@
 #define EXCP_TYPE_EL2_FIQ	6
 #define EXCP_TYPE_EL2_ERROR	7
 
+#define	EXCP_TYPE_MAINT_IRQ	8
+
 #define	HYP_GET_VECTOR_TABLE	-1
 
 #endif /* !_VMM_HYP_H_ */

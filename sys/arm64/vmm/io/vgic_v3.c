@@ -819,6 +819,7 @@ vgic_v3_sync_hwstate(void *arg)
 	int lr_free;
 	int i;
 	bool by_priority;
+	bool en_underflow_intr;
 
 	hypctx = arg;
 	cpu_if =  &hypctx->vgic_cpu_if;
@@ -847,7 +848,19 @@ vgic_v3_sync_hwstate(void *arg)
 	by_priority = (lr_free <= cpu_if->ich_lr_num);
 	vgic_v3_irqbuf_to_lr(hypctx, cpu_if, by_priority);
 
-	if (cpu_if->irqbuf_num > 0) {
+	lr_free = 0;
+	for (i = 0; i < cpu_if->ich_lr_num; i++)
+		if (cpu_if->ich_elsr_el2 & (1U << i))
+			lr_free++;
+
+	en_underflow_intr = false;
+	if (cpu_if->irqbuf_num > 0)
+		for (i = 0; i < cpu_if->irqbuf_num; i++)
+			if (cpu_if->irqbuf[i].irqtype != VGIC_IRQ_CLK) {
+				en_underflow_intr = true;
+				break;
+			}
+	if (en_underflow_intr) {
 		cpu_if->ich_hcr_el2 |= ICH_HCR_EL2_UIE;
 	} else {
 		cpu_if->ich_hcr_el2 &= ~ICH_HCR_EL2_UIE;
@@ -921,7 +934,7 @@ vgic_v3_init(uint64_t ich_vtr_el2) {
 static int
 vgic_v3_maint_intr(void *arg)
 {
-	eprintf("MAINTENANCE INTERRUPT\n");
+	printf("MAINTENANCE INTERRUPT\n");
 
 	return (FILTER_HANDLED);
 }
