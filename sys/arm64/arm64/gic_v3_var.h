@@ -109,6 +109,10 @@ uint64_t gic_r_read_8(device_t, bus_size_t);
 void gic_r_write_4(device_t, bus_size_t, uint32_t var);
 void gic_r_write_8(device_t, bus_size_t, uint64_t var);
 
+int gic_v3_setup_maint_intr(driver_filter_t filter, driver_intr_t handler,
+    void *arg);
+int gic_v3_teardown_maint_intr(void);
+
 /*
  * GIC Distributor accessors.
  * Notice that only GIC sofc can be passed.

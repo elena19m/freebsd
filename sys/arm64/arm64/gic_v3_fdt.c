@@ -49,6 +49,11 @@ __FBSDID("$FreeBSD$");
 #include "gic_v3_reg.h"
 #include "gic_v3_var.h"
 
+static struct resource *maint_res;
+static device_t gic_dev;
+static int maint_rid;
+static void *maint_cookie;
+
 /*
  * FDT glue.
  */
@@ -171,6 +176,8 @@ gic_v3_fdt_attach(device_t dev)
 	if (device_get_children(dev, &sc->gic_children, &sc->gic_nchildren) != 0)
 		sc->gic_nchildren = 0;
 
+	gic_dev = dev;
+
 	return (err);
 
 error:
@@ -287,6 +294,8 @@ gic_v3_ofw_bus_attach(device_t dev)
 		size_cells = 2;
 		OF_getencprop(parent, "#size-cells", &size_cells,
 		    sizeof(size_cells));
+
+
 		/* Iterate through all GIC subordinates */
 		for (node = OF_child(parent); node > 0; node = OF_peer(node)) {
 			/* Allocate and populate devinfo. */
@@ -334,5 +343,24 @@ gic_v3_ofw_bus_attach(device_t dev)
 		}
 	}
 
+	maint_res = bus_alloc_resource_any(dev, SYS_RES_IRQ, &maint_rid,
+	    RF_ACTIVE);
+	if (!maint_res)
+		device_printf(dev,
+		    "Could not allocate resource for maintenance interrupt\n");
+
 	return (bus_generic_attach(dev));
+}
+
+int
+gic_v3_setup_maint_intr(driver_filter_t filter, driver_intr_t handler, void *arg)
+{
+	return (bus_setup_intr(gic_dev, maint_res, INTR_TYPE_MISC,
+	    filter, handler, arg, &maint_cookie));
+}
+
+int
+gic_v3_teardown_maint_intr(void)
+{
+	return (bus_teardown_intr(gic_dev, maint_res, maint_cookie));
 }
