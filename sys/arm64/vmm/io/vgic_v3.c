@@ -833,8 +833,10 @@ vgic_v3_sync_hwstate(void *arg)
 	mtx_lock_spin(&cpu_if->lr_mtx);
 
 	/* Exit early if there are no buffered interrupts */
-	if (cpu_if->irqbuf_num == 0)
+	if (cpu_if->irqbuf_num == 0) {
+		cpu_if->ich_hcr_el2 &= ~ICH_HCR_EL2_UIE;
 		goto out;
+	}
 
 	/* Test if all buffered interrupts can fit in the LR regs */
 	lr_free = 0;
@@ -845,7 +847,11 @@ vgic_v3_sync_hwstate(void *arg)
 	by_priority = (lr_free <= cpu_if->ich_lr_num);
 	vgic_v3_irqbuf_to_lr(hypctx, cpu_if, by_priority);
 
-	/* TODO Enable maintenance interrupts if interrupts are still pending */
+	if (cpu_if->irqbuf_num > 0) {
+		cpu_if->ich_hcr_el2 |= ICH_HCR_EL2_UIE;
+	} else {
+		cpu_if->ich_hcr_el2 &= ~ICH_HCR_EL2_UIE;
+	}
 
 out:
 	mtx_unlock_spin(&cpu_if->lr_mtx);
