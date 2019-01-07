@@ -99,6 +99,11 @@ static u_int sgi_to_ipi[GIC_LAST_SGI - GIC_FIRST_SGI + 1];
 static u_int sgi_first_unused = GIC_FIRST_SGI;
 #endif
 
+static struct resource *maint_res;
+static device_t gic_dev;
+static int maint_rid;
+static void *maint_cookie;
+
 static device_method_t gic_v3_methods[] = {
 	/* Device interface */
 	DEVMETHOD(device_detach,	gic_v3_detach),
@@ -364,6 +369,37 @@ gic_v3_detach(device_t dev)
 	free(sc->gic_redists.regions, M_GIC_V3);
 
 	return (0);
+}
+
+void
+gic_v3_alloc_maint_res(device_t dev)
+{
+	gic_dev = dev;
+	maint_res = bus_alloc_resource_any(dev, SYS_RES_IRQ, &maint_rid,
+	    RF_ACTIVE);
+	if (!maint_res)
+		device_printf(dev,
+		    "Could not allocate resource for maintenance interrupt\n");
+}
+
+int
+gic_v3_setup_maint_intr(driver_filter_t filter, driver_intr_t handler,
+    void *arg)
+{
+	if (!maint_res)
+		return (EINVAL);
+
+	return (bus_setup_intr(gic_dev, maint_res, INTR_TYPE_MISC,
+	    filter, handler, arg, &maint_cookie));
+}
+
+int
+gic_v3_teardown_maint_intr(void)
+{
+	if (!maint_res)
+		return (EINVAL);
+
+	return (bus_teardown_intr(gic_dev, maint_res, maint_cookie));
 }
 
 static int
