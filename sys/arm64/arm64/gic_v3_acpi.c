@@ -338,6 +338,8 @@ gic_v3_acpi_attach(device_t dev)
 	if (device_get_children(dev, &sc->gic_children, &sc->gic_nchildren) !=0)
 		sc->gic_nchildren = 0;
 
+	gic_v3_alloc_maint_res(dev);
+
 	return (0);
 
 error:
