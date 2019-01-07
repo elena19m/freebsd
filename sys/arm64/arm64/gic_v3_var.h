@@ -109,8 +109,8 @@ uint64_t gic_r_read_8(device_t, bus_size_t);
 void gic_r_write_4(device_t, bus_size_t, uint32_t var);
 void gic_r_write_8(device_t, bus_size_t, uint64_t var);
 
-int gic_v3_setup_maint_intr(driver_filter_t filter, driver_intr_t handler,
-    void *arg);
+void gic_v3_alloc_maint_res(device_t);
+int gic_v3_setup_maint_intr(driver_filter_t, driver_intr_t, void *);
 int gic_v3_teardown_maint_intr(void);
 
 /*
