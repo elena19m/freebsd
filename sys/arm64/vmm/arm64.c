@@ -76,12 +76,10 @@ pmap_t hyp_pmap;
 static uint64_t vmid_generation = 0;
 static struct mtx vmid_generation_mtx;
 
-static struct hypctx *active_vcpu = NULL;
-
-struct hypctx *
-arm64_active_vcpu(void)
+static inline void
+arm64_set_active_vcpu(struct hypctx *hypctx)
 {
-	return (active_vcpu);
+	PCPU_SET(vcpu, hypctx);
 }
 
 static void arm64_set_vttbr(struct hyp *hyp)
@@ -134,6 +132,7 @@ arm_init(int ipinum)
 	mtx_init(&vmid_generation_mtx, "vmid_generation_mtx", NULL, MTX_DEF);
 
 	daif = intr_disable();
+	arm64_set_active_vcpu(NULL);
 	/*
 	 * Install the temporary vectors which will be responsible for
 	 * initializing the VMM when we next trap into EL2.
@@ -251,6 +250,8 @@ arm_cleanup(void)
 	daif = intr_disable();
 	vmm_call_hyp((void *)vtophys(vmm_cleanup), vtophys(hyp_stub_vectors));
 	intr_restore(daif);
+
+	arm64_set_active_vcpu(NULL);
 
 	vtimer_cleanup();
 
@@ -607,7 +608,7 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 		 * TODO: What happens if a timer interrupt is asserted exactly
 		 * here, but for the previous VM?
 		 */
-		active_vcpu = hypctx;
+		arm64_set_active_vcpu(hypctx);
 		vgic_v3_sync_hwstate(hypctx);
 		excp_type = vmm_call_hyp((void *)ktohyp(vmm_enter_guest),
 		    ktohyp(hypctx));
@@ -642,8 +643,8 @@ arm_vmcleanup(void *arg)
 	struct hypctx *hypctx;
 
 	hypctx = &hyp->ctx[0];
-	if (active_vcpu == hypctx)
-		active_vcpu = NULL;
+	if (arm64_get_active_vcpu() == hypctx)
+		arm64_set_active_vcpu(NULL);
 
 	vtimer_vmcleanup(arg);
 	vgic_v3_detach_from_vm(arg);

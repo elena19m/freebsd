@@ -29,6 +29,7 @@
 #include <machine/reg.h>
 #include <machine/vfp.h>
 #include <machine/hypervisor.h>
+#include <machine/pcpu.h>
 
 #include "mmu.h"
 #include "io/vgic_v3.h"
@@ -129,6 +130,6 @@ uint64_t 	vmm_read_tcr_el2(void);
 
 #define	DEBUG_ME	0
 
-struct hypctx	*arm64_active_vcpu(void);
+#define	arm64_get_active_vcpu()		((struct hypctx *)PCPU_GET(vcpu))
 
 #endif /* !_VMM_ARM64_H_ */
