@@ -64,7 +64,7 @@ vtimer_virtual_timer_intr(void *arg)
 	struct hypctx *hypctx;
 	uint32_t cntv_ctl;
 
-	hypctx = arm64_active_vcpu();
+	hypctx = arm64_get_active_vcpu();
 	cntv_ctl = READ_SPECIALREG(cntv_ctl_el0);
 
 	if (!hypctx) {
@@ -181,7 +181,7 @@ vtimer_vmcleanup(void *arg)
 	hyp = arg;
 	vtimer = &hyp->vtimer;
 
-	hypctx = arm64_active_vcpu();
+	hypctx = arm64_get_active_vcpu();
 	if (!hypctx) {
 		/* The active VM was destroyed, stop the timer. */
 		cntv_ctl = READ_SPECIALREG(cntv_ctl_el0);
