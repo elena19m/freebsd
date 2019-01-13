@@ -43,6 +43,7 @@ struct debug_monitor_state;
 	u_int	pc_acpi_id;	/* ACPI CPU id */			\
 	u_int	pc_midr;	/* stored MIDR value */			\
 	uint64_t pc_clock;						\
+	void	*pc_vcpu;						\
 	pcpu_bp_harden pc_bp_harden;					\
 	pcpu_ssbd pc_ssbd;						\
 	struct pmap *pc_curpmap;					\
