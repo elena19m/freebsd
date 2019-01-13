@@ -386,11 +386,14 @@ int
 gic_v3_setup_maint_intr(driver_filter_t filter, driver_intr_t handler,
     void *arg)
 {
+	int flags;
+
 	if (!maint_res)
 		return (EINVAL);
 
-	return (bus_setup_intr(gic_dev, maint_res, INTR_TYPE_MISC,
-	    filter, handler, arg, &maint_cookie));
+	flags = INTR_TYPE_MISC | INTR_MPSAFE;
+	return (bus_setup_intr(gic_dev, maint_res, flags, filter, handler,
+	    arg, &maint_cookie));
 }
 
 int
