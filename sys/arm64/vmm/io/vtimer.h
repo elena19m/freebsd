@@ -29,6 +29,9 @@
 #ifndef _VMM_VTIMER_H_
 #define _VMM_VTIMER_H_
 
+#define	GT_PHYS_NS_IRQ	30
+#define	GT_VIRT_IRQ	27
+
 #define	CNTP_CTL_EL0_OP0	0b11
 #define	CNTP_CTL_EL0_OP2	0b001
 #define	CNTP_CTL_EL0_OP1	0b011
