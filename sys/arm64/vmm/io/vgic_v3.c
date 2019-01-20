@@ -494,7 +494,11 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 
 	/*
 	 * If the guest is running behind timer interrupts, don't swamp it with
-	 * one interrupt after another.
+	 * one interrupt after another. However, if the timer interrupt is being
+	 * serviced by the guest (it is in a state other than pending, either
+	 * active or pending and active), then add it to the buffer to be
+	 * injected later. Otherwise, the timer would stop working because we
+	 * disable the timer in the host interrupt handler.
 	 */
 	if (irqtype == VGIC_IRQ_CLK) {
 		for (i = 0; i < cpu_if->ich_lr_num; i++)
@@ -737,19 +741,20 @@ vgic_v3_lr_next_empty(uint32_t ich_elsr_el2, int start, int end)
  * registers:
  *
  * 1. The virtual interrupt is active. The guest is executing the interrupt
- * handler, and the timer fired before the guest had the chance to write to
- * the EOIR1 register (the interrupt handler hasn't finished executing).
+ * handler, and the timer fired after it programmed the new alarm time but
+ * before the guest had the chance to write to the EOIR1 register.
  *
- * 2. The virtual interrupt is pending. Because the virtual timer handler
- * disables the timer, this can only happen if there were two or more timer
- * interrupts in the buffer (see the case above), and one of them was added
- * to the List Registers as pending in the previous world switch.
+ * 2. The virtual interrupt is pending and active. The timer interrupt is level
+ * sensitive. The guest wrote to the EOR1 register, but the write hasn't yet
+ * propagated to the timer.
  *
  * Injecting the interrupt in these cases would mean that another timer
- * interrupt is asserted as soon as the guest writes to the EOIR1 register.
- * This can lead to the guest being stuck servicing timer interrupts and doing
- * nothing else. So do not inject a timer interrupt while one is active or
- * pending. Buffered interrupts will be injected after the next world switch.
+ * interrupt is asserted as soon as the guest writes to the EOIR1 register (or
+ * very shortly thereafter, in the pending and active scenario). This can lead
+ * to the guest servicing timer interrupts one after the other and doing
+ * nothing else. So do not inject a timer interrupt while one is active pending.
+ * The buffered timer interrupts will be injected after the next world switch in
+ * this case.
  */
 static bool
 clk_irq_in_lr(struct vgic_v3_cpu_if *cpu_if)
@@ -759,7 +764,8 @@ clk_irq_in_lr(struct vgic_v3_cpu_if *cpu_if)
 
 	for (i = 0; i < cpu_if->ich_lr_num; i++) {
 		lr = cpu_if->ich_lr_el2[i];
-		if (ICH_LR_EL2_VINTID(lr) == 27 && !lr_inactive(lr))
+		if (ICH_LR_EL2_VINTID(lr) == 27 &&
+		    (lr_active(lr) || lr_pending_active(lr)))
 			return (true);
 	}
 
