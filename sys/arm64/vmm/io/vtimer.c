@@ -47,9 +47,6 @@
 
 #define	RES1		0xffffffffffffffffUL
 
-#define	GT_PHYS_NS_IRQ	30
-#define	GT_VIRT_IRQ	27
-
 #define timer_enabled(ctl)	\
     (!((ctl) & CNTP_CTL_IMASK) && ((ctl) & CNTP_CTL_ENABLE))
 

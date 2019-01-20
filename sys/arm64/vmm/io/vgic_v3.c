@@ -764,7 +764,7 @@ clk_irq_in_lr(struct vgic_v3_cpu_if *cpu_if)
 
 	for (i = 0; i < cpu_if->ich_lr_num; i++) {
 		lr = cpu_if->ich_lr_el2[i];
-		if (ICH_LR_EL2_VINTID(lr) == 27 &&
+		if (ICH_LR_EL2_VINTID(lr) == GT_VIRT_IRQ &&
 		    (lr_active(lr) || lr_pending_active(lr)))
 			return (true);
 	}
