@@ -57,8 +57,16 @@
 		interrupt-controller;
 		reg =	<0x0 0x2f000000 0x0 0x10000>,	/* Distributor */
 			<0x0 0x2f100000 0x0 0x200000>;	/* Redistributor */
-		interrupts = <1 9 4>;
+		interrupts = <1 9 4>;			/* IRQ 25, edge triggered */
 	};
+
+	uart0: uart@0x3f8 {
+		compatible = "ns16550a";
+		reg = <0x0 0x3f8 0x0 0x1000>;
+		clock-frequency = <1843200>;
+		interrupts = <1 4 4>;			/* IRQ 20, edge triggered */
+		interrupt-parrent = <&gic>;
+	}
 
 	timer {
 		compatible = "arm,armv8-timer";
