@@ -78,6 +78,11 @@ struct vm_snapshot_file_meta {
 	xo_handle_t *xop;
 };
 
+enum vm_snapshot_op {
+	VM_SNAPSHOT_SAVE,
+	VM_SNAPSHOT_RESTORE,
+};
+
 void destroy_restore_state(struct restore_state *rstate);
 
 const char * lookup_vmname(struct restore_state *rstate);
