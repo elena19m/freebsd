@@ -943,7 +943,7 @@ blockif_snapshot_req(struct vmctx *ctx, struct blockif_req *br,
 	 */
 
 	/* Snapshot the iovecs */
-	for (i = 0; i < nitems(br->br_iov); i++) {
+	for (i = 0; i < br->br_iovcnt; i++) {
 		iov = &br->br_iov[i];
 
 		SNAPSHOT_PART_OR_RET(iov->iov_len, buf, buf_size, snapshot_len);
@@ -1000,7 +1000,7 @@ blockif_restore_req(struct vmctx *ctx, struct blockif_req *br,
 	 */
 
 	/* Snapshot the iovecs */
-	for (i = 0; i < nitems(br->br_iov); i++) {
+	for (i = 0; i < br->br_iovcnt; i++) {
 		iov = &br->br_iov[i];
 
 		RESTORE_PART_OR_RET(iov->iov_len, buffer, buf_size);
