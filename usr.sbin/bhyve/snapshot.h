@@ -46,6 +46,11 @@ struct vm_snapshot_kern_info {
 	enum snapshot_req req;		/* request type */
 };
 
+enum vm_snapshot_op {
+	VM_SNAPSHOT_SAVE,
+	VM_SNAPSHOT_RESTORE,
+};
+
 struct vm_snapshot_buffer {
 	/* R/O for device-specific functions;
 	 * written by generic snapshot functions
@@ -71,16 +76,13 @@ struct vm_snapshot_meta {
 	void *dev_data;
 
 	struct vm_snapshot_buffer buffer;
+
+	enum vm_snapshot_op op;
 };
 
 struct vm_snapshot_file_meta {
 	int data_fd;
 	xo_handle_t *xop;
-};
-
-enum vm_snapshot_op {
-	VM_SNAPSHOT_SAVE,
-	VM_SNAPSHOT_RESTORE,
 };
 
 void destroy_restore_state(struct restore_state *rstate);
