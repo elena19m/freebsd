@@ -1235,3 +1235,50 @@ restore_part(volatile void *data, size_t data_size, uint8_t **buffer,
 
 	return (0);
 }
+
+int
+vm_snapshot_buf(volatile void *data, size_t data_size,
+	     struct vm_snapshot_meta *meta)
+{
+	struct vm_snapshot_buffer *buffer;
+	int op;
+
+	buffer = &meta->buffer;
+	op = meta->op;
+
+	if (buffer->buf_rem < data_size) {
+		fprintf(stderr, "%s: buffer too small\r\n", __func__);
+		return (-1);
+	}
+
+	if (op == VM_SNAPSHOT_SAVE)
+		memcpy(buffer->buf, (uint8_t *) data, data_size);
+	else if (op == VM_SNAPSHOT_RESTORE)
+		memcpy((uint8_t *) data, buffer->buf, data_size);
+	else
+		return (EINVAL);
+
+	buffer->buf += data_size;
+	buffer->buf_rem -= data_size;
+
+	return (0);
+}
+
+size_t
+vm_get_snapshot_size(struct vm_snapshot_meta *meta)
+{
+	size_t length;
+	struct vm_snapshot_buffer *buffer;
+
+	buffer = &meta->buffer;
+
+	if (buffer->buf_size < buffer->buf_rem) {
+		fprintf(stderr, "%s: Invalid buffer: size = %zu, rem = %zu\r\n",
+			__func__, buffer->buf_size, buffer->buf_rem);
+		length = 0;
+	} else {
+		length = buffer->buf_size - buffer->buf_rem;
+	}
+
+	return (length);
+}

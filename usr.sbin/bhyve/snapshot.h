@@ -112,6 +112,10 @@ int snapshot_part(volatile void *data, size_t data_size, uint8_t **buffer,
 int restore_part(volatile void *data, size_t data_size, uint8_t **buffer,
 		  size_t *buf_size);
 
+int vm_snapshot_buf(volatile void *data, size_t data_size,
+		    struct vm_snapshot_meta *meta);
+size_t vm_get_snapshot_size(struct vm_snapshot_meta *meta);
+
 #define	SNAPSHOT_PART(DATA, BUFFER, BUF_SIZE, SNAP_LEN) _Generic((BUFFER),     \
 	uint8_t *: snapshot_part(&(DATA), sizeof(DATA), (uint8_t **) &(BUFFER),\
 				(size_t *) &(BUF_SIZE), SNAP_LEN),             \
@@ -145,5 +149,26 @@ do {                                                                           \
 	if (ret != 0)                                                          \
 		return (ret);                                                  \
 } while (0)
+
+#define	SNAPSHOT_BUF_OR_LEAVE(DATA, LEN, META, RES, LABEL)		\
+do {									\
+	(RES) = vm_snapshot_buf((DATA), (LEN), (META));			\
+	if (ret != 0) {							\
+		const char *__op;					\
+		if ((META)->op == VM_SNAPSHOT_SAVE)			\
+			__op = "save";					\
+		else if ((META)->op == VM_SNAPSHOT_RESTORE)		\
+			__op = "restore";				\
+		else							\
+			__op = "unknown";				\
+									\
+		fprintf(stderr, "%s: snapshot-%s failed for %s\r\n",	\
+			__func__, __op, #DATA);				\
+		goto LABEL;						\
+	}								\
+} while (0)
+
+#define	SNAPSHOT_VAR_OR_LEAVE(DATA, META, RES, LABEL)		\
+	SNAPSHOT_BUF_OR_LEAVE(&(DATA), sizeof(DATA), (META), (RES), (LABEL))
 
 #endif
