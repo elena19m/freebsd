@@ -50,6 +50,7 @@ __FBSDID("$FreeBSD$");
 #include "inout.h"
 #include "pci_emul.h"
 #include "rfb.h"
+#include "snapshot.h"
 #include "vga.h"
 
 /*
@@ -441,31 +442,67 @@ done:
 }
 
 static int
+pci_fbuf_snapshot_op(struct vm_snapshot_meta *meta)
+{
+	int ret;
+
+	SNAPSHOT_BUF_OR_LEAVE(fbuf_sc->fb_base, FB_SIZE, meta, ret, err);
+
+err:
+	return (ret);
+}
+
+static int
 pci_fbuf_snapshot(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
 		  size_t buf_size, size_t *snapshot_size)
 {
-	size_t snap_len;
+	int ret;
+	struct vm_snapshot_meta meta = {
+		.ctx = ctx,
+		.dev_data = pi,
 
-	snap_len = FB_SIZE;
+		.buffer = {
+			.buf_start = buffer,
+			.buf_size = buf_size,
+			.buf = buffer,
+			.buf_rem = buf_size,
+		},
 
-	if (buf_size < snap_len) {
-		fprintf(stderr, "%s: buffer too small\r\n", __func__);
-		return (-1);
-	}
+		.op = VM_SNAPSHOT_SAVE,
+	};
 
-	memcpy(buffer, fbuf_sc->fb_base, FB_SIZE);
-	*snapshot_size = snap_len;
+	ret = pci_fbuf_snapshot_op(&meta);
+	if (ret != 0)
+		goto err;
 
-	return (0);
+	*snapshot_size = vm_get_snapshot_size(&meta);
+
+err:
+	return (ret);
 }
 
 static int
 pci_fbuf_restore(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
 		size_t buf_size)
 {
-	memcpy(fbuf_sc->fb_base, buffer, FB_SIZE);
+	int ret;
+	struct vm_snapshot_meta meta = {
+		.ctx = ctx,
+		.dev_data = pi,
 
-	return (0);
+		.buffer = {
+			.buf_start = buffer,
+			.buf_size = buf_size,
+			.buf = buffer,
+			.buf_rem = buf_size,
+		},
+
+		.op = VM_SNAPSHOT_RESTORE,
+	};
+
+	ret = pci_fbuf_snapshot_op(&meta);
+
+	return (ret);
 }
 
 struct pci_devemu pci_fbuf = {
