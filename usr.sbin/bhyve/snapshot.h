@@ -153,7 +153,7 @@ do {                                                                           \
 #define	SNAPSHOT_BUF_OR_LEAVE(DATA, LEN, META, RES, LABEL)		\
 do {									\
 	(RES) = vm_snapshot_buf((DATA), (LEN), (META));			\
-	if (ret != 0) {							\
+	if ((RES) != 0) {						\
 		const char *__op;					\
 		if ((META)->op == VM_SNAPSHOT_SAVE)			\
 			__op = "save";					\
