@@ -1298,3 +1298,34 @@ vm_get_snapshot_size(struct vm_snapshot_meta *meta)
 
 	return (length);
 }
+
+int
+vm_snapshot_gaddr(void **addr_var, size_t gaddr_len,
+		  struct vm_snapshot_meta *meta)
+{
+	int ret;
+	vm_paddr_t paddr;
+
+	if (meta->op == VM_SNAPSHOT_SAVE) {
+		paddr = paddr_host2guest(meta->ctx, *addr_var);
+		if (paddr == (vm_paddr_t) -1) {
+			ret = EFAULT;
+			goto done;
+		}
+
+		SNAPSHOT_VAR_OR_LEAVE(paddr, meta, ret, done);
+	} else if (meta->op == VM_SNAPSHOT_RESTORE) {
+		SNAPSHOT_VAR_OR_LEAVE(paddr, meta, ret, done);
+		if (paddr == (vm_paddr_t) -1) {
+			ret = EFAULT;
+			goto done;
+		}
+
+		*addr_var = paddr_guest2host(meta->ctx, paddr, gaddr_len);
+	} else {
+		ret = EINVAL;
+	}
+
+done:
+	return (ret);
+}

@@ -116,6 +116,8 @@ void vm_snapshot_buf_err(const char *bufname, const enum vm_snapshot_op op);
 int vm_snapshot_buf(volatile void *data, size_t data_size,
 		    struct vm_snapshot_meta *meta);
 size_t vm_get_snapshot_size(struct vm_snapshot_meta *meta);
+int vm_snapshot_gaddr(void **addr_var, size_t gaddr_len,
+		      struct vm_snapshot_meta *meta);
 
 #define	SNAPSHOT_PART(DATA, BUFFER, BUF_SIZE, SNAP_LEN) _Generic((BUFFER),     \
 	uint8_t *: snapshot_part(&(DATA), sizeof(DATA), (uint8_t **) &(BUFFER),\
@@ -162,5 +164,17 @@ do {									\
 
 #define	SNAPSHOT_VAR_OR_LEAVE(DATA, META, RES, LABEL)			\
 	SNAPSHOT_BUF_OR_LEAVE(&(DATA), sizeof(DATA), (META), (RES), LABEL)
+
+/* address variables are pointers to guest memory */
+#define	SNAPSHOT_GADDR_OR_LEAVE(ADDR_VAR, GADDR_SIZE, META, RES, LABEL)	\
+do {									\
+	(RES) = vm_snapshot_gaddr(&(ADDR_VAR), (GADDR_SIZE), (META));	\
+	if ((RES) != 0) {						\
+		if ((RES) == EFAULT)					\
+			fprintf(stderr, "%s: invalid address: %s\r\n",	\
+				__func__, #ADDR_VAR);			\
+		goto LABEL;						\
+	}								\
+} while (0)
 
 #endif
