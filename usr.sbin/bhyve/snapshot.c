@@ -1236,6 +1236,22 @@ restore_part(volatile void *data, size_t data_size, uint8_t **buffer,
 	return (0);
 }
 
+void
+vm_snapshot_buf_err(const char *bufname, const enum vm_snapshot_op op)
+{
+	const char *__op;
+
+	if (op == VM_SNAPSHOT_SAVE)
+		__op = "save";
+	else if (op == VM_SNAPSHOT_RESTORE)
+		__op = "restore";
+	else
+		__op = "unknown";
+
+	fprintf(stderr, "%s: snapshot-%s failed for %s\r\n",
+		__func__, __op, bufname);
+}
+
 int
 vm_snapshot_buf(volatile void *data, size_t data_size,
 	     struct vm_snapshot_meta *meta)
