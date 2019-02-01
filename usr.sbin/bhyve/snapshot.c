@@ -1264,7 +1264,7 @@ vm_snapshot_buf(volatile void *data, size_t data_size,
 
 	if (buffer->buf_rem < data_size) {
 		fprintf(stderr, "%s: buffer too small\r\n", __func__);
-		return (-1);
+		return (E2BIG);
 	}
 
 	if (op == VM_SNAPSHOT_SAVE)
