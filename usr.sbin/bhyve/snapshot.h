@@ -160,7 +160,7 @@ do {									\
 	}								\
 } while (0)
 
-#define	SNAPSHOT_VAR_OR_LEAVE(DATA, META, RES, LABEL)		\
-	SNAPSHOT_BUF_OR_LEAVE(&(DATA), sizeof(DATA), (META), (RES), (LABEL))
+#define	SNAPSHOT_VAR_OR_LEAVE(DATA, META, RES, LABEL)			\
+	SNAPSHOT_BUF_OR_LEAVE(&(DATA), sizeof(DATA), (META), (RES), LABEL)
 
 #endif
