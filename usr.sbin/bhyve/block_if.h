@@ -41,6 +41,8 @@
 #include <sys/uio.h>
 #include <sys/unistd.h>
 
+#include "snapshot.h"
+
 #define BLOCKIF_IOV_MAX		33	/* not practical to be IOV_MAX */
 
 struct blockif_req {
@@ -70,15 +72,9 @@ int	blockif_cancel(struct blockif_ctxt *bc, struct blockif_req *breq);
 int	blockif_close(struct blockif_ctxt *bc);
 void	blockif_pause(struct blockif_ctxt *bc);
 void	blockif_resume(struct blockif_ctxt *bc);
-int	blockif_snapshot_req(struct vmctx *ctx, struct blockif_req *br,
-			     uint8_t **buf, size_t *buf_size,
-			     size_t *snapshot_len);
-int	blockif_restore_req(struct vmctx *ctx, struct blockif_req *br,
-			    uint8_t **buffer, size_t *buf_size);
-int	blockif_snapshot(struct vmctx *ctx, struct blockif_ctxt *bc,
-			 uint8_t **buffer, size_t *buf_size,
-			 size_t *snapshot_size);
-int	blockif_restore(struct vmctx *ctx, struct blockif_ctxt *bc,
-			uint8_t **buffer, size_t *buf_size);
+int	blockif_snapshot_req(struct blockif_req *br,
+			     struct vm_snapshot_meta *meta);
+int	blockif_snapshot(struct blockif_ctxt *bc,
+			 struct vm_snapshot_meta *meta);
 
 #endif /* _BLOCK_IF_H_ */

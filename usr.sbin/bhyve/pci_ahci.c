@@ -2451,312 +2451,293 @@ pci_ahci_atapi_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 }
 
 static int
-pci_ahci_snapshot(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
-		  size_t buf_size, size_t *snapshot_len)
+pci_ahci_snapshot_save_queues(struct ahci_port *port,
+			      struct vm_snapshot_meta *meta)
 {
-	struct pci_ahci_softc *sc;
-	uint8_t *buf;
-	int i, j, ret;
-	struct ahci_port *port;
-	vm_paddr_t addr;
-	struct ahci_ioreq *ioreq, *aior;
+	int ret;
+	int idx;
+	struct ahci_ioreq *ioreq;
 
-	sc = pi->pi_arg;
-	buf = buffer;
+	STAILQ_FOREACH(ioreq, &port->iofhd, io_flist) {
+		idx = ((void *) ioreq - (void *) port->ioreq) / sizeof(*ioreq);
+		SNAPSHOT_VAR_OR_LEAVE(idx, meta, ret, done);
+	}
 
-	/* TODO: add mtx lock/unlock */
+	idx = -1;
+	SNAPSHOT_VAR_OR_LEAVE(idx, meta, ret, done);
 
-	SNAPSHOT_PART_OR_RET(sc->ports, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->cap, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->ghc, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->is, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->pi, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->vs, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->ccc_ctl, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->ccc_pts, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->em_loc, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->em_ctl, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->cap2, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->bohc, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->lintr, buf, buf_size, snapshot_len);
+	TAILQ_FOREACH(ioreq, &port->iobhd, io_blist) {
+		idx = ((void *) ioreq - (void *) port->ioreq) / sizeof(*ioreq);
+		SNAPSHOT_VAR_OR_LEAVE(idx, meta, ret, done);
 
-	for (i = 0; i < MAX_PORTS; i++) {
-
-		port = &sc->port[i];
-
-		SNAPSHOT_PART_OR_RET(port->bctx, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->port, buf, buf_size, snapshot_len);
-
-		if (port->bctx == NULL)
-			continue;
-
-		addr = paddr_host2guest(ctx, port->cmd_lst);
-		SNAPSHOT_PART_OR_RET(addr, buf, buf_size, snapshot_len);
-
-		addr = paddr_host2guest(ctx, port->rfis);
-		SNAPSHOT_PART_OR_RET(addr, buf, buf_size, snapshot_len);
-
-		SNAPSHOT_PART_OR_RET(port->ident, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->atapi, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->reset, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->waitforclear, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->mult_sectors, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->xfermode, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->err_cfis, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->sense_key, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->asc, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->ccs, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->pending, buf, buf_size, snapshot_len);
-
-		SNAPSHOT_PART_OR_RET(port->clb, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->clbu, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->fb, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->fbu, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->is, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->ie, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->cmd, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->unused0, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->tfd, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->sig, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->ssts, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->sctl, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->serr, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->sact, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->ci, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->sntf, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->fbs, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->ioqsz, buf, buf_size, snapshot_len);
-
-		for (j = 0; j < port->ioqsz; j++) {
-
-			ioreq = &port->ioreq[j];
-
-			/* blockif_req snapshot done only for busy requests */
-
-			addr = paddr_host2guest(ctx, ioreq->cfis);
-			SNAPSHOT_PART_OR_RET(addr, buf, buf_size, snapshot_len);
-
-			SNAPSHOT_PART_OR_RET(ioreq->len, buf, buf_size, snapshot_len);
-			SNAPSHOT_PART_OR_RET(ioreq->done, buf, buf_size, snapshot_len);
-			SNAPSHOT_PART_OR_RET(ioreq->slot, buf, buf_size, snapshot_len);
-			SNAPSHOT_PART_OR_RET(ioreq->more, buf, buf_size, snapshot_len);
-			SNAPSHOT_PART_OR_RET(ioreq->readop, buf, buf_size, snapshot_len);
-		}
-
-		STAILQ_FOREACH(aior, &port->iofhd, io_flist) {
-			j = ((void *) aior - (void *) port->ioreq) / sizeof(*aior);
-			SNAPSHOT_PART_OR_RET(j, buf, buf_size, snapshot_len);
-		}
-
-		j = -1;
-		SNAPSHOT_PART_OR_RET(j, buf, buf_size, snapshot_len);
-
-		TAILQ_FOREACH(aior, &port->iobhd, io_blist) {
-			j = ((void *) aior - (void *) port->ioreq) / sizeof(*aior);
-			SNAPSHOT_PART_OR_RET(j, buf, buf_size, snapshot_len);
-
-			/* snapshot only the busy requests
-			 * other requests are not valid
-			 */
-			ret = blockif_snapshot_req(ctx, &aior->io_req, &buf,
-						   &buf_size, snapshot_len);
-			if (ret != 0) {
-				fprintf(stderr,
-					"%s: failed to snapshot req\r\n",
-					__func__);
-				return (-1);
-			}
-		}
-
-		j = -1;
-		SNAPSHOT_PART_OR_RET(j, buf, buf_size, snapshot_len);
-
-		ret = blockif_snapshot(ctx, port->bctx, &buf, &buf_size,
-				       snapshot_len);
+		/* snapshot only the busy requests
+		 * other requests are not valid
+		 */
+		ret = blockif_snapshot_req(&ioreq->io_req, meta);
 		if (ret != 0) {
-			fprintf(stderr, "%s: failed to snapshot blockif\r\n",
+			fprintf(stderr, "%s: failed to snapshot req\r\n",
+				__func__);
+			goto done;
+		}
+	}
+
+	idx = -1;
+	SNAPSHOT_VAR_OR_LEAVE(idx, meta, ret, done);
+
+done:
+	return (ret);
+}
+
+static int
+pci_ahci_snapshot_restore_queues(struct ahci_port *port,
+				 struct vm_snapshot_meta *meta)
+{
+	int ret;
+	int idx;
+	struct ahci_ioreq *ioreq;
+
+	/* empty the free queue before restoring */
+	while (!STAILQ_EMPTY(&port->iofhd))
+		STAILQ_REMOVE_HEAD(&port->iofhd, io_flist);
+
+	/* restore the free queue */
+	while (1) {
+		SNAPSHOT_VAR_OR_LEAVE(idx, meta, ret, done);
+		if (idx == -1)
+			break;
+
+		STAILQ_INSERT_TAIL(&port->iofhd, &port->ioreq[idx], io_flist);
+	}
+
+	/* restore the busy queue */
+	while (1) {
+		SNAPSHOT_VAR_OR_LEAVE(idx, meta, ret, done);
+		if (idx == -1)
+			break;
+
+		ioreq = &port->ioreq[idx];
+		TAILQ_INSERT_TAIL(&port->iobhd, ioreq, io_blist);
+
+		/* restore only the busy requests
+		 * other requests are not valid
+		 */
+		ret = blockif_snapshot_req(&ioreq->io_req, meta);
+		if (ret != 0) {
+			fprintf(stderr, "%s: failed to restore request\r\n",
 				__func__);
 			return (-1);
 		}
 
+		/* re-enqueue the requests in the block interface */
+		if (ioreq->readop)
+			ret = blockif_read(port->bctx, &ioreq->io_req);
+		else
+			ret = blockif_write(port->bctx, &ioreq->io_req);
+
+		if (ret != 0) {
+			fprintf(stderr,
+				"%s: failed to re-enqueue request\r\n",
+				__func__);
+			return (-1);
+		}
 	}
 
-	return (0);
+done:
+	return (ret);
 }
 
 static int
-pci_ahci_restore(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
-		 size_t buf_size)
+pci_ahci_snapshot_op(struct vm_snapshot_meta *meta)
 {
-	struct pci_ahci_softc *sc;
-	uint8_t *buf;
 	int i, j, ret;
-	struct ahci_port *port;
-	vm_paddr_t addr;
-	struct ahci_ioreq *ioreq;
-	struct ahci_cmd_hdr *hdr;
 	void *bctx;
+	struct pci_devinst *pi;
+	struct pci_ahci_softc *sc;
+	struct ahci_port *port;
+	struct ahci_cmd_hdr *hdr;
+	struct ahci_ioreq *ioreq;
 
+	pi = meta->dev_data;
 	sc = pi->pi_arg;
-	buf = buffer;
 
-	RESTORE_PART_OR_RET(sc->ports, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->cap, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->ghc, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->is, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->pi, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->vs, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->ccc_ctl, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->ccc_pts, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->em_loc, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->em_ctl, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->cap2, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->bohc, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->lintr, buf, buf_size);
+	/* TODO: add mtx lock/unlock */
+
+	SNAPSHOT_VAR_OR_LEAVE(sc->ports, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->cap, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->ghc, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->is, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->pi, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->vs, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->ccc_ctl, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->ccc_pts, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->em_loc, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->em_ctl, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->cap2, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->bohc, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->lintr, meta, ret, done);
 
 	for (i = 0; i < MAX_PORTS; i++) {
 		port = &sc->port[i];
 
-		RESTORE_PART_OR_RET(bctx, buf, buf_size);
-		RESTORE_PART_OR_RET(port->port, buf, buf_size);
+		if (meta->op == VM_SNAPSHOT_SAVE)
+			bctx = port->bctx;
 
-		if ((bctx == NULL) && (port->bctx != NULL)) {
-			fprintf(stderr, "%s: restored port not matching actual "
-					"port\r\n", __func__);
-			return (-1);
-		} else if ((bctx != NULL) && (port->bctx == NULL)) {
-			fprintf(stderr, "%s: restored port not matching actual "
-					"port\r\n", __func__);
+		SNAPSHOT_VAR_OR_LEAVE(bctx, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->port, meta, ret, done);
+
+		/* mostly for restore; save is ensured by the lines above */
+		if (((bctx == NULL) && (port->bctx != NULL)) ||
+		    ((bctx != NULL) && (port->bctx == NULL))) {
+			fprintf(stderr, "%s: ports not matching\r\n", __func__);
+
 			return (-1);
 		}
-		if (bctx == NULL)
+
+		if (port->bctx == NULL)
 			continue;
 
 		if (port->port != i) {
-			fprintf(stderr, "%s: restored port not matching actual "
-					"port: %d expected %d \r\n", __func__,
-					port->port, i);
+			fprintf(stderr, "%s: ports not matching: "
+					"actual: %d expected: %d\r\n",
+					__func__, port->port, i);
 
 			return (-1);
 		}
 
-		RESTORE_PART_OR_RET(addr, buf, buf_size);
-		port->cmd_lst = paddr_guest2host(ctx, addr,
-				AHCI_CL_SIZE * AHCI_MAX_SLOTS);
+		SNAPSHOT_GADDR_OR_LEAVE(port->cmd_lst,
+			AHCI_CL_SIZE * AHCI_MAX_SLOTS, false, meta, ret, done);
 
-		RESTORE_PART_OR_RET(addr, buf, buf_size);
-		port->rfis = paddr_guest2host(ctx, addr, 256);
+		SNAPSHOT_GADDR_OR_LEAVE(port->rfis,
+					256, false ,meta, ret, done);
 
-		RESTORE_PART_OR_RET(port->ident, buf, buf_size);
-		RESTORE_PART_OR_RET(port->atapi, buf, buf_size);
-		RESTORE_PART_OR_RET(port->reset, buf, buf_size);
-		RESTORE_PART_OR_RET(port->waitforclear, buf, buf_size);
-		RESTORE_PART_OR_RET(port->mult_sectors, buf, buf_size);
-		RESTORE_PART_OR_RET(port->xfermode, buf, buf_size);
-		RESTORE_PART_OR_RET(port->err_cfis, buf, buf_size);
-		RESTORE_PART_OR_RET(port->sense_key, buf, buf_size);
-		RESTORE_PART_OR_RET(port->asc, buf, buf_size);
-		RESTORE_PART_OR_RET(port->ccs, buf, buf_size);
-		RESTORE_PART_OR_RET(port->pending, buf, buf_size);
+		SNAPSHOT_VAR_OR_LEAVE(port->ident, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->atapi, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->reset, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->waitforclear, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->mult_sectors, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->xfermode, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->err_cfis, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->sense_key, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->asc, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->ccs, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->pending, meta, ret, done);
 
-		RESTORE_PART_OR_RET(port->clb, buf, buf_size);
-		RESTORE_PART_OR_RET(port->clbu, buf, buf_size);
-		RESTORE_PART_OR_RET(port->fb, buf, buf_size);
-		RESTORE_PART_OR_RET(port->fbu, buf, buf_size);
-		RESTORE_PART_OR_RET(port->is, buf, buf_size);
-		RESTORE_PART_OR_RET(port->ie, buf, buf_size);
-		RESTORE_PART_OR_RET(port->cmd, buf, buf_size);
-		RESTORE_PART_OR_RET(port->unused0, buf, buf_size);
-		RESTORE_PART_OR_RET(port->tfd, buf, buf_size);
-		RESTORE_PART_OR_RET(port->sig, buf, buf_size);
-		RESTORE_PART_OR_RET(port->ssts, buf, buf_size);
-		RESTORE_PART_OR_RET(port->sctl, buf, buf_size);
-		RESTORE_PART_OR_RET(port->serr, buf, buf_size);
-		RESTORE_PART_OR_RET(port->sact, buf, buf_size);
-		RESTORE_PART_OR_RET(port->ci, buf, buf_size);
-		RESTORE_PART_OR_RET(port->sntf, buf, buf_size);
-		RESTORE_PART_OR_RET(port->fbs, buf, buf_size);
-		RESTORE_PART_OR_RET(port->ioqsz, buf, buf_size);
+		SNAPSHOT_VAR_OR_LEAVE(port->clb, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->clbu, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->fb, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->fbu, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->is, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->ie, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->cmd, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->unused0, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->tfd, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->sig, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->ssts, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->sctl, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->serr, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->sact, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->ci, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->sntf, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->fbs, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->ioqsz, meta, ret, done);
 
 		for (j = 0; j < port->ioqsz; j++) {
-
 			ioreq = &port->ioreq[j];
 
-			/* blockif_req restore done only for busy requests */
-
-			/* XXX: j may not be correct */
+			/* blockif_req snapshot done only for busy requests */
 			hdr = (struct ahci_cmd_hdr *)(port->cmd_lst + j * AHCI_CL_SIZE);
-			RESTORE_PART_OR_RET(addr, buf, buf_size);
-			ioreq->cfis = paddr_guest2host(ctx, addr,
-					0x80 + hdr->prdtl * sizeof(struct ahci_prdt_entry));
+			SNAPSHOT_GADDR_OR_LEAVE(ioreq->cfis,
+				0x80 + hdr->prdtl * sizeof(struct ahci_prdt_entry),
+				false, meta, ret, done);
 
-			RESTORE_PART_OR_RET(ioreq->len, buf, buf_size);
-			RESTORE_PART_OR_RET(ioreq->done, buf, buf_size);
-			RESTORE_PART_OR_RET(ioreq->slot, buf, buf_size);
-			RESTORE_PART_OR_RET(ioreq->more, buf, buf_size);
-			RESTORE_PART_OR_RET(ioreq->readop, buf, buf_size);
+			SNAPSHOT_VAR_OR_LEAVE(ioreq->len, meta, ret, done);
+			SNAPSHOT_VAR_OR_LEAVE(ioreq->done, meta, ret, done);
+			SNAPSHOT_VAR_OR_LEAVE(ioreq->slot, meta, ret, done);
+			SNAPSHOT_VAR_OR_LEAVE(ioreq->more, meta, ret, done);
+			SNAPSHOT_VAR_OR_LEAVE(ioreq->readop, meta, ret, done);
 		}
 
-		/* empty the free queue before restoring */
-		while (!STAILQ_EMPTY(&port->iofhd))
-			STAILQ_REMOVE_HEAD(&port->iofhd, io_flist);
-
-		/* restore the free queue */
-		while (1) {
-			RESTORE_PART_OR_RET(j, buf, buf_size);
-
-			if (j == -1)
-				break;
-
-			STAILQ_INSERT_TAIL(&port->iofhd, &port->ioreq[j], io_flist);
+		/* Perform save / restore specific operations */
+		if (meta->op == VM_SNAPSHOT_SAVE) {
+			ret = pci_ahci_snapshot_save_queues(port, meta);
+			if (ret != 0)
+				goto done;
+		} else if (meta->op == VM_SNAPSHOT_RESTORE) {
+			ret = pci_ahci_snapshot_restore_queues(port, meta);
+			if (ret != 0)
+				goto done;
+		} else {
+			/* error */
+			ret = EINVAL;
+			goto done;
 		}
 
-		/* restore the busy queue */
-		while (1) {
-			RESTORE_PART_OR_RET(j, buf, buf_size);
-
-			if (j == -1)
-				break;
-
-			ioreq = &port->ioreq[j];
-			TAILQ_INSERT_TAIL(&port->iobhd, ioreq, io_blist);
-
-			/* restore only the busy requests
-			 * other requests are not valid
-			 */
-			ret = blockif_restore_req(ctx, &ioreq->io_req,
-						  &buf, &buf_size);
-			if (ret != 0) {
-				fprintf(stderr,
-					"%s: failed to restore request\r\n",
-					__func__);
-				return (-1);
-			}
-
-			/* re-enqueue the requests in the block interface */
-			if (ioreq->readop)
-				ret = blockif_read(port->bctx, &ioreq->io_req);
-			else
-				ret = blockif_write(port->bctx, &ioreq->io_req);
-
-			if (ret != 0) {
-				fprintf(stderr,
-					"%s: failed to re-enqueue request\r\n",
-					__func__);
-				return (-1);
-			}
-		}
-
-		ret = blockif_restore(ctx, port->bctx, &buf, &buf_size);
+		ret = blockif_snapshot(port->bctx, meta);
 		if (ret != 0) {
 			fprintf(stderr, "%s: failed to restore blockif\r\n",
 				__func__);
 			return (-1);
 		}
-
 	}
 
-	return (0);
+done:
+	return (ret);
+}
+
+static int
+pci_ahci_snapshot(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
+		  size_t buf_size, size_t *snapshot_size)
+{
+	int ret;
+	struct vm_snapshot_meta meta = {
+		.ctx = ctx,
+		.dev_data = pi,
+
+		.buffer = {
+			.buf_start = buffer,
+			.buf_size = buf_size,
+			.buf = buffer,
+			.buf_rem = buf_size,
+		},
+
+		.op = VM_SNAPSHOT_SAVE,
+	};
+
+	ret = pci_ahci_snapshot_op(&meta);
+	if (ret != 0)
+		goto err;
+
+	*snapshot_size = vm_get_snapshot_size(&meta);
+
+err:
+	return (ret);
+}
+
+static int
+pci_ahci_restore(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
+		  size_t buf_size)
+{
+	int ret;
+	struct vm_snapshot_meta meta = {
+		.ctx = ctx,
+		.dev_data = pi,
+
+		.buffer = {
+			.buf_start = buffer,
+			.buf_size = buf_size,
+			.buf = buffer,
+			.buf_rem = buf_size,
+		},
+
+		.op = VM_SNAPSHOT_RESTORE,
+	};
+
+	ret = pci_ahci_snapshot_op(&meta);
+	if (ret != 0)
+		goto err;
+
+err:
+	return (ret);
 }
 
 static int

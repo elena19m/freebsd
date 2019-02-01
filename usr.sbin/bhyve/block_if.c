@@ -926,16 +926,15 @@ blockif_resume(struct blockif_ctxt *bc)
 }
 
 int
-blockif_snapshot_req(struct vmctx *ctx, struct blockif_req *br,
-		     uint8_t **buf, size_t *buf_size, size_t *snapshot_len)
+blockif_snapshot_req(struct blockif_req *br, struct vm_snapshot_meta *meta)
 {
 	int i;
 	struct iovec *iov;
-	vm_paddr_t addr;
+	int ret;
 
-	SNAPSHOT_PART_OR_RET(br->br_iovcnt, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(br->br_offset, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(br->br_resid, buf, buf_size, snapshot_len);
+	SNAPSHOT_VAR_OR_LEAVE(br->br_iovcnt, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(br->br_offset, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(br->br_resid, meta, ret, done);
 
 	/* XXX: The callback and parameter must be filled by the virtualized
 	 * device that uses the interface, during its init; we're not touching
@@ -946,19 +945,21 @@ blockif_snapshot_req(struct vmctx *ctx, struct blockif_req *br,
 	for (i = 0; i < br->br_iovcnt; i++) {
 		iov = &br->br_iov[i];
 
-		SNAPSHOT_PART_OR_RET(iov->iov_len, buf, buf_size, snapshot_len);
+		SNAPSHOT_VAR_OR_LEAVE(iov->iov_len, meta, ret, done);
 		/* we assume the iov is a guest-mapped address */
-		addr = paddr_host2guest(ctx, iov->iov_base);
-		SNAPSHOT_PART_OR_RET(addr, buf, buf_size, snapshot_len);
+		SNAPSHOT_GADDR_OR_LEAVE(iov->iov_base, iov->iov_len, false,
+					meta, ret, done);
 	}
 
-	return (0);
+done:
+	return (ret);
 }
 
 int
-blockif_snapshot(struct vmctx *ctx, struct blockif_ctxt *bc,
-		 uint8_t **buffer, size_t *buf_size, size_t *snapshot_len)
+blockif_snapshot(struct blockif_ctxt *bc, struct vm_snapshot_meta *meta)
 {
+	int ret;
+
 	if (bc->bc_paused == 0) {
 		fprintf(stderr, "%s: Snapshot failed: "
 			"interface not paused.\r\n", __func__);
@@ -967,78 +968,19 @@ blockif_snapshot(struct vmctx *ctx, struct blockif_ctxt *bc,
 
 	pthread_mutex_lock(&bc->bc_mtx);
 
-	SNAPSHOT_PART_OR_RET(bc->bc_magic, buffer, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(bc->bc_ischr, buffer, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(bc->bc_isgeom, buffer, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(bc->bc_candelete, buffer, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(bc->bc_rdonly, buffer, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(bc->bc_size, buffer, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(bc->bc_sectsz, buffer, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(bc->bc_psectsz, buffer, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(bc->bc_psectoff, buffer, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(bc->bc_closing, buffer, buf_size, snapshot_len);
+	SNAPSHOT_VAR_OR_LEAVE(bc->bc_magic, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(bc->bc_ischr, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(bc->bc_isgeom, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(bc->bc_candelete, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(bc->bc_rdonly, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(bc->bc_size, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(bc->bc_sectsz, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(bc->bc_psectsz, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(bc->bc_psectoff, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(bc->bc_closing, meta, ret, done);
 
+done:
 	pthread_mutex_unlock(&bc->bc_mtx);
-	return (0);
+	return (ret);
 }
 
-int
-blockif_restore_req(struct vmctx *ctx, struct blockif_req *br,
-		    uint8_t **buffer, size_t *buf_size)
-{
-	struct iovec *iov;
-	int i;
-	vm_paddr_t addr;
-
-	RESTORE_PART_OR_RET(br->br_iovcnt, buffer, buf_size);
-	RESTORE_PART_OR_RET(br->br_offset, buffer, buf_size);
-	RESTORE_PART_OR_RET(br->br_resid, buffer, buf_size);
-
-	/* XXX: The callback and parameter must be filled by the virtualized
-	 * device that uses the interface, during its init; we're not touching
-	 * them here
-	 */
-
-	/* Snapshot the iovecs */
-	for (i = 0; i < br->br_iovcnt; i++) {
-		iov = &br->br_iov[i];
-
-		RESTORE_PART_OR_RET(iov->iov_len, buffer, buf_size);
-		RESTORE_PART_OR_RET(addr, buffer, buf_size);
-		/* we assume that iov_base is a guest-mapped address */
-		if (addr == (vm_paddr_t)-1) {
-			fprintf(stderr, "%s: Invalid address\r\n", __func__);
-			return (EINVAL);
-		}
-		iov->iov_base = paddr_guest2host(ctx, addr, iov->iov_len);
-	}
-
-	return (0);
-}
-
-int
-blockif_restore(struct vmctx *ctx, struct blockif_ctxt *bc,
-		uint8_t **buffer, size_t *buf_size)
-{
-	if (bc->bc_paused == 0) {
-		fprintf(stderr, "%s: Restore failed: "
-			"interface not paused.\r\n", __func__);
-		return (ENXIO);
-	}
-
-	pthread_mutex_lock(&bc->bc_mtx);
-
-	RESTORE_PART_OR_RET(bc->bc_magic, buffer, buf_size);
-	RESTORE_PART_OR_RET(bc->bc_ischr, buffer, buf_size);
-	RESTORE_PART_OR_RET(bc->bc_isgeom, buffer, buf_size);
-	RESTORE_PART_OR_RET(bc->bc_candelete, buffer, buf_size);
-	RESTORE_PART_OR_RET(bc->bc_rdonly, buffer, buf_size);
-	RESTORE_PART_OR_RET(bc->bc_size, buffer, buf_size);
-	RESTORE_PART_OR_RET(bc->bc_sectsz, buffer, buf_size);
-	RESTORE_PART_OR_RET(bc->bc_psectsz, buffer, buf_size);
-	RESTORE_PART_OR_RET(bc->bc_psectoff, buffer, buf_size);
-	RESTORE_PART_OR_RET(bc->bc_closing, buffer, buf_size);
-
-	pthread_mutex_unlock(&bc->bc_mtx);
-	return (0);
-}
