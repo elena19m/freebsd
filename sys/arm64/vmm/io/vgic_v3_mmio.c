@@ -663,6 +663,9 @@ redist_igroupr0_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 {
 	bool *retu = arg;
 
+	if (wval == 0UL)
+		printf("Warning: interrupts marked as group 0, ignoring");
+
 	*retu = false;
 	return (0);
 }
