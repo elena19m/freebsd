@@ -157,8 +157,6 @@ int 	vgic_v3_inject_irq(void *arg, uint32_t irq,
 			   enum vgic_v3_irqtype irqtype);
 int 	vgic_v3_remove_irq(void *arg, uint32_t irq, bool ignore_state);
 
-void	vgic_v3_irq_set_priority(uint32_t irq, uint8_t priority,
-				 struct hyp *hyp, int vcpuid);
 void	vgic_v3_group_toggle_enabled(bool enabled, struct hyp *hyp);
 int	vgic_v3_irq_toggle_enabled(uint32_t irq, bool enabled,
 				   struct hyp *hyp, int vcpuid);

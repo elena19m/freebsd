@@ -309,25 +309,6 @@ dist_icenabler_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 	    VGIC_GICD_ICENABLER));
 }
 
-static void
-mmio_update_int_priority(uint32_t new_ipriorityr, uint32_t old_ipriorityr,
-    uint32_t irq, struct hyp *hyp, int vcpuid)
-{
-	uint32_t irq_mask;
-	int i;
-	uint8_t new_prio;
-
-	irq_mask = 0xff;
-	for (i = 0; i < 4; i++) {
-		if (reg_changed(new_ipriorityr, old_ipriorityr, irq_mask)) {
-			new_prio = (uint8_t)((new_ipriorityr >> (i * 8)) & 0xff);
-			vgic_v3_irq_set_priority(irq, new_prio, hyp, vcpuid);
-		}
-		irq++;
-		irq_mask <<= 8;
-	}
-}
-
 /* XXX: Registers are byte accessible. */
 static int
 dist_ipriorityr_read(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t *rval,
@@ -381,11 +362,7 @@ dist_ipriorityr_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 		goto out;
 
 	mtx_lock_spin(&dist->dist_mtx);
-
-	mmio_update_int_priority(wval, dist->gicd_ipriorityr[n], n * 4,
-	    hyp, vcpuid);
 	dist->gicd_ipriorityr[n] = wval;
-
 	mtx_unlock_spin(&dist->dist_mtx);
 
 out:
@@ -664,7 +641,7 @@ redist_igroupr0_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 	bool *retu = arg;
 
 	if (wval == 0UL)
-		printf("Warning: interrupts marked as group 0, ignoring");
+		printf("Warning: Interrupts marked as group 0, ignoring\n");
 
 	*retu = false;
 	return (0);
@@ -786,7 +763,6 @@ redist_ipriorityr_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 	struct hyp *hyp;
 	struct vgic_v3_redist *redist;
 	size_t n;
-	uint32_t old_ipriorityr;
 	bool *retu = arg;
 
 #if (DEBUG > 0)
@@ -797,8 +773,6 @@ redist_ipriorityr_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 	redist = &hyp->ctx[vcpuid].vgic_redist;
 
 	n = reg32_idx(fault_ipa, hyp->vgic_mmio_regions[VGIC_GICR_IPRIORITYR]);
-	old_ipriorityr = redist->gicr_ipriorityr[n];
-	mmio_update_int_priority(wval, old_ipriorityr, n * 4, hyp, vcpuid);
 	redist->gicr_ipriorityr[n] = wval;
 
 	*retu = false;
