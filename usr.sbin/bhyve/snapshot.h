@@ -153,28 +153,28 @@ do {                                                                           \
 		return (ret);                                                  \
 } while (0)
 
-#define	SNAPSHOT_BUF_OR_LEAVE(DATA, LEN, META, RES, LABEL)		\
-do {									\
-	(RES) = vm_snapshot_buf((DATA), (LEN), (META));			\
-	if ((RES) != 0) {						\
-		vm_snapshot_buf_err(#DATA, (META)->op);			\
-		goto LABEL;						\
-	}								\
+#define	SNAPSHOT_BUF_OR_LEAVE(DATA, LEN, META, RES, LABEL)			\
+do {										\
+	(RES) = vm_snapshot_buf((DATA), (LEN), (META));				\
+	if ((RES) != 0) {							\
+		vm_snapshot_buf_err(#DATA, (META)->op);				\
+		goto LABEL;							\
+	}									\
 } while (0)
 
-#define	SNAPSHOT_VAR_OR_LEAVE(DATA, META, RES, LABEL)			\
+#define	SNAPSHOT_VAR_OR_LEAVE(DATA, META, RES, LABEL)				\
 	SNAPSHOT_BUF_OR_LEAVE(&(DATA), sizeof(DATA), (META), (RES), LABEL)
 
 /* address variables are pointers to guest memory */
-#define	SNAPSHOT_GADDR_OR_LEAVE(ADDR_VAR, GADDR_SIZE, META, RES, LABEL)	\
-do {									\
-	(RES) = vm_snapshot_gaddr(&(ADDR_VAR), (GADDR_SIZE), (META));	\
-	if ((RES) != 0) {						\
-		if ((RES) == EFAULT)					\
-			fprintf(stderr, "%s: invalid address: %s\r\n",	\
-				__func__, #ADDR_VAR);			\
-		goto LABEL;						\
-	}								\
+#define	SNAPSHOT_GADDR_OR_LEAVE(ADDR_VAR, GADDR_SIZE, META, RES, LABEL)		\
+do {										\
+	(RES) = vm_snapshot_gaddr((void **)&(ADDR_VAR), (GADDR_SIZE), (META));	\
+	if ((RES) != 0) {							\
+		if ((RES) == EFAULT)						\
+			fprintf(stderr, "%s: invalid address: %s\r\n",		\
+				__func__, #ADDR_VAR);				\
+		goto LABEL;							\
+	}									\
 } while (0)
 
 #endif
