@@ -54,6 +54,7 @@ __FBSDID("$FreeBSD$");
 #include "pci_lpc.h"
 #include "ps2kbd.h"
 #include "ps2mouse.h"
+#include "snapshot.h"
 
 #define	KBD_DATA_PORT		0x60
 
@@ -555,99 +556,95 @@ atkbdc_init(struct vmctx *ctx)
 	atkbdc_sc = sc;
 }
 
+static int
+pci_atkbdc_snapshot_op(struct vm_snapshot_meta *meta)
+{
+	int ret;
+
+	SNAPSHOT_VAR_OR_LEAVE(atkbdc_sc->status, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(atkbdc_sc->outport, meta, ret, done);
+	SNAPSHOT_BUF_OR_LEAVE(atkbdc_sc->ram,
+			      sizeof(atkbdc_sc->ram), meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(atkbdc_sc->curcmd, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(atkbdc_sc->ctrlbyte, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(atkbdc_sc->kbd, meta, ret, done);
+
+	SNAPSHOT_VAR_OR_LEAVE(atkbdc_sc->kbd.irq_active, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(atkbdc_sc->kbd.irq, meta, ret, done);
+	SNAPSHOT_BUF_OR_LEAVE(atkbdc_sc->kbd.buffer,
+			      sizeof(atkbdc_sc->kbd.buffer), meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(atkbdc_sc->kbd.brd, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(atkbdc_sc->kbd.bwr, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(atkbdc_sc->kbd.bcnt, meta, ret, done);
+
+	SNAPSHOT_VAR_OR_LEAVE(atkbdc_sc->aux.irq_active, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(atkbdc_sc->aux.irq, meta, ret, done);
+
+	ret = ps2kbd_snapshot(atkbdc_sc->ps2kbd_sc, meta);
+	if (ret != 0)
+		goto done;
+
+	ret = ps2mouse_snapshot(atkbdc_sc->ps2mouse_sc, meta);
+
+done:
+	return (ret);
+}
+
 int
 atkbdc_snapshot(struct vmctx *ctx, const char *dev_name, void *buffer,
 		size_t buf_size, size_t *snapshot_size)
 {
-	size_t dev_snapshot_len;
 	int ret;
-	uint8_t *buf;
+	struct vm_snapshot_meta meta = {
+		.ctx = ctx,
+		.dev_data = NULL,
 
-	if (atkbdc_sc == NULL)
-		return (0);
+		.buffer = {
+			.buf_start = buffer,
+			.buf_size = buf_size,
+			.buf = buffer,
+			.buf_rem = buf_size,
+		},
 
-	dev_snapshot_len = sizeof(*atkbdc_sc);
+		.op = VM_SNAPSHOT_SAVE,
+	};
 
-	if (buf_size < dev_snapshot_len) {
-		fprintf(stderr, "%s: buffer too small\r\n", __func__);
-		return (-1);
-	}
+	ret = pci_atkbdc_snapshot_op(&meta);
+	if (ret != 0)
+		goto err;
 
-	buf = buffer;
-	memcpy(buf, atkbdc_sc, dev_snapshot_len);
+	*snapshot_size = vm_get_snapshot_size(&meta);
 
-	buf += dev_snapshot_len;
-	buf_size -= dev_snapshot_len;
-	*snapshot_size = dev_snapshot_len;
-
-	ret = ps2kbd_snapshot(atkbdc_sc->ps2kbd_sc, buf, buf_size,
-			      &dev_snapshot_len);
-	if (ret < 0) {
-		fprintf(stderr, "Unable to restore ps2kbd\r\n");
-		return (-1);
-	}
-
-	buf += dev_snapshot_len;
-	buf_size -= dev_snapshot_len;
-	*snapshot_size += dev_snapshot_len;
-
-	ret = ps2mouse_snapshot(atkbdc_sc->ps2mouse_sc, buf, buf_size,
-				&dev_snapshot_len);
-	if (ret < 0) {
-		fprintf(stderr, "Unable to restore ps2mouse\r\n");
-		return (-1);
-	}
-
-	*snapshot_size += dev_snapshot_len;
-
-	return (0);
+err:
+	return (ret);
 }
+
 
 int
 atkbdc_restore(struct vmctx *ctx, const char *dev_name,
 	       void *buffer, size_t buf_size)
 {
-	struct atkbdc_softc *old_sc;
-	uint8_t *buf = buffer;
 	int ret;
-	size_t restored_len;
+	struct vm_snapshot_meta meta = {
+		.ctx = ctx,
+		.dev_data = NULL,
 
-	old_sc = buffer;
+		.buffer = {
+			.buf_start = buffer,
+			.buf_size = buf_size,
+			.buf = buffer,
+			.buf_rem = buf_size,
+		},
 
-	atkbdc_sc->status = old_sc->status;
-	atkbdc_sc->outport = old_sc->outport;
-	memcpy(atkbdc_sc->ram, old_sc->ram, sizeof(atkbdc_sc->ram));
-	atkbdc_sc->curcmd = old_sc->curcmd;
-	atkbdc_sc->ctrlbyte = old_sc->ctrlbyte;
-	atkbdc_sc->kbd = old_sc->kbd;
+		.op = VM_SNAPSHOT_RESTORE,
+	};
 
-	atkbdc_sc->kbd.irq_active = old_sc->kbd.irq_active;
-	atkbdc_sc->kbd.irq = old_sc->kbd.irq;
-	memcpy(atkbdc_sc->kbd.buffer, old_sc->kbd.buffer, sizeof(atkbdc_sc->kbd.buffer));
-	atkbdc_sc->kbd.brd = old_sc->kbd.brd;
-	atkbdc_sc->kbd.bwr = old_sc->kbd.bwr;
-	atkbdc_sc->kbd.bcnt = old_sc->kbd.bcnt;
+	ret = pci_atkbdc_snapshot_op(&meta);
+	if (ret != 0)
+		goto err;
 
-	atkbdc_sc->aux.irq_active = old_sc->aux.irq_active;
-	atkbdc_sc->aux.irq = old_sc->aux.irq;
-
-	buf += sizeof(*atkbdc_sc);
-
-	ret = ps2kbd_restore(atkbdc_sc->ps2kbd_sc, buf, &restored_len);
-	if (ret < 0) {
-		fprintf(stderr, "%s: Failed to restore ps2kbd\r\n", __func__);
-		return (-1);
-	}
-
-	buf += restored_len;
-
-	ret = ps2mouse_restore(atkbdc_sc->ps2mouse_sc, buf, &restored_len);
-	if (ret < 0) {
-		fprintf(stderr, "%s: Failed to restore ps2mouse\r\n", __func__);
-		return (-1);
-	}
-
-	return (0);
+err:
+	return (ret);
 }
 
 static void

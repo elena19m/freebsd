@@ -31,6 +31,8 @@
 #ifndef _PS2KBD_H_
 #define	_PS2KBD_H_
 
+#include "snapshot.h"
+
 struct atkbdc_softc;
 
 struct ps2kbd_softc *ps2kbd_init(struct atkbdc_softc *sc);
@@ -38,8 +40,6 @@ struct ps2kbd_softc *ps2kbd_init(struct atkbdc_softc *sc);
 int ps2kbd_read(struct ps2kbd_softc *sc, uint8_t *val);
 void ps2kbd_write(struct ps2kbd_softc *sc, uint8_t val);
 
-int ps2kbd_snapshot(struct ps2kbd_softc *sc, void *buffer, size_t buf_size,
-		    size_t *snapshot_size);
-int ps2kbd_restore(struct ps2kbd_softc *sc, void *buffer, size_t *restored_len);
+int ps2kbd_snapshot(struct ps2kbd_softc *sc, struct vm_snapshot_meta *meta);
 
 #endif /* _PS2KBD_H_ */

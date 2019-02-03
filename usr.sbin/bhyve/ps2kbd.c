@@ -43,6 +43,7 @@ __FBSDID("$FreeBSD$");
 
 #include "atkbdc.h"
 #include "console.h"
+#include "snapshot.h"
 
 /* keyboard device commands */
 #define	PS2KC_RESET_DEV		0xff
@@ -383,31 +384,13 @@ ps2kbd_init(struct atkbdc_softc *atkbdc_sc)
 }
 
 int
-ps2kbd_snapshot(struct ps2kbd_softc *sc, void *buffer, size_t buf_size,
-		size_t *snapshot_size)
+ps2kbd_snapshot(struct ps2kbd_softc *sc, struct vm_snapshot_meta *meta)
 {
-	if (buf_size < sizeof(*sc)) {
-		fprintf(stderr, "%s: buffer too small\r\n", __func__);
-		return (-1);
-	}
+	int ret;
 
-	memcpy(buffer, sc, sizeof(*sc));
-	*snapshot_size = sizeof(*sc);
+	SNAPSHOT_VAR_OR_LEAVE(sc->enabled, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->curcmd, meta, ret, done);
 
-	return (0);
-}
-
-int
-ps2kbd_restore(struct ps2kbd_softc *sc, void *buffer, size_t *restored_len)
-{
-	struct ps2kbd_softc *old_sc;
-
-	old_sc = buffer;
-
-	sc->enabled = old_sc->enabled;
-	sc->curcmd = old_sc->curcmd;
-
-	*restored_len = sizeof(*old_sc);
-
-	return (0);
+done:
+	return (ret);
 }
