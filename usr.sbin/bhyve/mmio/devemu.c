@@ -274,18 +274,15 @@ int
 devemu_alloc_mem(struct devemu_inst *di)
 {
 	int error;
-	uint64_t *baseptr, limit, addr, mask, size;
-
-	if ((size & (size - 1)) != 0)
-		size = 1UL << flsl(size); /* round up to a power of 2 */
+	uint64_t *baseptr, limit, addr, size;
 
 	baseptr = &di->addr.baddr;
 	size = di->addr.size;
 	limit = DEVEMU_MEMLIMIT;
-	/* XXX: a define for this might be useful.
-	 * Value based on PCIM_BAR_MEM_BASE
-	 */
-	mask = ~0xfUL;
+
+	if ((size & (size - 1)) != 0)
+		/* Round up to a power of 2 */
+		size = 1UL << flsl(size);
 
 	error = devemu_alloc_resource(baseptr, limit, size, &addr);
 	if (error != 0)
