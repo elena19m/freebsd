@@ -2590,7 +2590,8 @@ pci_ahci_snapshot_op(struct vm_snapshot_meta *meta)
 		    ((bctx != NULL) && (port->bctx == NULL))) {
 			fprintf(stderr, "%s: ports not matching\r\n", __func__);
 
-			return (-1);
+			ret = EINVAL;
+			goto done;
 		}
 
 		if (port->bctx == NULL)
@@ -2601,7 +2602,8 @@ pci_ahci_snapshot_op(struct vm_snapshot_meta *meta)
 					"actual: %d expected: %d\r\n",
 					__func__, port->port, i);
 
-			return (-1);
+			ret = EINVAL;
+			goto done;
 		}
 
 		SNAPSHOT_GADDR_OR_LEAVE(port->cmd_lst,
