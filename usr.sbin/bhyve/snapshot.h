@@ -116,7 +116,7 @@ void vm_snapshot_buf_err(const char *bufname, const enum vm_snapshot_op op);
 int vm_snapshot_buf(volatile void *data, size_t data_size,
 		    struct vm_snapshot_meta *meta);
 size_t vm_get_snapshot_size(struct vm_snapshot_meta *meta);
-int vm_snapshot_gaddr(void **addr_var, size_t gaddr_len,
+int vm_snapshot_gaddr(void **addr_var, size_t gaddr_len, bool restore_null,
 		      struct vm_snapshot_meta *meta);
 
 #define	SNAPSHOT_PART(DATA, BUFFER, BUF_SIZE, SNAP_LEN) _Generic((BUFFER),     \
@@ -165,10 +165,15 @@ do {										\
 #define	SNAPSHOT_VAR_OR_LEAVE(DATA, META, RES, LABEL)				\
 	SNAPSHOT_BUF_OR_LEAVE(&(DATA), sizeof(DATA), (META), (RES), LABEL)
 
-/* address variables are pointers to guest memory */
-#define	SNAPSHOT_GADDR_OR_LEAVE(ADDR_VAR, GADDR_SIZE, META, RES, LABEL)		\
+/* address variables are pointers to guest memory
+ *
+ * when RNULL != 0, do not enforce invalid address checks; in stead, make the
+ * pointer NULL at restore time
+ */
+#define	SNAPSHOT_GADDR_OR_LEAVE(ADDR_VAR, GADDR_SIZE, RNULL, META, RES, LABEL)	\
 do {										\
-	(RES) = vm_snapshot_gaddr((void **)&(ADDR_VAR), (GADDR_SIZE), (META));	\
+	(RES) = vm_snapshot_gaddr((void **)&(ADDR_VAR), RNULL, (GADDR_SIZE),	\
+				  (META));					\
 	if ((RES) != 0) {							\
 		if ((RES) == EFAULT)						\
 			fprintf(stderr, "%s: invalid address: %s\r\n",		\

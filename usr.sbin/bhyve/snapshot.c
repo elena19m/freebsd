@@ -1300,7 +1300,7 @@ vm_get_snapshot_size(struct vm_snapshot_meta *meta)
 }
 
 int
-vm_snapshot_gaddr(void **addr_var, size_t gaddr_len,
+vm_snapshot_gaddr(void **addr_var, size_t gaddr_len, bool restore_null,
 		  struct vm_snapshot_meta *meta)
 {
 	int ret;
@@ -1309,16 +1309,21 @@ vm_snapshot_gaddr(void **addr_var, size_t gaddr_len,
 	if (meta->op == VM_SNAPSHOT_SAVE) {
 		paddr = paddr_host2guest(meta->ctx, *addr_var);
 		if (paddr == (vm_paddr_t) -1) {
-			ret = EFAULT;
-			goto done;
+			if ((restore_null == false) ||
+			    ((restore_null == true) && (*addr_var != NULL))) {
+				ret = EFAULT;
+				goto done;
+			}
 		}
 
 		SNAPSHOT_VAR_OR_LEAVE(paddr, meta, ret, done);
 	} else if (meta->op == VM_SNAPSHOT_RESTORE) {
 		SNAPSHOT_VAR_OR_LEAVE(paddr, meta, ret, done);
 		if (paddr == (vm_paddr_t) -1) {
-			ret = EFAULT;
-			goto done;
+			if (restore_null == false) {
+				ret = EFAULT;
+				goto done;
+			}
 		}
 
 		*addr_var = paddr_guest2host(meta->ctx, paddr, gaddr_len);
