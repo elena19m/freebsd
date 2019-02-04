@@ -53,6 +53,7 @@ __FBSDID("$FreeBSD$");
 #include <sysexits.h>
 
 #include "mevent.h"
+#include "snapshot.h"
 #include "uart_emul.h"
 
 #define	COM1_BASE      	0x3F8
@@ -703,52 +704,31 @@ uart_set_backend(struct uart_softc *sc, const char *opts)
 }
 
 int
-uart_snapshot(struct uart_softc *sc, void *buffer, size_t buf_size,
-	      size_t *snapshot_size)
+uart_snapshot(struct uart_softc *sc, struct vm_snapshot_meta *meta)
 {
-	if (sizeof(*sc) > buf_size) {
-		fprintf(stderr, "%s: buffer too small\r\n", __func__);
-		return (-1);
-	}
+	int ret;
 
-	memcpy(buffer, sc, sizeof(*sc));
-	*snapshot_size = sizeof(*sc);
-	return (0);
-}
+	SNAPSHOT_VAR_OR_LEAVE(sc->data, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->ier, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->lcr, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->mcr, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->lsr, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->msr, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->fcr, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->scr, meta, ret, done);
 
-int uart_restore(struct uart_softc *sc, void *buffer, size_t buf_size)
-{
-	struct uart_softc *old_sc = buffer;
+	SNAPSHOT_VAR_OR_LEAVE(sc->dll, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->dlh, meta, ret, done);
 
-	if (sizeof(*sc) > buf_size) {
-		fprintf(stderr, "%s: buffer too small\r\n", __func__);
-		return (-1);
-	}
-
-	sc->data = old_sc->data;
-	sc->ier = old_sc->ier;
-	sc->lcr = old_sc->lcr;
-	sc->mcr = old_sc->mcr;
-	sc->lsr = old_sc->lsr;
-	sc->msr = old_sc->msr;
-	sc->fcr = old_sc->fcr;
-	sc->scr = old_sc->scr;
-
-	sc->dll = old_sc->dll;
-	sc->dlh = old_sc->dlh;
-
-//	sc->rxfifo.buf = old_sc->rxfifo.buf;
-	sc->rxfifo.rindex = old_sc->rxfifo.rindex;
-	sc->rxfifo.windex = old_sc->rxfifo.windex;
-	sc->rxfifo.num = old_sc->rxfifo.num;
-	sc->rxfifo.size = old_sc->rxfifo.size;
-	memcpy(sc->rxfifo.buf, old_sc->rxfifo.buf, FIFOSZ);
+	SNAPSHOT_VAR_OR_LEAVE(sc->rxfifo.rindex, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->rxfifo.windex, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->rxfifo.num, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->rxfifo.size, meta, ret, done);
+	SNAPSHOT_BUF_OR_LEAVE(sc->rxfifo.buf, sizeof(sc->rxfifo.buf),
+			      meta, ret, done);
 
 	sc->thre_int_pending = 1;
-//	sc->thre_int_pending = old_sc->thre_int_pending;
 
-//	sc->intr_assert = old_sc->intr_assert;
-//	sc->intr_deassert = old_sc->intr_deassert;
-
-	return (sizeof(*sc));
+done:
+	return (ret);
 }

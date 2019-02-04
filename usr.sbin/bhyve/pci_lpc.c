@@ -47,6 +47,7 @@ __FBSDID("$FreeBSD$");
 #include "pci_emul.h"
 #include "pci_irq.h"
 #include "pci_lpc.h"
+#include "snapshot.h"
 #include "uart_emul.h"
 
 #define	IO_ICU1		0x20
@@ -451,54 +452,75 @@ lpc_pirq_routed(void)
 		pci_set_cfgdata8(lpc_bridge, 0x68 + pin, pirq_read(pin + 5));
 }
 
-int
-pci_lpc_snapshot(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
-		size_t buf_size, size_t *snapshot_size)
+static int
+pci_lpc_snapshot_op(struct vm_snapshot_meta *meta)
 {
 	int unit, ret;
-	size_t snap_size, offset;
 	struct uart_softc *sc;
-
-	offset = 0;
 
 	for (unit = 0; unit < LPC_UART_NUM; unit++) {
 		sc = lpc_uart_softc[unit].uart_softc;
 
-		ret = uart_snapshot(sc, buffer + offset, buf_size - offset,
-				    &snap_size);
-		if (ret != 0) {
-			fprintf(stderr, "%s: failed to snapshot uart dev\r\n", __func__);
-			*snapshot_size = 0;
-			return (-1);
-		}
-
-		offset += snap_size;
+		ret = uart_snapshot(sc, meta);
+		if (ret != 0)
+			goto done;
 	}
 
-	*snapshot_size += offset;
+done:
+	return (ret);
+}
 
-	return (0);
+static int
+pci_lpc_snapshot(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
+		  size_t buf_size, size_t *snapshot_size)
+{
+	int ret;
+	struct vm_snapshot_meta meta = {
+		.ctx = ctx,
+		.dev_data = pi,
+
+		.buffer = {
+			.buf_start = buffer,
+			.buf_size = buf_size,
+			.buf = buffer,
+			.buf_rem = buf_size,
+		},
+
+		.op = VM_SNAPSHOT_SAVE,
+	};
+
+	ret = pci_lpc_snapshot_op(&meta);
+	if (ret != 0)
+		goto err;
+
+	*snapshot_size = vm_get_snapshot_size(&meta);
+
+err:
+	return (ret);
 }
 
 static int
 pci_lpc_restore(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
 		size_t buf_size)
 {
-	int unit, ret;
-	size_t offset;
-	struct uart_softc *sc;
+	int ret;
+	struct vm_snapshot_meta meta = {
+		.ctx = ctx,
+		.dev_data = pi,
 
-	offset = 0;
+		.buffer = {
+			.buf_start = buffer,
+			.buf_size = buf_size,
+			.buf = buffer,
+			.buf_rem = buf_size,
+		},
 
-	for (unit = 0; unit < LPC_UART_NUM; unit++) {
-		sc = lpc_uart_softc[unit].uart_softc;
-		ret = uart_restore(sc, buffer + offset, buf_size - offset);
-		if (ret < 0)
-			return (-1);
-		offset += ret;
-	}
+		.op = VM_SNAPSHOT_RESTORE,
+	};
 
-	return (0);
+	ret = pci_lpc_snapshot_op(&meta);
+
+	return (ret);
 }
 
 struct pci_devemu pci_de_lpc = {
