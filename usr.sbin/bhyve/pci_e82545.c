@@ -2380,284 +2380,202 @@ e82545_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 }
 
 static int
-e82545_snapshot(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
-		size_t buf_size, size_t *snapshot_len)
+e82545_snapshot_op(struct vm_snapshot_meta *meta)
 {
 	int i;
+	int ret;
 	struct e82545_softc *sc;
-	uint8_t *buf;
-	vm_paddr_t addr;
+	struct pci_devinst *pi;
 	uint64_t bitmap_value;
 
+	pi = meta->dev_data;
 	sc = pi->pi_arg;
 
-	buf = buffer;
-
 	/* esc_mevp and esc_mevpitr should be reinitiated at init */
-
-	SNAPSHOT_PART_OR_RET(sc->esc_mac, buf, buf_size, snapshot_len);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_mac, meta, ret, done);
 
 	/* General */
-	SNAPSHOT_PART_OR_RET(sc->esc_CTRL, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_FCAL, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_FCAH, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_FCT, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_VET, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_FCTTV, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_LEDCTL, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_PBA, buf, buf_size, snapshot_len);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_CTRL, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_FCAL, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_FCAH, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_FCT, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_VET, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_FCTTV, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_LEDCTL, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_PBA, meta, ret, done);
 
 	/* Interrupt control */
-	SNAPSHOT_PART_OR_RET(sc->esc_irq_asserted, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_ICR, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_ITR, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_ICS, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_IMS, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_IMC, buf, buf_size, snapshot_len);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_irq_asserted, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_ICR, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_ITR, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_ICS, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_IMS, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_IMC, meta, ret, done);
 
 	/* Transmit */
 	/* The fields in the unions are in superposition to access certain
 	 * bytes in the larger uint variables
 	 * e.g., ip_config = [ipcss|ipcso|ipcse0|ipcse1]
 	 */
-	SNAPSHOT_PART_OR_RET(sc->esc_txctx.lower_setup.ip_config, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_txctx.upper_setup.tcp_config, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_txctx.cmd_and_length, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_txctx.tcp_seg_setup.data, buf, buf_size, snapshot_len);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_txctx.lower_setup.ip_config, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_txctx.upper_setup.tcp_config, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_txctx.cmd_and_length, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_txctx.tcp_seg_setup.data, meta, ret, done);
 
-	SNAPSHOT_PART_OR_RET(sc->esc_tx_enabled, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_tx_active, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_TXCW, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_TCTL, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_TIPG, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_AIT, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_tdba, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_TDBAL, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_TDBAH, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_TDLEN, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_TDH, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_TDHr, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_TDT, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_TIDV, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_TXDCTL, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_TADV, buf, buf_size, snapshot_len);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_tx_enabled, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_tx_active, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_TXCW, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_TCTL, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_TIPG, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_AIT, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_tdba, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_TDBAL, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_TDBAH, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_TDLEN, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_TDH, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_TDHr, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_TDT, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_TIDV, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_TXDCTL, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_TADV, meta, ret, done);
 
 	/* Has dependency on esc_TDLEN; reoreder of fields from struct */
-	addr = paddr_host2guest(sc->esc_ctx, sc->esc_txdesc);
-	SNAPSHOT_PART_OR_RET(addr, buf, buf_size, snapshot_len);
-
+	SNAPSHOT_GADDR_OR_LEAVE(sc->esc_txdesc, sc->esc_TDLEN,
+				true, meta, ret, done);
 
 	/* L2 frame acceptance */
 	for (i = 0; i < nitems(sc->esc_uni); i++) {
-		SNAPSHOT_PART_OR_RET(sc->esc_uni[i].eu_valid, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(sc->esc_uni[i].eu_addrsel, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(sc->esc_uni[i].eu_eth, buf, buf_size, snapshot_len);
+		SNAPSHOT_VAR_OR_LEAVE(sc->esc_uni[i].eu_valid, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(sc->esc_uni[i].eu_addrsel, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(sc->esc_uni[i].eu_eth, meta, ret, done);
 	}
 
-	SNAPSHOT_PART_OR_RET(sc->esc_fmcast, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_fvlan, buf, buf_size, snapshot_len);
+	SNAPSHOT_BUF_OR_LEAVE(sc->esc_fmcast, sizeof(sc->esc_fmcast),
+			      meta, ret, done);
+	SNAPSHOT_BUF_OR_LEAVE(sc->esc_fvlan, sizeof(sc->esc_fvlan),
+			      meta, ret, done);
 
 	/* Receive */
-	SNAPSHOT_PART_OR_RET(sc->esc_rx_enabled, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_rx_active, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_rx_loopback, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_RCTL, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_FCRTL, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_FCRTH, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_rdba, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_RDBAL, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_RDBAH, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_RDLEN, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_RDH, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_RDT, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_RDTR, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_RXDCTL, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_RADV, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_RSRPD, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->esc_RXCSUM, buf, buf_size, snapshot_len);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_rx_enabled, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_rx_active, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_rx_loopback, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_RCTL, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_FCRTL, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_FCRTH, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_rdba, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_RDBAL, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_RDBAH, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_RDLEN, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_RDH, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_RDT, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_RDTR, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_RXDCTL, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_RADV, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_RSRPD, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->esc_RXCSUM, meta, ret, done);
 
 	/* Has dependency on esc_RDLEN; reoreder of fields from struct */
-	addr = paddr_host2guest(sc->esc_ctx, sc->esc_rxdesc);
-	SNAPSHOT_PART_OR_RET(addr, buf, buf_size, snapshot_len);
+	SNAPSHOT_GADDR_OR_LEAVE(sc->esc_rxdesc, sc->esc_TDLEN,
+				true, meta, ret, done);
 
 	/* IO Port register access */
-	SNAPSHOT_PART_OR_RET(sc->io_addr, buf, buf_size, snapshot_len);
-
+	SNAPSHOT_VAR_OR_LEAVE(sc->io_addr, meta, ret, done);
 	/* Shadow copy of MDIC */
-	SNAPSHOT_PART_OR_RET(sc->mdi_control, buf, buf_size, snapshot_len);
+	SNAPSHOT_VAR_OR_LEAVE(sc->mdi_control, meta, ret, done);
 	/* Shadow copy of EECD */
-	SNAPSHOT_PART_OR_RET(sc->eeprom_control, buf, buf_size, snapshot_len);
+	SNAPSHOT_VAR_OR_LEAVE(sc->eeprom_control, meta, ret, done);
 	/* Latest NVM in/out */
-	SNAPSHOT_PART_OR_RET(sc->nvm_data, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->nvm_opaddr, buf, buf_size, snapshot_len);
+	SNAPSHOT_VAR_OR_LEAVE(sc->nvm_data, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->nvm_opaddr, meta, ret, done);
 	/* stats */
-	SNAPSHOT_PART_OR_RET(sc->missed_pkt_count, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->pkt_rx_by_size[6], buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->pkt_tx_by_size[6], buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->good_pkt_rx_count, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->bcast_pkt_rx_count, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->mcast_pkt_rx_count, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->good_pkt_tx_count, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->bcast_pkt_tx_count, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->mcast_pkt_tx_count, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->oversize_rx_count, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->tso_tx_count, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->good_octets_rx, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->good_octets_tx, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->missed_octets, buf, buf_size, snapshot_len);
+	SNAPSHOT_VAR_OR_LEAVE(sc->missed_pkt_count, meta, ret, done);
+	SNAPSHOT_BUF_OR_LEAVE(sc->pkt_rx_by_size, sizeof(sc->pkt_rx_by_size),
+			      meta, ret, done);
+	SNAPSHOT_BUF_OR_LEAVE(sc->pkt_tx_by_size, sizeof(sc->pkt_tx_by_size),
+			      meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->good_pkt_rx_count, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->bcast_pkt_rx_count, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->mcast_pkt_rx_count, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->good_pkt_tx_count, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->bcast_pkt_tx_count, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->mcast_pkt_tx_count, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->oversize_rx_count, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->tso_tx_count, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->good_octets_rx, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->good_octets_tx, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->missed_octets, meta, ret, done);
 
-	bitmap_value = sc->nvm_bits;
-	SNAPSHOT_PART_OR_RET(bitmap_value, buf, buf_size, snapshot_len);
-	bitmap_value = sc->nvm_mode;
-	SNAPSHOT_PART_OR_RET(bitmap_value, buf, buf_size, snapshot_len);
+	if (meta->op == VM_SNAPSHOT_SAVE)
+		bitmap_value = sc->nvm_bits;
+	SNAPSHOT_VAR_OR_LEAVE(bitmap_value, meta, ret, done);
+	if (meta->op == VM_SNAPSHOT_RESTORE)
+		sc->nvm_bits = bitmap_value;
+
+	if (meta->op == VM_SNAPSHOT_SAVE)
+		bitmap_value = sc->nvm_bits;
+	SNAPSHOT_VAR_OR_LEAVE(bitmap_value, meta, ret, done);
+	if (meta->op == VM_SNAPSHOT_RESTORE)
+		sc->nvm_bits = bitmap_value;
 
 	/* EEPROM data */
-	SNAPSHOT_PART_OR_RET(sc->eeprom_data, buf, buf_size, snapshot_len);
+	SNAPSHOT_BUF_OR_LEAVE(sc->eeprom_data, sizeof(sc->eeprom_data),
+			      meta, ret, done);
 
-	return (0);
+done:
+	return (ret);
+}
+
+static int
+e82545_snapshot(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
+		  size_t buf_size, size_t *snapshot_size)
+{
+	int ret;
+	struct vm_snapshot_meta meta = {
+		.ctx = ctx,
+		.dev_data = pi,
+
+		.buffer = {
+			.buf_start = buffer,
+			.buf_size = buf_size,
+			.buf = buffer,
+			.buf_rem = buf_size,
+		},
+
+		.op = VM_SNAPSHOT_SAVE,
+	};
+
+	ret = e82545_snapshot_op(&meta);
+	if (ret != 0)
+		goto err;
+
+	*snapshot_size = vm_get_snapshot_size(&meta);
+
+err:
+	return (ret);
 }
 
 static int
 e82545_restore(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
-	       size_t buf_size)
+		size_t buf_size)
 {
-	int i;
-	struct e82545_softc *sc;
-	uint8_t *buf;
-	vm_paddr_t addr;
-	uint64_t bitmap_value;
+	int ret;
+	struct vm_snapshot_meta meta = {
+		.ctx = ctx,
+		.dev_data = pi,
 
-	sc = pi->pi_arg;
+		.buffer = {
+			.buf_start = buffer,
+			.buf_size = buf_size,
+			.buf = buffer,
+			.buf_rem = buf_size,
+		},
 
-	buf = buffer;
+		.op = VM_SNAPSHOT_RESTORE,
+	};
 
-	/* esc_mevp and esc_mevpitr should be reinitiated at init */
+	ret = e82545_snapshot_op(&meta);
 
-	RESTORE_PART_OR_RET(sc->esc_mac, buf, buf_size);
-
-	/* General */
-	RESTORE_PART_OR_RET(sc->esc_CTRL, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_FCAL, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_FCAH, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_FCT, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_VET, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_FCTTV, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_LEDCTL, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_PBA, buf, buf_size);
-
-	/* Interrupt control */
-	RESTORE_PART_OR_RET(sc->esc_irq_asserted, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_ICR, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_ITR, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_ICS, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_IMS, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_IMC, buf, buf_size);
-
-	/* Transmit */
-	/* The fields in the unions are in superposition to access certain
-	 * bytes in the larger uint variables
-	 * e.g., ip_config = [ipcss|ipcso|ipcse0|ipcse1]
-	 */
-	RESTORE_PART_OR_RET(sc->esc_txctx.lower_setup.ip_config, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_txctx.upper_setup.tcp_config, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_txctx.cmd_and_length, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_txctx.tcp_seg_setup.data, buf, buf_size);
-
-	RESTORE_PART_OR_RET(sc->esc_tx_enabled, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_tx_active, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_TXCW, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_TCTL, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_TIPG, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_AIT, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_tdba, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_TDBAL, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_TDBAH, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_TDLEN, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_TDH, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_TDHr, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_TDT, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_TIDV, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_TXDCTL, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_TADV, buf, buf_size);
-
-	/* Has dependency on esc_TDLEN; reoreder of fields from struct */
-	RESTORE_PART_OR_RET(addr, buf, buf_size);
-	if (addr == (vm_paddr_t)-1)
-		sc->esc_txdesc = NULL;
-	else
-		sc->esc_txdesc = paddr_guest2host(sc->esc_ctx, addr, sc->esc_TDLEN);
-
-	/* L2 frame acceptance */
-	for (i = 0; i < nitems(sc->esc_uni); i++) {
-		RESTORE_PART_OR_RET(sc->esc_uni[i].eu_valid, buf, buf_size);
-		RESTORE_PART_OR_RET(sc->esc_uni[i].eu_addrsel, buf, buf_size);
-		RESTORE_PART_OR_RET(sc->esc_uni[i].eu_eth, buf, buf_size);
-	}
-
-	RESTORE_PART_OR_RET(sc->esc_fmcast, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_fvlan, buf, buf_size);
-
-	/* Receive */
-	RESTORE_PART_OR_RET(sc->esc_rx_enabled, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_rx_active, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_rx_loopback, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_RCTL, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_FCRTL, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_FCRTH, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_rdba, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_RDBAL, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_RDBAH, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_RDLEN, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_RDH, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_RDT, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_RDTR, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_RXDCTL, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_RADV, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_RSRPD, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->esc_RXCSUM, buf, buf_size);
-
-	/* Has dependency on esc_RDLEN; reoreder of fields from struct */
-	RESTORE_PART_OR_RET(addr, buf, buf_size);
-	if (addr == (vm_paddr_t)-1)
-		sc->esc_rxdesc = NULL;
-	else
-		sc->esc_rxdesc = paddr_guest2host(sc->esc_ctx, addr, sc->esc_TDLEN);
-
-	/* IO Port register access */
-	RESTORE_PART_OR_RET(sc->io_addr, buf, buf_size);
-
-	/* Shadow copy of MDIC */
-	RESTORE_PART_OR_RET(sc->mdi_control, buf, buf_size);
-	/* Shadow copy of EECD */
-	RESTORE_PART_OR_RET(sc->eeprom_control, buf, buf_size);
-	/* Latest NVM in/out */
-	RESTORE_PART_OR_RET(sc->nvm_data, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->nvm_opaddr, buf, buf_size);
-	/* stats */
-	RESTORE_PART_OR_RET(sc->missed_pkt_count, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->pkt_rx_by_size[6], buf, buf_size);
-	RESTORE_PART_OR_RET(sc->pkt_tx_by_size[6], buf, buf_size);
-	RESTORE_PART_OR_RET(sc->good_pkt_rx_count, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->bcast_pkt_rx_count, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->mcast_pkt_rx_count, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->good_pkt_tx_count, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->bcast_pkt_tx_count, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->mcast_pkt_tx_count, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->oversize_rx_count, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->tso_tx_count, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->good_octets_rx, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->good_octets_tx, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->missed_octets, buf, buf_size);
-
-	RESTORE_PART_OR_RET(bitmap_value, buf, buf_size);
-	sc->nvm_bits = bitmap_value;
-	RESTORE_PART_OR_RET(bitmap_value, buf, buf_size);
-	sc->nvm_mode = bitmap_value;
-
-	/* EEPROM data */
-	RESTORE_PART_OR_RET(sc->eeprom_data, buf, buf_size);
-
-	return (0);
+	return (ret);
 }
 
 struct pci_devemu pci_de_e82545 = {
