@@ -2525,7 +2525,8 @@ pci_ahci_snapshot_restore_queues(struct ahci_port *port,
 		if (ret != 0) {
 			fprintf(stderr, "%s: failed to restore request\r\n",
 				__func__);
-			return (-1);
+
+			goto done;
 		}
 
 		/* re-enqueue the requests in the block interface */
@@ -2538,7 +2539,8 @@ pci_ahci_snapshot_restore_queues(struct ahci_port *port,
 			fprintf(stderr,
 				"%s: failed to re-enqueue request\r\n",
 				__func__);
-			return (-1);
+
+			goto done;
 		}
 	}
 
@@ -2678,7 +2680,8 @@ pci_ahci_snapshot_op(struct vm_snapshot_meta *meta)
 		if (ret != 0) {
 			fprintf(stderr, "%s: failed to restore blockif\r\n",
 				__func__);
-			return (-1);
+
+			goto done;
 		}
 	}
 
