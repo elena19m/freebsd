@@ -789,46 +789,25 @@ umouse_stop(void *scarg)
 }
 
 static int
-umouse_snapshot(void *scarg, uint8_t **buffer,
-		size_t *buf_size, size_t *snapshot_len)
+umouse_snapshot(void *scarg, struct vm_snapshot_meta *meta)
 {
+	int ret;
 	struct umouse_softc *sc;
 
 	sc = scarg;
 
-	SNAPSHOT_PART_OR_RET(sc->um_report, buffer, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->newdata, buffer, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->hid.idle, buffer, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->hid.protocol, buffer, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->hid.feature, buffer, buf_size, snapshot_len);
+	SNAPSHOT_VAR_OR_LEAVE(sc->um_report, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->newdata, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->hid.idle, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->hid.protocol, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->hid.feature, meta, ret, done);
 
-	SNAPSHOT_PART_OR_RET(sc->polling, buffer, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->prev_evt.tv_sec, buffer, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->prev_evt.tv_usec, buffer, buf_size, snapshot_len);
+	SNAPSHOT_VAR_OR_LEAVE(sc->polling, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->prev_evt.tv_sec, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->prev_evt.tv_usec, meta, ret, done);
 
-	return (0);
-}
-
-static int
-umouse_restore(void *scarg, uint8_t **buffer, size_t *buf_size)
-{
-	struct umouse_softc *sc;
-
-	sc = scarg;
-
-	RESTORE_PART_OR_RET(sc->um_report, buffer, buf_size);
-	RESTORE_PART_OR_RET(sc->newdata, buffer, buf_size);
-	RESTORE_PART_OR_RET(sc->hid.idle, buffer, buf_size);
-	RESTORE_PART_OR_RET(sc->hid.protocol, buffer, buf_size);
-	RESTORE_PART_OR_RET(sc->hid.feature, buffer, buf_size);
-
-	RESTORE_PART_OR_RET(sc->polling, buffer, buf_size);
-	RESTORE_PART_OR_RET(sc->prev_evt.tv_sec, buffer, buf_size);
-	RESTORE_PART_OR_RET(sc->prev_evt.tv_usec, buffer, buf_size);
-
-	/* sc->hci is restored in pci_xhci */
-
-	return (0);
+done:
+	return (ret);
 }
 
 struct usb_devemu ue_mouse = {
@@ -842,6 +821,5 @@ struct usb_devemu ue_mouse = {
 	.ue_remove =	umouse_remove,
 	.ue_stop =	umouse_stop,
 	.ue_snapshot =	umouse_snapshot,
-	.ue_restore =	umouse_restore,
 };
 USB_EMUL_SET(ue_mouse);

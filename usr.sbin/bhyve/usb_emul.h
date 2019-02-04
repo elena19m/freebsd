@@ -35,6 +35,8 @@
 #include <sys/linker_set.h>
 #include <pthread.h>
 
+#include "snapshot.h"
+
 #define	USB_MAX_XFER_BLOCKS	8
 
 #define	USB_XFER_OUT		0
@@ -62,9 +64,7 @@ struct usb_devemu {
 	int	(*ue_reset)(void *sc);
 	int	(*ue_remove)(void *sc);
 	int	(*ue_stop)(void *sc);
-	int	(*ue_snapshot)(void *scarg, uint8_t **buffer,
-			       size_t *buf_size, size_t *snapshot_len);
-	int	(*ue_restore)(void *scarg, uint8_t **buffer, size_t *buf_size);
+	int	(*ue_snapshot)(void *scarg, struct vm_snapshot_meta *meta);
 };
 #define	USB_EMUL_SET(x)		DATA_SET(usb_emu_set, x);
 

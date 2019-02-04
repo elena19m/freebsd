@@ -288,9 +288,10 @@ struct pci_xhci_softc {
 
 #define	XHCI_HALTED(sc)		((sc)->opregs.usbsts & XHCI_STS_HCH)
 
+#define XHCI_GADDR_SIZE(a)	(XHCI_PADDR_SZ - \
+				    (((uint64_t) (a)) & (XHCI_PADDR_SZ - 1)))
 #define	XHCI_GADDR(sc,a)	paddr_guest2host((sc)->xsc_pi->pi_vmctx, \
-				    (a),                                 \
-				    XHCI_PADDR_SZ - ((a) & (XHCI_PADDR_SZ-1)))
+				    (a), XHCI_GADDR_SIZE(a))
 
 static int xhci_in_use;
 
@@ -2852,406 +2853,290 @@ pci_xhci_map_devs_slots(struct pci_xhci_softc *sc, int maps[])
 
 static int
 pci_xhci_snapshot_ep(struct pci_xhci_softc *sc, struct pci_xhci_dev_emu *dev,
-		     int idx, uint8_t **buffer, size_t *buf_size,
-		     size_t *snapshot_len)
+		     int idx, struct vm_snapshot_meta *meta)
 {
-	int k, ret;
+	int k;
+	int ret;
 	struct usb_data_xfer *xfer;
 	struct usb_data_xfer_block *xfer_block;
-	vm_paddr_t addr;
 
-	xfer = dev->eps[idx].ep_xfer;
+	/* some sanity checks */
+	if (meta->op == VM_SNAPSHOT_SAVE)
+		xfer = dev->eps[idx].ep_xfer;
 
-	SNAPSHOT_PART_OR_RET(xfer, buffer, buf_size, snapshot_len);
-	if (xfer == NULL)
-		return (0);
+	SNAPSHOT_VAR_OR_LEAVE(xfer, meta, ret, done);
+	if (xfer == NULL) {
+		ret = 0;
+		goto done;
+	}
 
+	if (meta->op == VM_SNAPSHOT_RESTORE) {
+		pci_xhci_init_ep(dev, idx);
+		xfer = dev->eps[idx].ep_xfer;
+	}
+
+	/* save / restore proper */
 	for (k = 0; k < USB_MAX_XFER_BLOCKS; k++) {
 		xfer_block = &xfer->data[k];
 
-		addr = paddr_host2guest(dev->xsc->xsc_pi->pi_vmctx, xfer_block->buf);
-		SNAPSHOT_PART_OR_RET(addr, buffer, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(xfer_block->blen, buffer, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(xfer_block->bdone, buffer, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(xfer_block->processed, buffer, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(xfer_block->hci_data, buffer, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(xfer_block->ccs, buffer, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(xfer_block->streamid, buffer, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(xfer_block->trbnext, buffer, buf_size, snapshot_len);
+		SNAPSHOT_GADDR_OR_LEAVE(xfer_block->buf,
+					XHCI_GADDR_SIZE(xfer_block->buf),
+					true, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(xfer_block->blen, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(xfer_block->bdone, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(xfer_block->processed, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(xfer_block->hci_data, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(xfer_block->ccs, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(xfer_block->streamid, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(xfer_block->trbnext, meta, ret, done);
 	}
 
-	SNAPSHOT_PART_OR_RET(xfer->ureq, buffer, buf_size, snapshot_len);
+	SNAPSHOT_VAR_OR_LEAVE(xfer->ureq, meta, ret, done);
 	if (xfer->ureq) {
-		ret = snapshot_part(xfer->ureq,
-				    sizeof(struct usb_device_request),
-				    buffer, buf_size, snapshot_len);
-		if (ret != 0) {
-			fprintf(stderr, "%s: buffer too small\r\n", __func__);
-			return (ret);
+		/* xfer->ureq is not allocated at restore time */
+		if (meta->op == VM_SNAPSHOT_RESTORE)
+			xfer->ureq = malloc(sizeof(struct usb_device_request));
+
+		SNAPSHOT_BUF_OR_LEAVE(xfer->ureq,
+				      sizeof(struct usb_device_request),
+				      meta, ret, done);
+	}
+
+	SNAPSHOT_VAR_OR_LEAVE(xfer->ndata, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(xfer->head, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(xfer->tail, meta, ret, done);
+
+done:
+	return (ret);
+}
+
+static int
+pci_xhci_snapshot_op(struct vm_snapshot_meta *meta)
+{
+	int i, j;
+	int ret;
+	int restore_idx;
+	struct pci_devinst *pi;
+	struct pci_xhci_softc *sc;
+	struct pci_xhci_portregs *port;
+	struct pci_xhci_dev_emu *dev;
+	char dname[SNAP_DEV_NAME_LEN];
+	int maps[XHCI_MAX_SLOTS + 1];
+
+	pi = meta->dev_data;
+	sc = pi->pi_arg;
+
+	SNAPSHOT_VAR_OR_LEAVE(sc->caplength, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->hcsparams1, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->hcsparams2, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->hcsparams3, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->hccparams1, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->dboff, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->rtsoff, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->hccparams2, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->regsend, meta, ret, done);
+
+	/* opregs */
+	SNAPSHOT_VAR_OR_LEAVE(sc->opregs.usbcmd, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->opregs.usbsts, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->opregs.pgsz, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->opregs.dnctrl, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->opregs.crcr, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->opregs.dcbaap, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->opregs.config, meta, ret, done);
+
+	/* opregs.cr_p */
+	SNAPSHOT_GADDR_OR_LEAVE(sc->opregs.cr_p,
+				XHCI_GADDR_SIZE(sc->opregs.cr_p),
+				false, meta, ret, done);
+
+	/* opregs.dcbaa_p */
+	SNAPSHOT_GADDR_OR_LEAVE(sc->opregs.dcbaa_p,
+				XHCI_GADDR_SIZE(sc->opregs.dcbaa_p),
+				false, meta, ret, done);
+
+	/* rtsregs */
+	SNAPSHOT_VAR_OR_LEAVE(sc->rtsregs.mfindex, meta, ret, done);
+
+	/* rtsregs.intrreg */
+	SNAPSHOT_VAR_OR_LEAVE(sc->rtsregs.intrreg.iman, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->rtsregs.intrreg.imod, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->rtsregs.intrreg.erstsz, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->rtsregs.intrreg.rsvd, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->rtsregs.intrreg.erstba, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->rtsregs.intrreg.erdp, meta, ret, done);
+
+	/* rtsregs.erstba_p */
+	SNAPSHOT_GADDR_OR_LEAVE(sc->rtsregs.erstba_p,
+				XHCI_GADDR_SIZE(sc->rtsregs.erstba_p),
+				false, meta, ret, done);
+
+	/* rtsregs.erst_p */
+	SNAPSHOT_GADDR_OR_LEAVE(sc->rtsregs.erst_p,
+				XHCI_GADDR_SIZE(sc->rtsregs.erst_p),
+				false, meta, ret, done);
+
+	SNAPSHOT_VAR_OR_LEAVE(sc->rtsregs.er_deq_seg, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->rtsregs.er_enq_idx, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->rtsregs.er_enq_seg, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->rtsregs.er_events_cnt, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->rtsregs.event_pcs, meta, ret, done);
+
+	/* sanity checking */
+	for (i = 1; i <= XHCI_MAX_DEVS; i++) {
+		dev = XHCI_DEVINST_PTR(sc, i);
+		if (dev == NULL)
+			continue;
+
+		if (meta->op == VM_SNAPSHOT_SAVE)
+			restore_idx = i;
+		SNAPSHOT_VAR_OR_LEAVE(restore_idx, meta, ret, done);
+
+		/* check if the restored device (when restoring) is sane */
+		if (restore_idx != i) {
+			fprintf(stderr, "%s: idx not matching: actual: %d, "
+				"expected: %d\r\n", __func__, restore_idx, i);
+			ret = EINVAL;
+			goto done;
+		}
+
+		if (meta->op == VM_SNAPSHOT_SAVE) {
+			memset(dname, 0, sizeof(dname));
+			strncpy(dname, dev->dev_ue->ue_emu, sizeof(dname) - 1);
+		}
+
+		SNAPSHOT_BUF_OR_LEAVE(dname, sizeof(dname), meta, ret, done);
+
+		if (meta->op == VM_SNAPSHOT_RESTORE) {
+			if (strcmp(dev->dev_ue->ue_emu, dname)) {
+				fprintf(stderr, "%s: device names mismatch: "
+					"actual: %s, expected: %s\r\n",
+					__func__, dname, dev->dev_ue->ue_emu);
+
+				ret = EINVAL;
+				goto done;
+			}
 		}
 	}
 
-	SNAPSHOT_PART_OR_RET(xfer->ndata, buffer, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(xfer->head, buffer, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(xfer->tail, buffer, buf_size, snapshot_len);
+	/* portregs */
+	for (i = 1; i <= XHCI_MAX_DEVS; i++) {
+		port = XHCI_PORTREG_PTR(sc, i);
+		dev = XHCI_DEVINST_PTR(sc, i);
 
-	return (0);
+		if (dev == NULL)
+			continue;
+
+		SNAPSHOT_VAR_OR_LEAVE(port->portsc, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->portpmsc, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->portli, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(port->porthlpmc, meta, ret, done);
+	}
+
+	/* slots */
+	if (meta->op == VM_SNAPSHOT_SAVE)
+		pci_xhci_map_devs_slots(sc, maps);
+
+	for (i = 1; i <= XHCI_MAX_SLOTS; i++) {
+		SNAPSHOT_VAR_OR_LEAVE(maps[i], meta, ret, done);
+
+		if (meta->op == VM_SNAPSHOT_SAVE) {
+			dev = XHCI_SLOTDEV_PTR(sc, i);
+		} else if (meta->op == VM_SNAPSHOT_RESTORE) {
+			if (maps[i] != 0)
+				dev = XHCI_DEVINST_PTR(sc, maps[i]);
+			else
+				dev = NULL;
+
+			XHCI_SLOTDEV_PTR(sc, i) = dev;
+		} else {
+			/* error */
+			ret = EINVAL;
+			goto done;
+		}
+
+		if (dev == NULL)
+			continue;
+
+		SNAPSHOT_GADDR_OR_LEAVE(dev->dev_ctx,
+					XHCI_GADDR_SIZE(dev->dev_ctx),
+					false, meta, ret, done);
+
+		for (j = 1; j < XHCI_MAX_ENDPOINTS; j++) {
+			ret = pci_xhci_snapshot_ep(sc, dev, j, meta);
+			if (ret != 0)
+				goto done;
+		}
+
+		SNAPSHOT_VAR_OR_LEAVE(dev->dev_slotstate, meta, ret, done);
+
+		/* devices[i]->dev_sc */
+		dev->dev_ue->ue_snapshot(dev->dev_sc, meta);
+
+		/* devices[i]->hci */
+		SNAPSHOT_VAR_OR_LEAVE(dev->hci.hci_address, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(dev->hci.hci_port, meta, ret, done);
+	}
+
+	SNAPSHOT_VAR_OR_LEAVE(sc->ndevices, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->usb2_port_start, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->usb3_port_start, meta, ret, done);
+
+done:
+	return (ret);
 }
 
 static int
 pci_xhci_snapshot(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
-		  size_t buf_size, size_t *snapshot_len)
+		  size_t buf_size, size_t *snapshot_size)
 {
-	int i, j;
 	int ret;
-	struct pci_xhci_softc *sc;
-	struct pci_xhci_portregs *port;
-	struct pci_xhci_dev_emu *dev;
-	char dev_name[SNAP_DEV_NAME_LEN];
-	uint8_t *buf;
-	int maps[XHCI_MAX_SLOTS + 1];
-	vm_paddr_t addr;
+	struct vm_snapshot_meta meta = {
+		.ctx = ctx,
+		.dev_data = pi,
 
-	sc = pi->pi_arg;
-	buf = buffer;
+		.buffer = {
+			.buf_start = buffer,
+			.buf_size = buf_size,
+			.buf = buffer,
+			.buf_rem = buf_size,
+		},
 
-	SNAPSHOT_PART_OR_RET(sc->caplength, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->hcsparams1, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->hcsparams2, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->hcsparams3, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->hccparams1, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->dboff, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->rtsoff, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->hccparams2, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->regsend, buf, buf_size, snapshot_len);
+		.op = VM_SNAPSHOT_SAVE,
+	};
 
-	/* opregs */
-	SNAPSHOT_PART_OR_RET(sc->opregs.usbcmd, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->opregs.usbsts, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->opregs.pgsz, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->opregs.dnctrl, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->opregs.crcr, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->opregs.dcbaap, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->opregs.config, buf, buf_size, snapshot_len);
+	ret = pci_xhci_snapshot_op(&meta);
+	if (ret != 0)
+		goto err;
 
-	/* opregs.cr_p */
-	addr = paddr_host2guest(sc->xsc_pi->pi_vmctx, sc->opregs.cr_p);
-	SNAPSHOT_PART_OR_RET(addr, buf, buf_size, snapshot_len);
+	*snapshot_size = vm_get_snapshot_size(&meta);
 
-	/* opregs.dcbaa_p */
-	addr = paddr_host2guest(sc->xsc_pi->pi_vmctx, sc->opregs.dcbaa_p);
-	SNAPSHOT_PART_OR_RET(addr, buf, buf_size, snapshot_len);
-
-	/* rtsregs */
-	SNAPSHOT_PART_OR_RET(sc->rtsregs.mfindex, buf, buf_size, snapshot_len);
-
-	/* rtsregs.intrreg */
-	SNAPSHOT_PART_OR_RET(sc->rtsregs.intrreg.iman, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->rtsregs.intrreg.imod, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->rtsregs.intrreg.erstsz, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->rtsregs.intrreg.rsvd, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->rtsregs.intrreg.erstba, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->rtsregs.intrreg.erdp, buf, buf_size, snapshot_len);
-
-	/* rtsregs.erstba_p */
-	addr = paddr_host2guest(sc->xsc_pi->pi_vmctx, sc->rtsregs.erstba_p);
-	SNAPSHOT_PART_OR_RET(addr, buf, buf_size, snapshot_len);
-
-	/* rtsregs.erst_p */
-	addr = paddr_host2guest(sc->xsc_pi->pi_vmctx, sc->rtsregs.erst_p);
-	SNAPSHOT_PART_OR_RET(addr, buf, buf_size, snapshot_len);
-
-	SNAPSHOT_PART_OR_RET(sc->rtsregs.er_deq_seg, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->rtsregs.er_enq_idx, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->rtsregs.er_enq_seg, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->rtsregs.er_events_cnt, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->rtsregs.event_pcs, buf, buf_size, snapshot_len);
-
-	for (i = 1; i <= XHCI_MAX_DEVS; i++) {
-		dev = XHCI_DEVINST_PTR(sc, i);
-		if (dev == NULL)
-			continue;
-
-		SNAPSHOT_PART_OR_RET(i, buf, buf_size, snapshot_len);
-
-		memset(dev_name, 0, SNAP_DEV_NAME_LEN);
-		strncpy(dev_name, dev->dev_ue->ue_emu, SNAP_DEV_NAME_LEN-1);
-
-		snapshot_part(dev_name, SNAP_DEV_NAME_LEN, &buf, &buf_size,
-			      snapshot_len);
-	}
-
-	/* portregs */
-	for (i = 1; i <= XHCI_MAX_DEVS; i++) {
-		port = XHCI_PORTREG_PTR(sc, i);
-		dev = XHCI_DEVINST_PTR(sc, i);
-
-		if (dev == NULL)
-			continue;
-
-		SNAPSHOT_PART_OR_RET(port->portsc, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->portpmsc, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->portli, buf, buf_size, snapshot_len);
-		SNAPSHOT_PART_OR_RET(port->porthlpmc, buf, buf_size, snapshot_len);
-	}
-
-	/* slots */
-	pci_xhci_map_devs_slots(sc, maps);
-
-	for (i = 1; i <= XHCI_MAX_SLOTS; i++) {
-		SNAPSHOT_PART_OR_RET(maps[i], buf, buf_size, snapshot_len);
-
-		dev = XHCI_SLOTDEV_PTR(sc, i);
-		if (dev == NULL)
-			continue;
-
-		addr = paddr_host2guest(sc->xsc_pi->pi_vmctx, dev->dev_ctx);
-		SNAPSHOT_PART_OR_RET(addr, buf, buf_size, snapshot_len);
-
-		for (j = 1; j < XHCI_MAX_ENDPOINTS; j++) {
-			ret = pci_xhci_snapshot_ep(sc, dev, j, &buf, &buf_size,
-						   snapshot_len);
-			if (ret != 0) {
-				fprintf(stderr, "Snapshot error!\r\n");
-				return (ret);
-			}
-		}
-
-		SNAPSHOT_PART_OR_RET(dev->dev_slotstate, buf, buf_size,
-				     snapshot_len);
-
-		/* devices[i]->dev_sc */
-		dev->dev_ue->ue_snapshot(dev->dev_sc, &buf, &buf_size,
-					 snapshot_len);
-
-		/* devices[i]->hci */
-		SNAPSHOT_PART_OR_RET(dev->hci.hci_address, buf, buf_size,
-				     snapshot_len);
-		SNAPSHOT_PART_OR_RET(dev->hci.hci_port, buf, buf_size,
-				     snapshot_len);
-	}
-
-	SNAPSHOT_PART_OR_RET(sc->ndevices, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->usb2_port_start, buf, buf_size, snapshot_len);
-	SNAPSHOT_PART_OR_RET(sc->usb3_port_start, buf, buf_size, snapshot_len);
-
-	return (0);
-}
-
-static int
-pci_xhci_restore_ep(struct pci_xhci_dev_emu *dev, int idx,
-		    uint8_t **buffer, size_t *buf_size)
-{
-	int k, ret;
-	struct usb_data_xfer *xfer;
-	struct usb_data_xfer_block *xfer_block;
-	vm_paddr_t addr;
-
-	RESTORE_PART_OR_RET(xfer, buffer, buf_size);
-	/* restore the pointer from the old VM to check if the
-	 *  xfer existed (the eps was used)
-	 */
-	if (xfer == NULL)
-		return (0);
-
-	pci_xhci_init_ep(dev, idx);
-
-	xfer = dev->eps[idx].ep_xfer;
-
-	for (k = 0; k < USB_MAX_XFER_BLOCKS; k++) {
-		xfer_block = &xfer->data[k];
-
-		RESTORE_PART_OR_RET(addr, buffer, buf_size);
-		if (addr == (vm_paddr_t)-1)
-			xfer_block->buf = NULL;
-		else
-			xfer_block->buf = XHCI_GADDR(dev->xsc, addr);
-		RESTORE_PART_OR_RET(xfer_block->blen, buffer, buf_size);
-		RESTORE_PART_OR_RET(xfer_block->bdone, buffer, buf_size);
-		RESTORE_PART_OR_RET(xfer_block->processed, buffer, buf_size);
-		RESTORE_PART_OR_RET(xfer_block->hci_data, buffer, buf_size);
-		RESTORE_PART_OR_RET(xfer_block->ccs, buffer, buf_size);
-		RESTORE_PART_OR_RET(xfer_block->streamid, buffer, buf_size);
-		RESTORE_PART_OR_RET(xfer_block->trbnext, buffer, buf_size);
-	}
-
-	RESTORE_PART_OR_RET(xfer->ureq, buffer, buf_size);
-	if (xfer->ureq) {
-		xfer->ureq = malloc(sizeof(struct usb_device_request));
-		if (xfer->ureq == NULL) {
-			fprintf(stderr, "%s: buffer alloc failed\r\n", __func__);
-			return (-1);
-		}
-
-		ret = restore_part(xfer->ureq,
-				   sizeof(struct usb_device_request),
-				   buffer, buf_size);
-		if (ret != 0) {
-			fprintf(stderr, "%s: buffer too small\r\n", __func__);
-			return (ret);
-		}
-	}
-
-	RESTORE_PART_OR_RET(xfer->ndata, buffer, buf_size);
-	RESTORE_PART_OR_RET(xfer->head, buffer, buf_size);
-	RESTORE_PART_OR_RET(xfer->tail, buffer, buf_size);
-
-	return (0);
+err:
+	return (ret);
 }
 
 static int
 pci_xhci_restore(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
-		 size_t buf_size)
+		size_t buf_size)
 {
-	int i, j;
-	int restore_idx;
 	int ret;
-	struct pci_xhci_softc *sc;
-	struct pci_xhci_portregs *port;
-	struct pci_xhci_dev_emu *dev;
-	char dev_name[SNAP_DEV_NAME_LEN];
-	uint8_t *buf;
-	vm_paddr_t addr;
+	struct vm_snapshot_meta meta = {
+		.ctx = ctx,
+		.dev_data = pi,
 
-	sc = pi->pi_arg;
-	buf = buffer;
+		.buffer = {
+			.buf_start = buffer,
+			.buf_size = buf_size,
+			.buf = buffer,
+			.buf_rem = buf_size,
+		},
 
-	RESTORE_PART_OR_RET(sc->caplength, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->hcsparams1, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->hcsparams2, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->hcsparams3, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->hccparams1, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->dboff, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->rtsoff, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->hccparams2, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->regsend, buf, buf_size);
+		.op = VM_SNAPSHOT_RESTORE,
+	};
 
-	/* opregs */
-	RESTORE_PART_OR_RET(sc->opregs.usbcmd, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->opregs.usbsts, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->opregs.pgsz, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->opregs.dnctrl, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->opregs.crcr, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->opregs.dcbaap, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->opregs.config, buf, buf_size);
+	ret = pci_xhci_snapshot_op(&meta);
 
-	/* opregs.cr_p */
-	RESTORE_PART_OR_RET(addr, buf, buf_size);
-	assert(addr != (vm_paddr_t)-1);
-	sc->opregs.cr_p = XHCI_GADDR(sc, addr);
-
-	/* opregs.dcbaa_p */
-	RESTORE_PART_OR_RET(addr, buf, buf_size);
-	assert(addr != (vm_paddr_t)-1);
-	sc->opregs.dcbaa_p = XHCI_GADDR(sc, addr);
-
-	/* rtsregs */
-	RESTORE_PART_OR_RET(sc->rtsregs.mfindex, buf, buf_size);
-
-	/* rtsregs.intrreg */
-	RESTORE_PART_OR_RET(sc->rtsregs.intrreg.iman, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->rtsregs.intrreg.imod, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->rtsregs.intrreg.erstsz, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->rtsregs.intrreg.rsvd, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->rtsregs.intrreg.erstba, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->rtsregs.intrreg.erdp, buf, buf_size);
-
-	/* rtsregs.erstba_p */
-	RESTORE_PART_OR_RET(addr, buf, buf_size);
-	assert(addr != (vm_paddr_t)-1);
-	sc->rtsregs.erstba_p = XHCI_GADDR(sc, addr);
-
-	/* rtsregs.erst_p */
-	RESTORE_PART_OR_RET(addr, buf, buf_size);
-	assert(addr != (vm_paddr_t)-1);
-	sc->rtsregs.erst_p = XHCI_GADDR(sc, addr);
-
-	RESTORE_PART_OR_RET(sc->rtsregs.er_deq_seg, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->rtsregs.er_enq_idx, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->rtsregs.er_enq_seg, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->rtsregs.er_events_cnt, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->rtsregs.event_pcs, buf, buf_size);
-
-	/* Check if devices maintain their indices when creating another VM */
-	for (i = 1; i <= XHCI_MAX_DEVS; i++) {
-		dev = XHCI_DEVINST_PTR(sc, i);
-		if (dev == NULL)
-			continue;
-
-		RESTORE_PART_OR_RET(restore_idx, buf, buf_size);
-		ret = restore_part(dev_name, SNAP_DEV_NAME_LEN, &buf, &buf_size);
-		if (ret != 0) {
-			fprintf(stderr, "%s: buffer too small\r\n", __func__);
-			return (ret);
-		}
-
-		if (i != restore_idx) {
-			fprintf(stderr, "%s: device instances from old machine "
-				"are not matching the current one: %d vs %d\r\n",
-				__func__, i, restore_idx);
-			return (-1);
-		}
-
-		if (strncmp(dev->dev_ue->ue_emu, dev_name,
-			    SNAP_DEV_NAME_LEN - 1)) {
-			dev_name[SNAP_DEV_NAME_LEN - 1] = '\0';
-			fprintf(stderr,
-				"%s: device type mismatch: %s, expected %s\r\n",
-				__func__, dev_name, dev->dev_ue->ue_emu);
-			return (-1);
-		}
-	}
-
-	/* portregs */
-	for (i = 1; i <= XHCI_MAX_DEVS; i++) {
-		port = XHCI_PORTREG_PTR(sc, i);
-		dev = XHCI_DEVINST_PTR(sc, i);
-
-		if (dev == NULL)
-			continue;
-
-		RESTORE_PART_OR_RET(port->portsc, buf, buf_size);
-		RESTORE_PART_OR_RET(port->portpmsc, buf, buf_size);
-		RESTORE_PART_OR_RET(port->portli, buf, buf_size);
-		RESTORE_PART_OR_RET(port->porthlpmc, buf, buf_size);
-	}
-
-	/* slots */
-	for (i = 1; i <= XHCI_MAX_SLOTS; i++) {
-		RESTORE_PART_OR_RET(restore_idx, buf, buf_size);
-		if (restore_idx != 0)
-			dev = XHCI_DEVINST_PTR(sc, restore_idx);
-		else
-			dev = NULL;
-		XHCI_SLOTDEV_PTR(sc, i) = dev;
-
-		if (dev == NULL)
-			continue;
-
-		RESTORE_PART_OR_RET(addr, buf, buf_size);
-		dev->dev_ctx = XHCI_GADDR(sc, addr);
-
-		for (j = 1; j < XHCI_MAX_ENDPOINTS; j++) {
-			ret = pci_xhci_restore_ep(dev, j, &buf, &buf_size);
-			if (ret != 0)
-				return (ret);
-		}
-
-		RESTORE_PART_OR_RET(dev->dev_slotstate, buf, buf_size);
-
-		/* devices[i]->dev_sc */
-		dev->dev_ue->ue_restore(dev->dev_sc, &buf, &buf_size);
-
-		/* devices[i]->hci */
-		RESTORE_PART_OR_RET(dev->hci.hci_address, buf, buf_size);
-		RESTORE_PART_OR_RET(dev->hci.hci_port, buf, buf_size);
-	}
-
-	RESTORE_PART_OR_RET(sc->ndevices, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->usb2_port_start, buf, buf_size);
-	RESTORE_PART_OR_RET(sc->usb3_port_start, buf, buf_size);
-
-	return (0);
+	return (ret);
 }
 
 struct pci_devemu pci_de_xhci = {
