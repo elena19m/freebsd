@@ -118,6 +118,8 @@ int vm_snapshot_buf(volatile void *data, size_t data_size,
 size_t vm_get_snapshot_size(struct vm_snapshot_meta *meta);
 int vm_snapshot_gaddr(void **addr_var, size_t gaddr_len, bool restore_null,
 		      struct vm_snapshot_meta *meta);
+int vm_snapshot_buf_cmp(volatile void *data, size_t data_size,
+			      struct vm_snapshot_meta *meta);
 
 #define	SNAPSHOT_PART(DATA, BUFFER, BUF_SIZE, SNAP_LEN) _Generic((BUFFER),     \
 	uint8_t *: snapshot_part(&(DATA), sizeof(DATA), (uint8_t **) &(BUFFER),\
@@ -181,5 +183,18 @@ do {										\
 		goto LABEL;							\
 	}									\
 } while (0)
+
+/* compare the value in the meta buffer with the data */
+#define	SNAPSHOT_BUF_CMP_OR_LEAVE(DATA, LEN, META, RES, LABEL)			\
+do {										\
+	(RES) = vm_snapshot_buf_cmp((DATA), (LEN), (META));			\
+	if ((RES) != 0) {							\
+		vm_snapshot_buf_err(#DATA, (META)->op);				\
+		goto LABEL;							\
+	}									\
+} while (0)
+
+#define	SNAPSHOT_VAR_CMP_OR_LEAVE(DATA, META, RES, LABEL)			\
+	SNAPSHOT_BUF_CMP_OR_LEAVE(&(DATA), sizeof(DATA), (META), (RES), LABEL)
 
 #endif

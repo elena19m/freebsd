@@ -52,6 +52,7 @@ __FBSDID("$FreeBSD$");
 
 #include "bhyverun.h"
 #include "pci_emul.h"
+#include "snapshot.h"
 #include "virtio.h"
 #include "block_if.h"
 
@@ -146,8 +147,7 @@ struct pci_vtblk_softc {
 static void pci_vtblk_reset(void *);
 static void pci_vtblk_pause(void *);
 static void pci_vtblk_resume(void *);
-static int pci_vtblk_snapshot(void *, void *, size_t, size_t *);
-static int pci_vtblk_restore(void *, void *, size_t);
+static int pci_vtblk_snapshot(void *, struct vm_snapshot_meta *);
 static void pci_vtblk_notify(void *, struct vqueue_info *);
 static int pci_vtblk_cfgread(void *, int, int, uint32_t *);
 static int pci_vtblk_cfgwrite(void *, int, int, uint32_t);
@@ -164,8 +164,7 @@ static struct virtio_consts vtblk_vi_consts = {
 	VTBLK_S_HOSTCAPS,	/* our capabilities */
 	pci_vtblk_pause,	/* pause blockif threads */
 	pci_vtblk_resume,	/* resume blockif threads */
-	pci_vtblk_snapshot,	/* save device state */
-	pci_vtblk_restore,	/* restore device state */
+	pci_vtblk_snapshot,	/* save / restore device state */
 };
 
 static void
@@ -196,47 +195,16 @@ pci_vtblk_resume(void *vsc)
 }
 
 static int
-pci_vtblk_snapshot(void *vsc, void *buffer, size_t buf_size, size_t *snap_size)
+pci_vtblk_snapshot(void *vsc, struct vm_snapshot_meta *meta)
 {
+	int ret;
 	struct pci_vtblk_softc *sc = vsc;
-	size_t snap_len = sizeof(sc->vbsc_cfg)
-			+ sizeof(sc->vbsc_ident);
 
-	DPRINTF(("vtblk: device snapshot requested !\n"));
-	*snap_size = 0;
+	SNAPSHOT_VAR_OR_LEAVE(sc->vbsc_cfg, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->vbsc_ident, meta, ret, done);
 
-	if (snap_len > buf_size) {
-		fprintf(stderr, "%s: buffer too small\n", __func__);
-		return (-1);
-	}
-	memcpy(buffer, &sc->vbsc_cfg, sizeof(sc->vbsc_cfg));
-	buffer += sizeof(sc->vbsc_cfg);
-	memcpy(buffer, &sc->vbsc_ident, sizeof(sc->vbsc_ident));
-	buffer += sizeof(sc->vbsc_ident);
-
-	*snap_size = snap_len;
-	return (0);
-}
-
-static int
-pci_vtblk_restore(void *vsc, void *buffer, size_t buf_size)
-{
-	struct pci_vtblk_softc *sc = vsc;
-	size_t snap_len = sizeof(sc->vbsc_cfg)
-			+ sizeof(sc->vbsc_ident);
-
-	DPRINTF(("vtblk: device restore requested !\n"));
-
-	if (snap_len > buf_size) {
-		fprintf(stderr, "%s: buffer too small\n", __func__);
-		return (-1);
-	}
-
-	memcpy(&sc->vbsc_cfg, buffer, sizeof(sc->vbsc_cfg));
-	buffer += sizeof(sc->vbsc_cfg);
-	memcpy(&sc->vbsc_ident, buffer, sizeof(sc->vbsc_ident));
-	buffer += sizeof(sc->vbsc_ident);
-	return (snap_len);
+done:
+	return (ret);
 }
 
 static void

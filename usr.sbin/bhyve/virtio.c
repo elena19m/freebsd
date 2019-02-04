@@ -39,6 +39,7 @@ __FBSDID("$FreeBSD$");
 
 #include "bhyverun.h"
 #include "pci_emul.h"
+#include "snapshot.h"
 #include "virtio.h"
 
 /*
@@ -810,238 +811,164 @@ vi_pci_resume(struct pci_devinst *pi)
 	return (0);
 }
 
+static int
+vi_pci_snapshot_softc(struct virtio_softc *vs, struct vm_snapshot_meta *meta)
+{
+	int ret;
+
+	SNAPSHOT_VAR_OR_LEAVE(vs->vs_flags, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(vs->vs_negotiated_caps, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(vs->vs_curq, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(vs->vs_status, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(vs->vs_isr, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(vs->vs_msix_cfg_idx, meta, ret, done);
+
+done:
+	return (ret);
+}
+
+static int
+vi_pci_snapshot_consts(struct virtio_consts *vc, struct vm_snapshot_meta *meta)
+{
+	int ret;
+
+	SNAPSHOT_VAR_CMP_OR_LEAVE(vc->vc_nvq, meta, ret, done);
+	SNAPSHOT_VAR_CMP_OR_LEAVE(vc->vc_cfgsize, meta, ret, done);
+	SNAPSHOT_VAR_CMP_OR_LEAVE(vc->vc_hv_caps, meta, ret, done);
+
+done:
+	return (ret);
+}
+
+static int
+vi_pci_snapshot_queues(struct virtio_softc *vs, struct vm_snapshot_meta *meta)
+{
+	int i;
+	int ret;
+	struct virtio_consts *vc;
+	struct vqueue_info *vq;
+	uint64_t addr_size;
+
+	vc = vs->vs_vc;
+
+	/* Save virtio queue info */
+	for (i = 0; i < vc->vc_nvq; i++) {
+		vq = &vs->vs_queues[i];
+
+		SNAPSHOT_VAR_CMP_OR_LEAVE(vq->vq_qsize, meta, ret, done);
+		SNAPSHOT_VAR_CMP_OR_LEAVE(vq->vq_num, meta, ret, done);
+
+		SNAPSHOT_VAR_OR_LEAVE(vq->vq_flags, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(vq->vq_last_avail, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(vq->vq_save_used, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(vq->vq_msix_idx, meta, ret, done);
+
+		SNAPSHOT_VAR_OR_LEAVE(vq->vq_pfn, meta, ret, done);
+
+		addr_size = vq->vq_qsize * sizeof(struct virtio_desc);
+		SNAPSHOT_GADDR_OR_LEAVE(vq->vq_desc, addr_size,
+				false, meta, ret, done);
+
+		addr_size = (2 + vq->vq_qsize + 1) * sizeof(uint16_t);
+		SNAPSHOT_GADDR_OR_LEAVE(vq->vq_avail, addr_size,
+				false, meta, ret, done);
+
+		addr_size  = (2 + 2 * vq->vq_qsize + 1) * sizeof(uint16_t);
+		SNAPSHOT_GADDR_OR_LEAVE(vq->vq_used, addr_size,
+				false, meta, ret, done);
+	}
+
+done:
+	return (ret);
+}
+
+static int
+vi_pci_snapshot_op(struct vm_snapshot_meta *meta)
+{
+	int ret;
+	struct pci_devinst *pi;
+	struct virtio_softc *vs;
+	struct virtio_consts *vc;
+
+	pi = meta->dev_data;
+	vs = pi->pi_arg;
+	vc = vs->vs_vc;
+
+	/* Save virtio softc */
+	ret = vi_pci_snapshot_softc(vs, meta);
+	if (ret != 0)
+		goto done;
+
+	/* Save virtio consts */
+	ret = vi_pci_snapshot_consts(vc, meta);
+	if (ret != 0)
+		goto done;
+
+	/* Save virtio queue info */
+	ret = vi_pci_snapshot_queues(vs, meta);
+	if (ret != 0)
+		goto done;
+
+	/* Save device softc, if needed */
+	if (vc->vc_snapshot != NULL) {
+		ret = (*vc->vc_snapshot)(DEV_SOFTC(vs), meta);
+		if (ret != 0)
+			goto done;
+	}
+
+done:
+	return (ret);
+}
+
 int
 vi_pci_snapshot(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
 		size_t buf_size, size_t *snapshot_size)
 {
-	struct virtio_softc *vs = pi->pi_arg;
-	struct virtio_consts *vc;
-	int i, qsize, err = 0;
-	size_t snap_size = 0;
-	uint64_t phys;
-	void *qmem;
+	int ret;
+	struct vm_snapshot_meta meta = {
+		.ctx = ctx,
+		.dev_data = pi,
 
-	*snapshot_size = 0;
+		.buffer = {
+			.buf_start = buffer,
+			.buf_size = buf_size,
+			.buf = buffer,
+			.buf_rem = buf_size,
+		},
 
-	vc = vs->vs_vc;
-	assert(vc->vc_pause != NULL);
+		.op = VM_SNAPSHOT_SAVE,
+	};
 
-	/* Save virtio softc */
-	if (sizeof(*vs) > buf_size - snap_size) {
-		fprintf(stderr, "%s: buffer too small\n", __func__);
-		err = -1;
-		goto done;
-	}
-	memcpy(buffer + snap_size, vs, sizeof(*vs));
-	snap_size += sizeof(*vs);
+	ret = vi_pci_snapshot_op(&meta);
+	if (ret != 0)
+		goto err;
 
-	/* Save virtio consts */
-	if (sizeof(*vc) > buf_size - snap_size) {
-		fprintf(stderr, "%s: buffer too small\n", __func__);
-		err = -1;
-		goto done;
-	}
-	memcpy(buffer + snap_size, vc, sizeof(*vc));
-	snap_size += sizeof(*vc);
+	*snapshot_size = vm_get_snapshot_size(&meta);
 
-	/* Save virtio queue info */
-	for (i = 0; i < vc->vc_nvq; i++) {
-		if (sizeof(vs->vs_queues[i]) > buf_size - snap_size) {
-			fprintf(stderr, "%s: buffer too small\n", __func__);
-			err = -1;
-			goto done;
-		}
-		memcpy(buffer + snap_size, &vs->vs_queues[i],
-		       sizeof(vs->vs_queues[i]));
-		snap_size += sizeof(vs->vs_queues[i]);
-
-		/* Save actual queue data */
-		phys = (uint64_t)vs->vs_queues[i].vq_pfn << VRING_PFN;
-		qsize = vring_size(vs->vs_queues[i].vq_qsize);
-		qmem = paddr_guest2host(vs->vs_pi->pi_vmctx, phys, qsize);
-
-		if (qsize > buf_size - snap_size) {
-			fprintf(stderr, "%s: buffer too small\n", __func__);
-			err = -1;
-			goto done;
-		}
-		memcpy(buffer + snap_size, qmem, qsize);
-		snap_size += qsize;
-	}
-
-	*snapshot_size = snap_size;
-
-	/* Save device softc, if needed */
-	if (vc->vc_snapshot != NULL) {
-		snap_size = 0;
-		err = (*vc->vc_snapshot)(DEV_SOFTC(vs),
-					 buffer + *snapshot_size,
-					 buf_size - *snapshot_size,
-					 &snap_size);
-		if (err) {
-			fprintf(stderr, "%s: failed to save dev softc: %s\n",
-				__func__, vc->vc_name);
-			goto done;
-		}
-		assert(snap_size < buf_size - *snapshot_size);
-		*snapshot_size += snap_size;
-	}
-
-done:
-	return (err);
-}
-
-static int
-vi_pci_restore_softc(struct virtio_softc *new_vs, void *buffer, size_t buf_size)
-{
-	struct virtio_softc *old_vs;
-
-	if (sizeof(*new_vs) > buf_size) {
-		fprintf(stderr, "%s: buffer too small\n", __func__);
-		return (-1);
-	}
-
-	old_vs = (struct virtio_softc *)buffer;
-
-	new_vs->vs_flags = old_vs->vs_flags;
-	new_vs->vs_negotiated_caps = old_vs->vs_negotiated_caps;
-	new_vs->vs_curq = old_vs->vs_curq;
-	new_vs->vs_status = old_vs->vs_status;
-	new_vs->vs_isr = old_vs->vs_isr;
-	new_vs->vs_msix_cfg_idx = old_vs->vs_msix_cfg_idx;
-
-	return (sizeof(*new_vs));
-}
-
-static int
-vi_pci_restore_consts(struct virtio_consts *new_vc, void *buffer, size_t buf_size)
-{
-	struct virtio_consts *old_vc;
-
-	if (sizeof(*new_vc) > buf_size) {
-		fprintf(stderr, "%s: buffer too small\n", __func__);
-		return (-1);
-	}
-
-	old_vc = (struct virtio_consts *)buffer;
-
-	assert(new_vc->vc_nvq == old_vc->vc_nvq);
-	assert(new_vc->vc_cfgsize == old_vc->vc_cfgsize);
-	assert(new_vc->vc_hv_caps == old_vc->vc_hv_caps);
-
-	return (sizeof(*new_vc));
-}
-
-static int
-vi_pci_restore_queues(struct virtio_softc *vs, void *buffer, size_t buf_size)
-{
-	struct virtio_consts *vc;
-	struct vqueue_info *new_vqi, *old_vqi;
-	size_t offset = 0;
-	int i, qsize;
-	uint64_t phys;
-	void *qmem;
-
-	vc = vs->vs_vc;
-
-	/* Save virtio queue info */
-	for (i = 0; i < vc->vc_nvq; i++) {
-		if (sizeof(vs->vs_queues[i]) > buf_size - offset) {
-			fprintf(stderr, "%s: buffer too small\n", __func__);
-			return (-1);
-		}
-
-		new_vqi = &vs->vs_queues[i];
-		old_vqi = (struct vqueue_info *)(buffer + offset);
-		assert(new_vqi->vq_qsize == old_vqi->vq_qsize);
-		assert(new_vqi->vq_num == old_vqi->vq_num);
-
-		new_vqi->vq_flags = old_vqi->vq_flags;
-		new_vqi->vq_last_avail = old_vqi->vq_last_avail;
-		new_vqi->vq_save_used = old_vqi->vq_save_used;
-		new_vqi->vq_msix_idx = old_vqi->vq_msix_idx;
-
-		new_vqi->vq_pfn = old_vqi->vq_pfn;
-		phys = (uint64_t)new_vqi->vq_pfn << VRING_PFN;
-		qsize = vring_size(new_vqi->vq_qsize);
-		qmem = paddr_guest2host(vs->vs_pi->pi_vmctx, phys, qsize);
-
-		new_vqi->vq_desc = (struct virtio_desc *)qmem;
-		qmem += new_vqi->vq_qsize * sizeof(struct virtio_desc);
-
-		new_vqi->vq_avail = (struct vring_avail *)qmem;
-		qmem += (2 + new_vqi->vq_qsize + 1) * sizeof(uint16_t);
-
-		qmem = (char *)roundup2((uintptr_t)qmem, VRING_ALIGN);
-
-		new_vqi->vq_used = (struct vring_used *)qmem;
-
-		offset += sizeof(*new_vqi);
-
-		/* Restore actual queue data */
-		qmem = paddr_guest2host(vs->vs_pi->pi_vmctx, phys, qsize);
-		if (qsize > buf_size - offset) {
-			fprintf(stderr, "%s: buffer too small\n", __func__);
-			return (-1);
-		}
-		memcpy(qmem, buffer + offset, qsize);
-		offset += qsize;
-	}
-
-	return (offset);
+err:
+	return (ret);
 }
 
 int
 vi_pci_restore(struct vmctx *ctx, struct pci_devinst *pi, void *buffer,
-	       size_t buf_size)
+		size_t buf_size)
 {
-	struct virtio_softc *vs = pi->pi_arg;
-	struct virtio_consts *vc;
-	size_t offset = 0;
-	int ret, err = 0;
+	int ret;
+	struct vm_snapshot_meta meta = {
+		.ctx = ctx,
+		.dev_data = pi,
 
-	vc = vs->vs_vc;
+		.buffer = {
+			.buf_start = buffer,
+			.buf_size = buf_size,
+			.buf = buffer,
+			.buf_rem = buf_size,
+		},
 
-	ret = vi_pci_restore_softc(vs, buffer, buf_size);
-	if (ret < 0) {
-		err = -1;
-		goto done;
-	}
-	offset += ret;
+		.op = VM_SNAPSHOT_RESTORE,
+	};
 
-	ret = vi_pci_restore_consts(vc, buffer + offset, buf_size - offset);
-	if (ret < 0) {
-		err = -1;
-		goto done;
-	}
-	offset += ret;
+	ret = vi_pci_snapshot_op(&meta);
 
-	ret = vi_pci_restore_queues(vs, buffer + offset, buf_size - offset);
-	if (ret < 0) {
-		err = -1;
-		goto done;
-	}
-	offset += ret;
-
-	/* Restore device softc, if needed */
-	if (vc->vc_restore != NULL) {
-		ret = (*vc->vc_restore)(DEV_SOFTC(vs), buffer + offset, buf_size - offset);
-		if (ret < 0) {
-			fprintf(stderr, "%s: failed to restore dev softc: %s\n",
-				__func__, vc->vc_name);
-			err = -1;
-			goto done;
-		}
-		offset += ret;
-	}
-
-	if (offset != buf_size) {
-		fprintf(stderr, "%s: [WARN] restore buffer not used entirely",
-			__func__);
-		err = -1;
-		goto done;
-	}
-
-done:
-	return (err);
+	return (ret);
 }

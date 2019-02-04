@@ -64,6 +64,7 @@ __FBSDID("$FreeBSD$");
 #include "bhyverun.h"
 #include "pci_emul.h"
 #include "mevent.h"
+#include "snapshot.h"
 #include "virtio.h"
 
 #define VTNET_RINGSZ	1024
@@ -171,8 +172,7 @@ struct pci_vtnet_softc {
 static void pci_vtnet_reset(void *);
 static void pci_vtnet_pause(void *);
 static void pci_vtnet_resume(void *);
-static int pci_vtnet_snapshot(void *, void *, size_t, size_t *);
-static int pci_vtnet_restore(void *, void *, size_t);
+static int pci_vtnet_snapshot(void *, struct vm_snapshot_meta *);
 /* static void pci_vtnet_notify(void *, struct vqueue_info *); */
 static int pci_vtnet_cfgread(void *, int, int, uint32_t *);
 static int pci_vtnet_cfgwrite(void *, int, int, uint32_t);
@@ -190,8 +190,7 @@ static struct virtio_consts vtnet_vi_consts = {
 	VTNET_S_HOSTCAPS,	/* our capabilities */
 	pci_vtnet_pause,	/* pause rx/tx threads */
 	pci_vtnet_resume,	/* resume rx/tx threads */
-	pci_vtnet_snapshot,	/* save device state */
-	pci_vtnet_restore,	/* restore device state */
+	pci_vtnet_snapshot,	/* save / restore device state */
 };
 
 /*
@@ -288,41 +287,26 @@ pci_vtnet_resume(void *vsc)
 }
 
 static int
-pci_vtnet_snapshot(void *vsc, void *buffer, size_t buf_size, size_t *snap_size)
+pci_vtnet_snapshot(void *vsc, struct vm_snapshot_meta *meta)
 {
+	int ret;
 	struct pci_vtnet_softc *sc = vsc;
-	size_t snap_len = sizeof(sc->vsc_features)
-			+ sizeof(sc->vsc_config)
-			+ sizeof(sc->rx_vhdrlen)
-			+ sizeof(sc->rx_merge)
-			+ sizeof(sc->vsc_rx_ready);
 
 	DPRINTF(("vtnet: device snapshot requested !\n"));
-	*snap_size = 0;
 
 	/* Queues and consts should have been saved by the more generic
 	 * vi_pci_snapshot function. We need to save only our features and
 	 * config.
 	 */
 
-	if (snap_len > buf_size) {
-		fprintf(stderr, "%s: buffer too small\n", __func__);
-		return (-1);
-	}
-	memcpy(buffer, &sc->vsc_features, sizeof(sc->vsc_features));
-	buffer += sizeof(sc->vsc_features);
-	memcpy(buffer, &sc->vsc_config, sizeof(sc->vsc_config));
-	buffer += sizeof(sc->vsc_config);
-	memcpy(buffer, &sc->rx_vhdrlen, sizeof(sc->rx_vhdrlen));
-	buffer += sizeof(sc->rx_vhdrlen);
-	memcpy(buffer, &sc->rx_merge, sizeof(sc->rx_merge));
-	buffer += sizeof(sc->rx_merge);
-	memcpy(buffer, &sc->vsc_rx_ready, sizeof(sc->vsc_rx_ready));
-	buffer += sizeof(sc->vsc_rx_ready);
+	SNAPSHOT_VAR_OR_LEAVE(sc->vsc_features, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->vsc_config, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->rx_vhdrlen, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->rx_merge, meta, ret, done);
+	SNAPSHOT_VAR_OR_LEAVE(sc->vsc_rx_ready, meta, ret, done);
 
-	*snap_size = snap_len;
-
-	return (0);
+done:
+	return (ret);
 }
 
 static int

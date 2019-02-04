@@ -1334,3 +1334,37 @@ vm_snapshot_gaddr(void **addr_var, size_t gaddr_len, bool restore_null,
 done:
 	return (ret);
 }
+
+int
+vm_snapshot_buf_cmp(volatile void *data, size_t data_size,
+		    struct vm_snapshot_meta *meta)
+{
+	struct vm_snapshot_buffer *buffer;
+	int op;
+	int ret;
+
+	buffer = &meta->buffer;
+	op = meta->op;
+
+	if (buffer->buf_rem < data_size) {
+		fprintf(stderr, "%s: buffer too small\r\n", __func__);
+		ret = E2BIG;
+		goto done;
+	}
+
+	if (op == VM_SNAPSHOT_SAVE) {
+		ret = 0;
+		memcpy(buffer->buf, (uint8_t *) data, data_size);
+	} else if (op == VM_SNAPSHOT_RESTORE) {
+		ret = memcmp((uint8_t *) data, buffer->buf, data_size);
+	} else {
+		ret = EINVAL;
+		goto done;
+	}
+
+	buffer->buf += data_size;
+	buffer->buf_rem -= data_size;
+
+done:
+	return (ret);
+}
