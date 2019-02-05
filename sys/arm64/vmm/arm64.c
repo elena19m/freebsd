@@ -54,6 +54,7 @@
 #include "mmu.h"
 #include "arm64.h"
 #include "hyp.h"
+#include "reset.h"
 #include "io/vgic_v3.h"
 #include "io/vtimer.h"
 
@@ -289,54 +290,8 @@ arm_vminit(struct vm *vm)
 		hypctx->vcpu = i;
 		hypctx->hyp = hyp;
 
-		/*
-		 * Set the Hypervisor Configuration Register:
-		 *
-		 * HCR_RW: use AArch64 for EL1
-		 * HCR_BSU_IS: barrier instructions apply to the inner shareable
-		 * domain
-		 * HCR_SWIO: turn set/way invalidate into set/way clean and
-		 * invalidate
-		 * HCR_FB: broadcast maintenance operations
-		 * HCR_AMO: route physical SError interrupts to EL2
-		 * HCR_IMO: route physical IRQ interrupts to EL2
-		 * HCR_FMO: route physical FIQ interrupts to EL2
-		 * HCR_VM: use stage 2 translation
-		 */
-		hypctx->hcr_el2 = HCR_RW | HCR_BSU_IS | HCR_SWIO | HCR_FB | \
-		    HCR_VM | HCR_AMO | HCR_IMO | HCR_FMO;
-
-		/* The guest will detect a single-core, single-threaded CPU */
-		hypctx->vmpidr_el2 = get_mpidr();
-		hypctx->vmpidr_el2 |= VMPIDR_EL2_U;
-		hypctx->vmpidr_el2 &= ~VMPIDR_EL2_MT;
-
-		/* Use the same CPU identification information as the host */
-		hypctx->vpidr_el2 = READ_SPECIALREG(midr_el1);
-
-		/*
-		 * Don't trap accesses to CPACR_EL1, trace, SVE, Advanced SIMD
-		 * and floating point functionality to EL2.
-		 */
-		hypctx->cptr_el2 = CPTR_RES1;
-
-		/*
-		 * Disable interrupts in the guest. The guest OS will re-enable
-		 * them.
-		 */
-		hypctx->spsr_el2 = PSR_D | PSR_A | PSR_I | PSR_F;
-		/* Use the EL1 stack when taking exceptions to EL1 */
-	       	hypctx->spsr_el2 |= PSR_M_EL1h;
-
-		/* The guest starts with the MMU disabled */
-		hypctx->sctlr_el1 = SCTLR_RES1;
-		hypctx->sctlr_el1 &= ~SCTLR_M;
-
-		/* Use the same memory attributes as the host */
-		hypctx->mair_el1 = READ_SPECIALREG(mair_el1);
-
-		/* Don't trap accesses to SVE, Advanced SIMD and FP to EL1 */
-		hypctx->cpacr_el1 = CPACR_FPEN_TRAP_NONE;
+		reset_vm_el1_sysregs(hypctx);
+		reset_vm_el2_sysregs(hypctx);
 
 		vtimer_cpuinit(hypctx);
 		last_vcpu = (i == VM_MAXCPU - 1);
