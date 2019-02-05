@@ -3008,6 +3008,7 @@ pci_xhci_snapshot_op(struct vm_snapshot_meta *meta)
 		SNAPSHOT_BUF_OR_LEAVE(dname, sizeof(dname), meta, ret, done);
 
 		if (meta->op == VM_SNAPSHOT_RESTORE) {
+			dname[sizeof(dname) - 1] = '\0';
 			if (strcmp(dev->dev_ue->ue_emu, dname)) {
 				fprintf(stderr, "%s: device names mismatch: "
 					"actual: %s, expected: %s\r\n",
