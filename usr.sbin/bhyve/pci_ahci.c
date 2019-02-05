@@ -2612,7 +2612,7 @@ pci_ahci_snapshot_op(struct vm_snapshot_meta *meta)
 			AHCI_CL_SIZE * AHCI_MAX_SLOTS, false, meta, ret, done);
 
 		SNAPSHOT_GADDR_OR_LEAVE(port->rfis,
-					256, false ,meta, ret, done);
+					256, false, meta, ret, done);
 
 		SNAPSHOT_VAR_OR_LEAVE(port->ident, meta, ret, done);
 		SNAPSHOT_VAR_OR_LEAVE(port->atapi, meta, ret, done);
