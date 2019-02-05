@@ -13,6 +13,7 @@ SRCS+=	vmm.c		\
 	vmm_stat.c	\
 	arm64.c		\
 	psci.c		\
+	reset.c		\
 	hyp.S
 
 .PATH: ${.CURDIR}/../../arm64/vmm/io
