@@ -40,13 +40,18 @@ struct hypctx {
 
 	/* EL1 control registers */
 	uint64_t	actlr_el1;	/* Auxiliary Control Register */
+	uint64_t	afsr0_el1;	/* Auxiliary Fault Status Register 0 */
+	uint64_t	afsr1_el1;	/* Auxiliary Fault Status Register 1 */
 	uint64_t	amair_el1;	/* Auxiliary Memory Attribute Indirection Register */
 	uint64_t	contextidr_el1;	/* Current Process Identifier */
+	uint64_t	cpacr_el1;	/* Arhitectural Feature Access Control Register */
 	uint64_t	elr_el1;	/* Exception Link Register */
+	uint64_t	esr_el1;	/* Exception Syndrome Register */
 	uint64_t	far_el1;	/* Fault Address Register */
 	uint64_t	fp;		/* Frame Pointer */
 	uint64_t	mair_el1;	/* Memory Attribute Indirection Register */
 	uint64_t	par_el1;	/* Physical Address Register */
+	uint64_t	sctlr_el1;	/* System Control Register */
 	uint64_t	sp_el0;		/* Stack Pointer */
 	uint64_t	tcr_el1;	/* Translation Control Register */
 	uint64_t	tpidr_el0;	/* EL0 Software ID Register */
@@ -55,25 +60,20 @@ struct hypctx {
 	uint64_t	ttbr0_el1;	/* Translation Table Base Register 0 */
 	uint64_t	ttbr1_el1;	/* Translation Table Base Register 1 */
 	uint64_t	vbar_el1;	/* Vector Base Address Register */
-	uint32_t	afsr0_el1;	/* Auxiliary Fault Status Register 0 */
-	uint32_t	afsr1_el1;	/* Auxiliary Fault Status Register 1 */
-	uint32_t	cpacr_el1;	/* Arhitectural Feature Access Control Register */
-	uint32_t	esr_el1;	/* Exception Syndrome Register */
-	uint32_t	sctlr_el1;	/* System Control Register */
 	uint32_t	spsr_el1;	/* Saved Program Status Register */
 
 	/* EL2 control registers */
+	uint64_t	cptr_el2;	/* Architectural Feature Trap Register */
 	uint64_t	elr_el2;	/* Exception Link Register */
 	uint64_t	hcr_el2;	/* Hypervisor Configuration Register */
 	uint64_t	vpidr_el2;	/* Virtualization Processor ID Register */
 	uint64_t	vmpidr_el2;	/* Virtualization Multiprocessor ID Register */
-	uint32_t	cptr_el2;	/* Architectural Feature Trap Register */
 	uint32_t	spsr_el2;	/* Saved Program Status Register */
 
 	uint32_t	vcpu;
 	struct hyp	*hyp;
 	struct {
-		uint32_t	esr_el2;	/* Exception Syndrome Register */
+		uint64_t	esr_el2;	/* Exception Syndrome Register */
 		uint64_t	far_el2;	/* Fault Address Register */
 		uint64_t	hpfar_el2;	/* Hypervisor IPA Fault Address Register */
 	} exit_info;
