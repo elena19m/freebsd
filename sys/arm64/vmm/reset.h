@@ -26,7 +26,7 @@
 #ifndef _VMM_RESET_H_
 #define _VMM_RESET_H_
 
-void	reset_vm_el1_sysregs(void *vcpu);
-void	reset_vm_el2_sysregs(void *vcpu);
+void	reset_vm_el01_regs(void *vcpu);
+void	reset_vm_el2_regs(void *vcpu);
 
 #endif

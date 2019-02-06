@@ -290,8 +290,8 @@ arm_vminit(struct vm *vm)
 		hypctx->vcpu = i;
 		hypctx->hyp = hyp;
 
-		reset_vm_el1_sysregs(hypctx);
-		reset_vm_el2_sysregs(hypctx);
+		reset_vm_el01_regs(hypctx);
+		reset_vm_el2_regs(hypctx);
 
 		vtimer_cpuinit(hypctx);
 		last_vcpu = (i == VM_MAXCPU - 1);

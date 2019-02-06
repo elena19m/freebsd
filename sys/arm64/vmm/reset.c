@@ -33,23 +33,45 @@
 #include "arm64.h"
 #include "reset.h"
 
+/* Make the architecturally UNKNOWN value 0. */
+#define reset_to_unknown_value(reg)	(memset(&(reg), 0, sizeof(reg)))
+
 void
-reset_vm_el1_sysregs(void *vcpu)
+reset_vm_el01_regs(void *vcpu)
 {
 	struct hypctx *el2ctx;
 
 	el2ctx = vcpu;
 
-	el2ctx->sctlr_el1 = SCTLR_RES1;
-	el2ctx->sctlr_el1 &= ~SCTLR_M;
-	/* Use the same memory attributes as the host */
-	el2ctx->mair_el1 = READ_SPECIALREG(mair_el1);
-	/* Don't trap accesses to SVE, Advanced SIMD and FP to EL1 */
-	el2ctx->cpacr_el1 = CPACR_FPEN_TRAP_NONE;
+	reset_to_unknown_value(el2ctx->regs);
+
+	reset_to_unknown_value(el2ctx->actlr_el1);
+	reset_to_unknown_value(el2ctx->afsr0_el1);
+	reset_to_unknown_value(el2ctx->afsr1_el1);
+	reset_to_unknown_value(el2ctx->amair_el1);
+	reset_to_unknown_value(el2ctx->contextidr_el1);
+	reset_to_unknown_value(el2ctx->cpacr_el1);
+	reset_to_unknown_value(el2ctx->elr_el1);
+	reset_to_unknown_value(el2ctx->esr_el1);
+	reset_to_unknown_value(el2ctx->far_el1);
+	reset_to_unknown_value(el2ctx->mair_el1);
+	reset_to_unknown_value(el2ctx->par_el1);
+	/* Guest starts with MMU disabled */
+	/* TODO Check all fields */
+	el2ctx->sctlr_el1 = SCTLR_RES1 & ~SCTLR_M;
+	reset_to_unknown_value(el2ctx->sp_el0);
+	reset_to_unknown_value(el2ctx->tcr_el1);
+	reset_to_unknown_value(el2ctx->tpidr_el0);
+	reset_to_unknown_value(el2ctx->tpidr_el1);
+	reset_to_unknown_value(el2ctx->tpidrro_el0);
+	reset_to_unknown_value(el2ctx->ttbr0_el1);
+	reset_to_unknown_value(el2ctx->ttbr1_el1);
+	reset_to_unknown_value(el2ctx->vbar_el1);
+	reset_to_unknown_value(el2ctx->spsr_el1);
 }
 
 void
-reset_vm_el2_sysregs(void *vcpu)
+reset_vm_el2_regs(void *vcpu)
 {
 	struct hypctx *el2ctx;
 
