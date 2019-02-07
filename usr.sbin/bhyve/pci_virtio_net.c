@@ -309,37 +309,6 @@ done:
 	return (ret);
 }
 
-static int
-pci_vtnet_restore(void *vsc, void *buffer, size_t buf_size)
-{
-	struct pci_vtnet_softc *sc = vsc;
-	size_t snap_len = sizeof(sc->vsc_features)
-			+ sizeof(sc->vsc_config)
-			+ sizeof(sc->rx_vhdrlen)
-			+ sizeof(sc->rx_merge)
-			+ sizeof(sc->vsc_rx_ready);
-
-	DPRINTF(("vtnet: device restore requested !\n"));
-
-	if (snap_len > buf_size) {
-		fprintf(stderr, "%s: buffer too small\n", __func__);
-		return (-1);
-	}
-
-	memcpy(&sc->vsc_features, buffer, sizeof(sc->vsc_features));
-	buffer += sizeof(sc->vsc_features);
-	memcpy(&sc->vsc_config, buffer, sizeof(sc->vsc_config));
-	buffer += sizeof(sc->vsc_config);
-	memcpy(&sc->rx_vhdrlen, buffer, sizeof(sc->rx_vhdrlen));
-	buffer += sizeof(sc->rx_vhdrlen);
-	memcpy(&sc->rx_merge, buffer, sizeof(sc->rx_merge));
-	buffer += sizeof(sc->rx_merge);
-	memcpy(&sc->vsc_rx_ready, buffer, sizeof(sc->vsc_rx_ready));
-	buffer += sizeof(sc->vsc_rx_ready);
-
-	return (snap_len);
-}
-
 /*
  * Called to send a buffer chain out to the tap device
  */
