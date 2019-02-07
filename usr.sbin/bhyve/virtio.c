@@ -876,6 +876,9 @@ vi_pci_snapshot_queues(struct virtio_softc *vs, struct vm_snapshot_meta *meta)
 		addr_size  = (2 + 2 * vq->vq_qsize + 1) * sizeof(uint16_t);
 		SNAPSHOT_GADDR_OR_LEAVE(vq->vq_used, addr_size,
 				false, meta, ret, done);
+
+		SNAPSHOT_BUF_OR_LEAVE(vq->vq_desc, vring_size(vq->vq_qsize),
+				      meta, ret, done);
 	}
 
 done:
