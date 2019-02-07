@@ -201,7 +201,8 @@ pci_vtblk_snapshot(void *vsc, struct vm_snapshot_meta *meta)
 	struct pci_vtblk_softc *sc = vsc;
 
 	SNAPSHOT_VAR_OR_LEAVE(sc->vbsc_cfg, meta, ret, done);
-	SNAPSHOT_VAR_OR_LEAVE(sc->vbsc_ident, meta, ret, done);
+	SNAPSHOT_BUF_OR_LEAVE(sc->vbsc_ident, sizeof(sc->vbsc_ident),
+			      meta, ret, done);
 
 done:
 	return (ret);
