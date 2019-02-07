@@ -172,7 +172,7 @@ do {										\
  */
 #define	SNAPSHOT_GADDR_OR_LEAVE(ADDR_VAR, GADDR_SIZE, RNULL, META, RES, LABEL)	\
 do {										\
-	(RES) = vm_snapshot_gaddr((void **)&(ADDR_VAR), RNULL, (GADDR_SIZE),	\
+	(RES) = vm_snapshot_gaddr((void **)&(ADDR_VAR), (GADDR_SIZE), (RNULL),	\
 				  (META));					\
 	if ((RES) != 0) {							\
 		if ((RES) == EFAULT)						\
