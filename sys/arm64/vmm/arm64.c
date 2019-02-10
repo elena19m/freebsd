@@ -282,9 +282,6 @@ arm_vminit(struct vm *vm)
 	hypmap_init(hyp->stage2_map, PT_STAGE2);
 	arm64_set_vttbr(hyp);
 
-	vtimer_vminit(hyp);
-	vgic_v3_vminit(hyp);
-
 	for (i = 0; i < VM_MAXCPU; i++) {
 		hypctx = &hyp->ctx[i];
 		hypctx->vcpu = i;
@@ -292,7 +289,12 @@ arm_vminit(struct vm *vm)
 
 		reset_vm_el01_regs(hypctx);
 		reset_vm_el2_regs(hypctx, i);
+	}
 
+	vtimer_vminit(hyp);
+	vgic_v3_vminit(hyp);
+	for (i = 0; i < VM_MAXCPU; i++) {
+		hypctx = &hyp->ctx[i];
 		vtimer_cpuinit(hypctx);
 		last_vcpu = (i == VM_MAXCPU - 1);
 		vgic_v3_cpuinit(hypctx, last_vcpu);
