@@ -109,7 +109,12 @@ reset_vm_el2_regs(void *vcpu, int vcpuid)
 	el2ctx->vmpidr_el2 |= cpu_aff;
 
 	/* Use the same CPU identification information as the host */
-	el2ctx->vpidr_el2 = READ_SPECIALREG(midr_el1);
+	el2ctx->vpidr_el2 = CPU_IMPL_TO_MIDR(CPU_IMPL_ARM);
+	el2ctx->vpidr_el2 |= CPU_VAR_TO_MIDR(0);
+	el2ctx->vpidr_el2 |= CPU_ARCH_TO_MIDR(0xf);
+	el2ctx->vpidr_el2 |= CPU_PART_TO_MIDR(CPU_PART_FOUNDATION);
+	el2ctx->vpidr_el2 |= CPU_REV_TO_MIDR(0);
+
 	/*
 	 * Don't trap accesses to CPACR_EL1, trace, SVE, Advanced SIMD
 	 * and floating point functionality to EL2.
