@@ -29,12 +29,18 @@
 #include <sys/lock.h>
 
 #include <machine/armreg.h>
+#include <machine/cpu.h>
+#include <machine/hypervisor.h>
 
 #include "arm64.h"
 #include "reset.h"
 
-/* Make the architecturally UNKNOWN value 0. */
-#define reset_to_unknown_value(reg)	(memset(&(reg), 0, sizeof(reg)))
+/*
+ * Make the architecturally UNKNOWN value 0. As a bonus, we don't have to
+ * manually set all those RES0 fields.
+ */
+#define	ARCH_UNKNOWN		0
+#define	set_arch_unknown(reg)	(memset(&(reg), ARCH_UNKNOWN, sizeof(reg)))
 
 void
 reset_vm_el01_regs(void *vcpu)
@@ -43,37 +49,38 @@ reset_vm_el01_regs(void *vcpu)
 
 	el2ctx = vcpu;
 
-	reset_to_unknown_value(el2ctx->regs);
+	set_arch_unknown(el2ctx->regs);
 
-	reset_to_unknown_value(el2ctx->actlr_el1);
-	reset_to_unknown_value(el2ctx->afsr0_el1);
-	reset_to_unknown_value(el2ctx->afsr1_el1);
-	reset_to_unknown_value(el2ctx->amair_el1);
-	reset_to_unknown_value(el2ctx->contextidr_el1);
-	reset_to_unknown_value(el2ctx->cpacr_el1);
-	reset_to_unknown_value(el2ctx->elr_el1);
-	reset_to_unknown_value(el2ctx->esr_el1);
-	reset_to_unknown_value(el2ctx->far_el1);
-	reset_to_unknown_value(el2ctx->mair_el1);
-	reset_to_unknown_value(el2ctx->par_el1);
+	set_arch_unknown(el2ctx->actlr_el1);
+	set_arch_unknown(el2ctx->afsr0_el1);
+	set_arch_unknown(el2ctx->afsr1_el1);
+	set_arch_unknown(el2ctx->amair_el1);
+	set_arch_unknown(el2ctx->contextidr_el1);
+	set_arch_unknown(el2ctx->cpacr_el1);
+	set_arch_unknown(el2ctx->elr_el1);
+	set_arch_unknown(el2ctx->esr_el1);
+	set_arch_unknown(el2ctx->far_el1);
+	set_arch_unknown(el2ctx->mair_el1);
+	set_arch_unknown(el2ctx->par_el1);
 	/* Guest starts with MMU disabled */
 	/* TODO Check all fields */
 	el2ctx->sctlr_el1 = SCTLR_RES1 & ~SCTLR_M;
-	reset_to_unknown_value(el2ctx->sp_el0);
-	reset_to_unknown_value(el2ctx->tcr_el1);
-	reset_to_unknown_value(el2ctx->tpidr_el0);
-	reset_to_unknown_value(el2ctx->tpidr_el1);
-	reset_to_unknown_value(el2ctx->tpidrro_el0);
-	reset_to_unknown_value(el2ctx->ttbr0_el1);
-	reset_to_unknown_value(el2ctx->ttbr1_el1);
-	reset_to_unknown_value(el2ctx->vbar_el1);
-	reset_to_unknown_value(el2ctx->spsr_el1);
+	set_arch_unknown(el2ctx->sp_el0);
+	set_arch_unknown(el2ctx->tcr_el1);
+	set_arch_unknown(el2ctx->tpidr_el0);
+	set_arch_unknown(el2ctx->tpidr_el1);
+	set_arch_unknown(el2ctx->tpidrro_el0);
+	set_arch_unknown(el2ctx->ttbr0_el1);
+	set_arch_unknown(el2ctx->ttbr1_el1);
+	set_arch_unknown(el2ctx->vbar_el1);
+	set_arch_unknown(el2ctx->spsr_el1);
 }
 
 void
-reset_vm_el2_regs(void *vcpu)
+reset_vm_el2_regs(void *vcpu, int vcpuid)
 {
 	struct hypctx *el2ctx;
+	uint64_t cpu_aff;
 
 	el2ctx = vcpu;
 
@@ -93,10 +100,14 @@ reset_vm_el2_regs(void *vcpu)
 	 */
 	el2ctx->hcr_el2 = HCR_RW | HCR_BSU_IS | HCR_SWIO | HCR_FB | \
 			  HCR_VM | HCR_AMO | HCR_IMO | HCR_FMO;
-	/* The guest will detect a single-core, single-threaded CPU */
-	el2ctx->vmpidr_el2 = get_mpidr();
-	el2ctx->vmpidr_el2 |= VMPIDR_EL2_U;
-	el2ctx->vmpidr_el2 &= ~VMPIDR_EL2_MT;
+
+	el2ctx->vmpidr_el2 = VMPIDR_EL2_RES1;
+	/* The guest will detect a multi-core, single-threaded CPU */
+	el2ctx->vmpidr_el2 &= ~VMPIDR_EL2_U & ~VMPIDR_EL2_MT;
+	/* Only 24 bits of affinity, for a grand total of 16,777,216 cores. */
+	cpu_aff = vcpuid & (CPU_AFF0_MASK | CPU_AFF1_MASK | CPU_AFF2_MASK);
+	el2ctx->vmpidr_el2 |= cpu_aff;
+
 	/* Use the same CPU identification information as the host */
 	el2ctx->vpidr_el2 = READ_SPECIALREG(midr_el1);
 	/*
