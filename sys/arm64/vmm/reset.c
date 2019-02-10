@@ -77,7 +77,7 @@ reset_vm_el01_regs(void *vcpu)
 }
 
 void
-reset_vm_el2_regs(void *vcpu, int vcpuid)
+reset_vm_el2_regs(void *vcpu)
 {
 	struct hypctx *el2ctx;
 	uint64_t cpu_aff;
@@ -105,7 +105,7 @@ reset_vm_el2_regs(void *vcpu, int vcpuid)
 	/* The guest will detect a multi-core, single-threaded CPU */
 	el2ctx->vmpidr_el2 &= ~VMPIDR_EL2_U & ~VMPIDR_EL2_MT;
 	/* Only 24 bits of affinity, for a grand total of 16,777,216 cores. */
-	cpu_aff = vcpuid & (CPU_AFF0_MASK | CPU_AFF1_MASK | CPU_AFF2_MASK);
+	cpu_aff = el2ctx->vcpu & (CPU_AFF0_MASK | CPU_AFF1_MASK | CPU_AFF2_MASK);
 	el2ctx->vmpidr_el2 |= cpu_aff;
 
 	/* Use the same CPU identification information as the host */
