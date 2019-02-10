@@ -138,6 +138,8 @@ vgic_v3_cpuinit(void *arg, bool last_vcpu)
 	int i;
 
 	vmpidr_el2 = hypctx->vmpidr_el2;
+	KASSERT(vmpidr_el2 != 0,
+	    ("Trying to init this CPU's vGIC before the vCPU"));
 	/*
 	 * Get affinity for the current CPU. The guest CPU affinity is taken
 	 * from VMPIDR_EL2. The Redistributor corresponding to this CPU is
