@@ -288,7 +288,7 @@ arm_vminit(struct vm *vm)
 		hypctx->hyp = hyp;
 
 		reset_vm_el01_regs(hypctx);
-		reset_vm_el2_regs(hypctx, i);
+		reset_vm_el2_regs(hypctx);
 	}
 
 	vtimer_vminit(hyp);
