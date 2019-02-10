@@ -98,6 +98,8 @@ dist_ctlr_write(void *vm, int vcpuid, uint64_t fault_ipa, uint64_t wval,
 
 	hyp = vm_get_cookie(vm);
 	dist = &hyp->vgic_dist;
+	/* GICD_CTLR.DS is RAO/WI when only one security state is supported. */
+	wval |= GICD_CTLR_DS;
 
 	mtx_lock_spin(&dist->dist_mtx);
 
