@@ -215,17 +215,15 @@ vgic_v3_vminit(void *arg)
 	struct vgic_v3_dist *dist = &hyp->vgic_dist;
 
 	/*
-	 * Configure the Distributor control register.
+	 * Configure the Distributor control register. The register resets to an
+	 * architecturally UNKNOWN value, so we reset to 0 to disable all
+	 * functionality controlled by the register.
 	 *
-	 * GICD_CTLR_G1: enable Group 0 interrupts
-	 * GICD_CTLR_G1A: enable Group 1 interrupts
-	 * GICD_CTLR_ARE_NS: enable affinity routing
-	 * GICD_CTLR_DS: ARM GIC Architecture Specification for GICv3 and
-	 * GICv4, p. 4-464: when the distributor supports a single security
-	 * state, this bit is RAO/WI
+	 * The exception is GICD_CTLR.DS, which is RA0/WI when the Distributor
+	 * supports one security state (ARM GIC Architecture Specification for
+	 * GICv3 and GICv4, p. 4-464)
 	 */
-	dist->gicd_ctlr = GICD_CTLR_G1 | GICD_CTLR_G1A | GICD_CTLR_ARE_NS | \
-	    GICD_CTLR_DS;
+	dist->gicd_ctlr = GICD_CTLR_DS;
 
 	dist->gicd_typer = ro_regs.gicd_typer;
 	dist->nirqs = GICD_TYPER_I_NUM(dist->gicd_typer);
