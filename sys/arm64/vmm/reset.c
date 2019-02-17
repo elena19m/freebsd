@@ -62,9 +62,18 @@ reset_vm_el01_regs(void *vcpu)
 	set_arch_unknown(el2ctx->far_el1);
 	set_arch_unknown(el2ctx->mair_el1);
 	set_arch_unknown(el2ctx->par_el1);
-	/* Guest starts with MMU disabled */
-	/* TODO Check all fields */
-	el2ctx->sctlr_el1 = SCTLR_RES1 & ~SCTLR_M;
+
+	/*
+	 * Guest starts with:
+	 * ~SCTLR_M: MMU off
+	 * ~SCTLR_C: data cache off
+	 * SCTLR_CP15BEN: memory barrier instruction enable from EL0; RAO/WI
+	 * ~SCTLR_I: instruction cache off
+	 */
+	el2ctx->sctlr_el1 = SCTLR_RES1;
+	el2ctx->sctlr_el1 &= ~SCTLR_M & ~SCTLR_C & ~SCTLR_I;
+	el2ctx->sctlr_el1 |= SCTLR_CP15BEN;
+
 	set_arch_unknown(el2ctx->sp_el0);
 	set_arch_unknown(el2ctx->tcr_el1);
 	set_arch_unknown(el2ctx->tpidr_el0);
