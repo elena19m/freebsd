@@ -61,6 +61,11 @@ vtimer_virtual_timer_intr(void *arg)
 	struct hypctx *hypctx;
 	uint32_t cntv_ctl;
 
+	/*
+	 * TODO everything here is very strange. The relantionship between the
+	 * hardware value and the value in memory is not clear at all.
+	 */
+
 	hypctx = arm64_get_active_vcpu();
 	cntv_ctl = READ_SPECIALREG(cntv_ctl_el0);
 
