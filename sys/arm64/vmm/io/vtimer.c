@@ -292,7 +292,7 @@ vtimer_phys_ctl_write(void *vm, int vcpuid, uint64_t wval, void *arg)
 	struct hypctx *hypctx;
 	struct vtimer_cpu *vtimer_cpu;
 	uint64_t ctl_el0;
-	bool timer_toggled_on, timer_toggled_off;
+	bool timer_toggled_on;
 	bool *retu = arg;
 
 	hyp = vm_get_cookie(vm);
@@ -304,15 +304,11 @@ vtimer_phys_ctl_write(void *vm, int vcpuid, uint64_t wval, void *arg)
 
 	if (!timer_enabled(ctl_el0) && timer_enabled(wval))
 		timer_toggled_on = true;
-	if (timer_enabled(ctl_el0) && !timer_enabled(wval))
-		timer_toggled_off = true;
 
 	vtimer_cpu->cntp_ctl_el0 = wval;
 
 	if (timer_toggled_on)
 		vtimer_schedule_irq(vtimer_cpu, hypctx);
-	else if (timer_toggled_off)
-		vtimer_remove_irq(hypctx);
 
 	*retu = false;
 	return (0);
