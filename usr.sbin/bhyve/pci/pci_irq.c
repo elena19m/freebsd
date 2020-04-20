@@ -43,8 +43,8 @@ __FBSDID("$FreeBSD$");
 
 #include "acpi.h"
 #include "inout.h"
-#include "devemu.h"
-#include "devemu_irq.h"
+#include "pci_emul.h"
+#include "pci_irq.h"
 #include "pci_lpc.h"
 
 /*
@@ -114,7 +114,7 @@ pirq_write(struct vmctx *ctx, int pin, uint8_t val)
 }
 
 void
-devemu_irq_reserve(int irq)
+pci_irq_reserve(int irq)
 {
 
 	assert(irq >= 0 && irq < nitems(irq_counts));
@@ -124,7 +124,7 @@ devemu_irq_reserve(int irq)
 }
 
 void
-devemu_irq_use(int irq)
+pci_irq_use(int irq)
 {
 
 	assert(irq >= 0 && irq < nitems(irq_counts));
@@ -134,7 +134,7 @@ devemu_irq_use(int irq)
 }
 
 void
-devemu_irq_init(struct vmctx *ctx)
+pci_irq_init(struct vmctx *ctx)
 {
 	int i;
 
@@ -153,58 +153,58 @@ devemu_irq_init(struct vmctx *ctx)
 }
 
 void
-devemu_irq_assert(struct devemu_inst *di)
+pci_irq_assert(struct pci_devinst *pi)
 {
 	struct pirq *pirq;
 
-	if (di->di_lintr.pirq_pin > 0) {
-		assert(di->di_lintr.pirq_pin <= nitems(pirqs));
-		pirq = &pirqs[di->di_lintr.pirq_pin - 1];
+	if (pi->pi_lintr.pirq_pin > 0) {
+		assert(pi->pi_lintr.pirq_pin <= nitems(pirqs));
+		pirq = &pirqs[pi->pi_lintr.pirq_pin - 1];
 		pthread_mutex_lock(&pirq->lock);
 		pirq->active_count++;
 		if (pirq->active_count == 1 && pirq_valid_irq(pirq->reg)) {
-			vm_isa_assert_irq(di->di_vmctx, pirq->reg & PIRQ_IRQ,
-			    di->di_lintr.ioapic_irq);
+			vm_isa_assert_irq(pi->pi_vmctx, pirq->reg & PIRQ_IRQ,
+			    pi->pi_lintr.ioapic_irq);
 			pthread_mutex_unlock(&pirq->lock);
 			return;
 		}
 		pthread_mutex_unlock(&pirq->lock);
 	}
-	vm_ioapic_assert_irq(di->di_vmctx, di->di_lintr.ioapic_irq);
+	vm_ioapic_assert_irq(pi->pi_vmctx, pi->pi_lintr.ioapic_irq);
 }
 
 void
-devemu_irq_deassert(struct devemu_inst *di)
+pci_irq_deassert(struct pci_devinst *pi)
 {
 	struct pirq *pirq;
 
-	if (di->di_lintr.pirq_pin > 0) {
-		assert(di->di_lintr.pirq_pin <= nitems(pirqs));
-		pirq = &pirqs[di->di_lintr.pirq_pin - 1];
+	if (pi->pi_lintr.pirq_pin > 0) {
+		assert(pi->pi_lintr.pirq_pin <= nitems(pirqs));
+		pirq = &pirqs[pi->pi_lintr.pirq_pin - 1];
 		pthread_mutex_lock(&pirq->lock);
 		pirq->active_count--;
 		if (pirq->active_count == 0 && pirq_valid_irq(pirq->reg)) {
-			vm_isa_deassert_irq(di->di_vmctx, pirq->reg & PIRQ_IRQ,
-			    di->di_lintr.ioapic_irq);
+			vm_isa_deassert_irq(pi->pi_vmctx, pirq->reg & PIRQ_IRQ,
+			    pi->pi_lintr.ioapic_irq);
 			pthread_mutex_unlock(&pirq->lock);
 			return;
 		}
 		pthread_mutex_unlock(&pirq->lock);
 	}
-	vm_ioapic_deassert_irq(di->di_vmctx, di->di_lintr.ioapic_irq);
+	vm_ioapic_deassert_irq(pi->pi_vmctx, pi->pi_lintr.ioapic_irq);
 }
 
 int
-pirq_alloc_pin(struct devemu_inst *di)
+pirq_alloc_pin(struct pci_devinst *pi)
 {
-	struct vmctx *ctx = di->di_vmctx;
+	struct vmctx *ctx = pi->pi_vmctx;
 	int best_count, best_irq, best_pin, irq, pin;
 
 	pirq_cold = 0;
 
 	if (lpc_bootrom()) {
 		/* For external bootrom use fixed mapping. */
-		best_pin = (4 + di->di_slot + di->di_lintr.pin) % 8;
+		best_pin = (4 + pi->pi_slot + pi->pi_lintr.pin) % 8;
 	} else {
 		/* Find the least-used PIRQ pin. */
 		best_pin = 0;

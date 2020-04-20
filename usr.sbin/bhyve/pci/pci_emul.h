@@ -28,8 +28,8 @@
  * $FreeBSD$
  */
 
-#ifndef _DEVEMU_H_
-#define _DEVEMU_H_
+#ifndef _PCI_EMUL_H_
+#define _PCI_EMUL_H_
 
 #include <sys/types.h>
 #include <sys/queue.h>
@@ -43,26 +43,26 @@
 #define	PCI_BARMAX	PCIR_MAX_BAR_0	/* BAR registers in a Type 0 header */
 
 struct vmctx;
-struct devemu_inst;
+struct pci_devinst;
 struct memory_region;
 struct vm_snapshot_meta;
 
-struct devemu_dev {
-	char      *de_emu;		/* Name of device emulation */
+struct pci_devemu {
+	char      *pe_emu;		/* Name of device emulation */
 
 	/* instance creation */
-	int       (*de_init)(struct vmctx *, struct devemu_inst *,
+	int       (*pe_init)(struct vmctx *, struct pci_devinst *,
 			     char *opts);
 
 	/* ACPI DSDT enumeration */
-	void	(*de_write_dsdt)(struct devemu_inst *);
+	void	(*pe_write_dsdt)(struct pci_devinst *);
 
 	/* config space read/write callbacks */
-	int	(*de_cfgwrite)(struct vmctx *ctx, int vcpu,
-			       struct devemu_inst *di, int offset,
+	int	(*pe_cfgwrite)(struct vmctx *ctx, int vcpu,
+			       struct pci_devinst *pi, int offset,
 			       int bytes, uint32_t val);
-	int	(*de_cfgread)(struct vmctx *ctx, int vcpu,
-			      struct devemu_inst *di, int offset,
+	int	(*pe_cfgread)(struct vmctx *ctx, int vcpu,
+			      struct pci_devinst *pi, int offset,
 			      int bytes, uint32_t *retval);
 
 	/* BAR read/write callbacks */
@@ -78,7 +78,7 @@ struct devemu_dev {
 	int	(*pe_pause)(struct vmctx *ctx, struct pci_devinst *pi);
 	int	(*pe_resume)(struct vmctx *ctx, struct pci_devinst *pi);
 };
-#define DEVEMU_SET(x)   DATA_SET(devemu_set, x);
+#define PCI_EMUL_SET(x)   DATA_SET(pci_devemu_set, x);
 
 enum pcibar_type {
 	PCIBAR_NONE,
@@ -94,7 +94,7 @@ struct pcibar {
 	uint64_t		addr;
 };
 
-#define DI_NAMESZ	40
+#define PI_NAMESZ	40
 
 struct msix_table_entry {
 	uint64_t	addr;
@@ -102,7 +102,7 @@ struct msix_table_entry {
 	uint32_t	vector_control;
 } __packed;
 
-/*
+/* 
  * In case the structure is modified to hold extra information, use a define
  * for the size that should be emulated.
  */
@@ -116,14 +116,14 @@ enum lintr_stat {
 	PENDING
 };
 
-struct devemu_inst {
-	struct devemu_dev *di_d;
-	struct vmctx *di_vmctx;
-	uint8_t	  di_bus, di_slot, di_func;
-	char	  di_name[DI_NAMESZ];
-	int	  di_bar_getsize;
-	int	  di_prevcap;
-	int	  di_capend;
+struct pci_devinst {
+	struct pci_devemu *pi_d;
+	struct vmctx *pi_vmctx;
+	uint8_t	  pi_bus, pi_slot, pi_func;
+	char	  pi_name[PI_NAMESZ];
+	int	  pi_bar_getsize;
+	int	  pi_prevcap;
+	int	  pi_capend;
 
 	struct {
 		int8_t    	pin;
@@ -131,14 +131,14 @@ struct devemu_inst {
 		int		pirq_pin;
 		int	  	ioapic_irq;
 		pthread_mutex_t	lock;
-	} di_lintr;
+	} pi_lintr;
 
 	struct {
 		int		enabled;
 		uint64_t	addr;
 		uint64_t	msg_data;
 		int		maxmsgnum;
-	} di_msi;
+	} pi_msi;
 
 	struct {
 		int	enabled;
@@ -148,16 +148,16 @@ struct devemu_inst {
 		int	table_count;
 		uint32_t pba_offset;
 		int	pba_size;
-		int	function_mask;
+		int	function_mask; 	
 		struct msix_table_entry *table;	/* allocated at runtime */
 		void	*pba_page;
 		int	pba_page_offset;
-	} di_msix;
+	} pi_msix;
 
-	void      *di_arg;		/* devemu-private data */
+	void      *pi_arg;		/* devemu-private data */
 
-	u_char	  di_cfgdata[PCI_REGMAX + 1];
-	struct pcibar di_bar[PCI_BARMAX + 1];
+	u_char	  pi_cfgdata[PCI_REGMAX + 1];
+	struct pcibar pi_bar[PCI_BARMAX + 1];
 };
 
 struct msicap {
@@ -214,7 +214,7 @@ struct pciecap {
 } __packed;
 static_assert(sizeof(struct pciecap) == 60, "compile-time assertion failed");
 
-typedef void (*devemu_lintr_cb)(int b, int s, int pin, int pirq_pin,
+typedef void (*pci_lintr_cb)(int b, int s, int pin, int pirq_pin,
     int ioapic_irq, void *arg);
 
 int	init_pci(struct vmctx *ctx);
@@ -239,14 +239,14 @@ int	pci_msi_maxmsgnum(struct pci_devinst *pi);
 int	pci_parse_slot(char *opt);
 void    pci_print_supported_devices();
 void	pci_populate_msicap(struct msicap *cap, int msgs, int nextptr);
-int	pci_emul_add_msixcap(struct devemu_inst *di, int msgnum, int barnum);
-int	pci_emul_msix_twrite(struct devemu_inst *di, uint64_t offset, int size,
+int	pci_emul_add_msixcap(struct pci_devinst *pi, int msgnum, int barnum);
+int	pci_emul_msix_twrite(struct pci_devinst *pi, uint64_t offset, int size,
 			     uint64_t value);
-uint64_t pci_emul_msix_tread(struct devemu_inst *di, uint64_t offset, int size);
-int	devemu_count_lintr(int bus);
-void	devemu_walk_lintr(int bus, devemu_lintr_cb cb, void *arg);
-void	devemu_write_dsdt(void);
-uint64_t devemu_ecfg_base(void);
+uint64_t pci_emul_msix_tread(struct pci_devinst *pi, uint64_t offset, int size);
+int	pci_count_lintr(int bus);
+void	pci_walk_lintr(int bus, pci_lintr_cb cb, void *arg);
+void	pci_write_dsdt(void);
+uint64_t pci_ecfg_base(void);
 int	pci_bus_configured(int bus);
 #ifdef BHYVE_SNAPSHOT
 int	pci_snapshot(struct vm_snapshot_meta *meta);
@@ -254,46 +254,46 @@ int	pci_pause(struct vmctx *ctx, const char *dev_name);
 int	pci_resume(struct vmctx *ctx, const char *dev_name);
 #endif
 
-static __inline void
-devemu_set_cfgdata8(struct devemu_inst *di, int offset, uint8_t val)
+static __inline void 
+pci_set_cfgdata8(struct pci_devinst *pi, int offset, uint8_t val)
 {
 	assert(offset <= PCI_REGMAX);
-	*(uint8_t *)(di->di_cfgdata + offset) = val;
+	*(uint8_t *)(pi->pi_cfgdata + offset) = val;
 }
 
-static __inline void
-devemu_set_cfgdata16(struct devemu_inst *di, int offset, uint16_t val)
+static __inline void 
+pci_set_cfgdata16(struct pci_devinst *pi, int offset, uint16_t val)
 {
 	assert(offset <= (PCI_REGMAX - 1) && (offset & 1) == 0);
-	*(uint16_t *)(di->di_cfgdata + offset) = val;
+	*(uint16_t *)(pi->pi_cfgdata + offset) = val;
 }
 
-static __inline void
-devemu_set_cfgdata32(struct devemu_inst *di, int offset, uint32_t val)
+static __inline void 
+pci_set_cfgdata32(struct pci_devinst *pi, int offset, uint32_t val)
 {
 	assert(offset <= (PCI_REGMAX - 3) && (offset & 3) == 0);
-	*(uint32_t *)(di->di_cfgdata + offset) = val;
+	*(uint32_t *)(pi->pi_cfgdata + offset) = val;
 }
 
 static __inline uint8_t
-devemu_get_cfgdata8(struct devemu_inst *di, int offset)
+pci_get_cfgdata8(struct pci_devinst *pi, int offset)
 {
 	assert(offset <= PCI_REGMAX);
-	return (*(uint8_t *)(di->di_cfgdata + offset));
+	return (*(uint8_t *)(pi->pi_cfgdata + offset));
 }
 
 static __inline uint16_t
-devemu_get_cfgdata16(struct devemu_inst *di, int offset)
+pci_get_cfgdata16(struct pci_devinst *pi, int offset)
 {
 	assert(offset <= (PCI_REGMAX - 1) && (offset & 1) == 0);
-	return (*(uint16_t *)(di->di_cfgdata + offset));
+	return (*(uint16_t *)(pi->pi_cfgdata + offset));
 }
 
 static __inline uint32_t
-devemu_get_cfgdata32(struct devemu_inst *di, int offset)
+pci_get_cfgdata32(struct pci_devinst *pi, int offset)
 {
 	assert(offset <= (PCI_REGMAX - 3) && (offset & 3) == 0);
-	return (*(uint32_t *)(di->di_cfgdata + offset));
+	return (*(uint32_t *)(pi->pi_cfgdata + offset));
 }
 
-#endif /* _DEVEMU_H_ */
+#endif /* _PCI_EMUL_H_ */
