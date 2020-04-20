@@ -66,7 +66,7 @@ __FBSDID("$FreeBSD$");
 
 #include "bhyverun.h"
 #include "debug.h"
-#include "devemu.h"
+#include "pci_emul.h"
 #include "mevent.h"
 #include "net_utils.h"
 #include "net_backends.h"
@@ -247,7 +247,7 @@ struct  eth_uni {
 
 
 struct e82545_softc {
-	struct devemu_inst *esc_di;
+	struct pci_devinst *esc_pi;
 	struct vmctx	*esc_ctx;
 	struct mevent   *esc_mevpitr;
 	pthread_mutex_t	esc_mtx;
@@ -563,7 +563,7 @@ e82545_itr_callback(int fd, enum ev_type type, void *param)
 	if (new && !sc->esc_irq_asserted) {
 		DPRINTF("itr callback: lintr assert %x", new);
 		sc->esc_irq_asserted = 1;
-		devemu_lintr_assert(sc->esc_di);
+		pci_lintr_assert(sc->esc_pi);
 	} else {
 		mevent_delete(sc->esc_mevpitr);
 		sc->esc_mevpitr = NULL;
@@ -593,7 +593,7 @@ e82545_icr_assert(struct e82545_softc *sc, uint32_t bits)
 	} else if (!sc->esc_irq_asserted) {
 		DPRINTF("icr assert: lintr assert %x", new);
 		sc->esc_irq_asserted = 1;
-		devemu_lintr_assert(sc->esc_di);
+		pci_lintr_assert(sc->esc_pi);
 		if (sc->esc_ITR != 0) {
 			sc->esc_mevpitr = mevent_add(
 			    (sc->esc_ITR + 3905) / 3906,  /* 256ns -> 1ms */
@@ -621,7 +621,7 @@ e82545_ims_change(struct e82545_softc *sc, uint32_t bits)
 	} else if (!sc->esc_irq_asserted) {
 		DPRINTF("ims change: lintr assert %x", new);
 		sc->esc_irq_asserted = 1;
-		devemu_lintr_assert(sc->esc_di);
+		pci_lintr_assert(sc->esc_pi);
 		if (sc->esc_ITR != 0) {
 			sc->esc_mevpitr = mevent_add(
 			    (sc->esc_ITR + 3905) / 3906,  /* 256ns -> 1ms */
@@ -643,7 +643,7 @@ e82545_icr_deassert(struct e82545_softc *sc, uint32_t bits)
 	 */
 	if (sc->esc_irq_asserted && !(sc->esc_ICR & sc->esc_IMS)) {
 		DPRINTF("icr deassert: lintr deassert %x\r\n", bits);
-		devemu_lintr_deassert(sc->esc_di);
+		pci_lintr_deassert(sc->esc_pi);
 		sc->esc_irq_asserted = 0;
 	}
 }
@@ -2083,14 +2083,14 @@ e82545_read_register(struct e82545_softc *sc, uint32_t offset)
 }
 
 static void
-e82545_write(struct vmctx *ctx, int vcpu, struct devemu_inst *di, int baridx,
+e82545_write(struct vmctx *ctx, int vcpu, struct pci_devinst *pi, int baridx,
 	     uint64_t offset, int size, uint64_t value)
 {
 	struct e82545_softc *sc;
 
 	//DPRINTF("Write bar:%d offset:0x%lx value:0x%lx size:%d", baridx, offset, value, size);
 
-	sc = di->di_arg;
+	sc = pi->pi_arg;
 
 	pthread_mutex_lock(&sc->esc_mtx);
 
@@ -2133,14 +2133,14 @@ e82545_write(struct vmctx *ctx, int vcpu, struct devemu_inst *di, int baridx,
 }
 
 static uint64_t
-e82545_read(struct vmctx *ctx, int vcpu, struct devemu_inst *di, int baridx,
+e82545_read(struct vmctx *ctx, int vcpu, struct pci_devinst *pi, int baridx,
 	    uint64_t offset, int size)
 {
 	struct e82545_softc *sc;
 	uint64_t retval;
 	
 	//DPRINTF("Read  bar:%d offset:0x%lx size:%d\r\n", baridx, offset, size);
-	sc = di->di_arg;
+	sc = pi->pi_arg;
 	retval = 0;
 
 	pthread_mutex_lock(&sc->esc_mtx);
@@ -2198,7 +2198,7 @@ e82545_reset(struct e82545_softc *sc, int drvr)
 
 	/* clear outstanding interrupts */
 	if (sc->esc_irq_asserted)
-		devemu_lintr_deassert(sc->esc_di);
+		pci_lintr_deassert(sc->esc_pi);
 
 	/* misc */
 	if (!drvr) {
@@ -2277,7 +2277,7 @@ e82545_reset(struct e82545_softc *sc, int drvr)
 }
 
 static int
-e82545_init(struct vmctx *ctx, struct devemu_inst *di, char *opts)
+e82545_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 {
 	char nstr[80];
 	struct e82545_softc *sc;
@@ -2290,37 +2290,37 @@ e82545_init(struct vmctx *ctx, struct devemu_inst *di, char *opts)
 	/* Setup our softc */
 	sc = calloc(1, sizeof(*sc));
 
-	di->di_arg = sc;
-	sc->esc_di = di;
+	pi->pi_arg = sc;
+	sc->esc_pi = pi;
 	sc->esc_ctx = ctx;
 
 	pthread_mutex_init(&sc->esc_mtx, NULL);
 	pthread_cond_init(&sc->esc_rx_cond, NULL);
 	pthread_cond_init(&sc->esc_tx_cond, NULL);
 	pthread_create(&sc->esc_tx_tid, NULL, e82545_tx_thread, sc);
-	snprintf(nstr, sizeof(nstr), "e82545-%d:%d tx", di->di_slot,
-	    di->di_func);
+	snprintf(nstr, sizeof(nstr), "e82545-%d:%d tx", pi->pi_slot,
+	    pi->pi_func);
         pthread_set_name_np(sc->esc_tx_tid, nstr);
 
-	devemu_set_cfgdata16(di, PCIR_DEVICE, E82545_DEV_ID_82545EM_COPPER);
-	devemu_set_cfgdata16(di, PCIR_VENDOR, E82545_VENDOR_ID_INTEL);
-	devemu_set_cfgdata8(di,  PCIR_CLASS, PCIC_NETWORK);
-	devemu_set_cfgdata8(di, PCIR_SUBCLASS, PCIS_NETWORK_ETHERNET);
-	devemu_set_cfgdata16(di, PCIR_SUBDEV_0, E82545_SUBDEV_ID);
-	devemu_set_cfgdata16(di, PCIR_SUBVEND_0, E82545_VENDOR_ID_INTEL);
+	pci_set_cfgdata16(pi, PCIR_DEVICE, E82545_DEV_ID_82545EM_COPPER);
+	pci_set_cfgdata16(pi, PCIR_VENDOR, E82545_VENDOR_ID_INTEL);
+	pci_set_cfgdata8(pi,  PCIR_CLASS, PCIC_NETWORK);
+	pci_set_cfgdata8(pi, PCIR_SUBCLASS, PCIS_NETWORK_ETHERNET);
+	pci_set_cfgdata16(pi, PCIR_SUBDEV_0, E82545_SUBDEV_ID);
+	pci_set_cfgdata16(pi, PCIR_SUBVEND_0, E82545_VENDOR_ID_INTEL);
 
-	devemu_set_cfgdata8(di,  PCIR_HDRTYPE, PCIM_HDRTYPE_NORMAL);
-	devemu_set_cfgdata8(di,  PCIR_INTPIN, 0x1);
+	pci_set_cfgdata8(pi,  PCIR_HDRTYPE, PCIM_HDRTYPE_NORMAL);
+	pci_set_cfgdata8(pi,  PCIR_INTPIN, 0x1);
 	
 	/* TODO: this card also supports msi, but the freebsd driver for it
 	 * does not, so I have not implemented it. */
-	devemu_lintr_request(di);
+	pci_lintr_request(pi);
 
-	devemu_alloc_bar(di, E82545_BAR_REGISTER, PCIBAR_MEM32,
+	pci_emul_alloc_bar(pi, E82545_BAR_REGISTER, PCIBAR_MEM32,
 		E82545_BAR_REGISTER_LEN);
-	devemu_alloc_bar(di, E82545_BAR_FLASH, PCIBAR_MEM32,
+	pci_emul_alloc_bar(pi, E82545_BAR_FLASH, PCIBAR_MEM32,
 		E82545_BAR_FLASH_LEN);
-	devemu_alloc_bar(di, E82545_BAR_IO, PCIBAR_IO,
+	pci_emul_alloc_bar(pi, E82545_BAR_IO, PCIBAR_IO,
 		E82545_BAR_IO_LEN);
 
 	/*
@@ -2546,5 +2546,5 @@ struct pci_devemu pci_de_e82545 = {
 	.pe_snapshot =	e82545_snapshot,
 #endif
 };
-DEVEMU_SET(pci_de_e82545);
+PCI_EMUL_SET(pci_de_e82545);
 

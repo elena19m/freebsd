@@ -37,7 +37,7 @@ __FBSDID("$FreeBSD$");
 #include <vmmapi.h>
 
 #include "ioapic.h"
-#include "devemu.h"
+#include "pci_emul.h"
 #include "pci_lpc.h"
 
 /*
@@ -69,7 +69,7 @@ ioapic_init(struct vmctx *ctx)
 }
 
 int
-ioapic_pci_alloc_irq(struct devemu_inst *di)
+ioapic_pci_alloc_irq(struct pci_devinst *pi)
 {
 	static int last_pin;
 
@@ -77,7 +77,7 @@ ioapic_pci_alloc_irq(struct devemu_inst *di)
 		return (-1);
 	if (lpc_bootrom()) {
 		/* For external bootrom use fixed mapping. */
-		return (16 + (4 + di->di_slot + di->di_lintr.pin) % 8);
+		return (16 + (4 + pi->pi_slot + pi->pi_lintr.pin) % 8);
 	}
 	return (16 + (last_pin++ % pci_pins));
 }

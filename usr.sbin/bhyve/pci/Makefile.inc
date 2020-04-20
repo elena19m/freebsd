@@ -4,9 +4,9 @@
 
 .PATH: ${BHYVE_SRCTOP}/pci/
 SRCS+=	\
-	devemu_irq.c		\
-	devemu_virtio.c		\
-	devemu.c		\
+	pci_irq.c		\
+	virtio.c		\
+	pci_emul.c		\
 	pci_ahci.c		\
 	pci_e82545.c		\
 	pci_fbuf.c		\

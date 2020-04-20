@@ -60,7 +60,7 @@ __FBSDID("$FreeBSD$");
 #include "virtio.h"
 #include "net_utils.h"
 #include "net_backends.h"
-#include "iov.h"
+#include "amd64/iov.h"
 
 #define VTNET_RINGSZ	1024
 
