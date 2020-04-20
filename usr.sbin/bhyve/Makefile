@@ -16,6 +16,7 @@ BHYVE_SYSDIR?=${SRCTOP}
 BHYVE_SRCTOP?=${.CURDIR}
 
 SRCS=	\
+	audio.c			\
 	net_backends.c		\
 	net_utils.c		\
 	pci_ahci.c		\
