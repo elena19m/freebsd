@@ -55,13 +55,12 @@ __FBSDID("$FreeBSD$");
 
 #include "bhyverun.h"
 #include "debug.h"
+#include "pci/pci_emul.h"
 #include "mevent.h"
+#include "virtio.h"
 #include "net_utils.h"
 #include "net_backends.h"
 #include "iov.h"
-#include "devemu.h"
-#include "mevent.h"
-#include "devemu_virtio.h"
 
 #define VTNET_RINGSZ	1024
 
@@ -105,7 +104,7 @@ static int pci_vtnet_debug;
 /*
  * Per-device softc
  */
-struct devemu_vtnet_softc {
+struct pci_vtnet_softc {
 	struct virtio_softc vsc_vs;
 	struct vqueue_info vsc_queues[VTNET_MAXQ - 1];
 	pthread_mutex_t vsc_mtx;
@@ -115,7 +114,7 @@ struct devemu_vtnet_softc {
 	int		resetting;	/* protected by tx_mtx */
 
 	uint64_t	vsc_features;	/* negotiated features */
-
+	
 	pthread_mutex_t	rx_mtx;
 	int		rx_merge;	/* merged rx bufs in use */
 
@@ -146,11 +145,11 @@ static struct virtio_consts vtnet_vi_consts = {
 	"vtnet",		/* our name */
 	VTNET_MAXQ - 1,		/* we currently support 2 virtqueues */
 	sizeof(struct virtio_net_config), /* config reg size */
-	devemu_vtnet_reset,	/* reset */
+	pci_vtnet_reset,	/* reset */
 	NULL,			/* device-wide qnotify -- not used */
-	devemu_vtnet_cfgread,	/* read PCI config */
-	devemu_vtnet_cfgwrite,	/* write PCI config */
-	devemu_vtnet_neg_features,	/* apply negotiated features */
+	pci_vtnet_cfgread,	/* read PCI config */
+	pci_vtnet_cfgwrite,	/* write PCI config */
+	pci_vtnet_neg_features,	/* apply negotiated features */
 	VTNET_S_HOSTCAPS,	/* our capabilities */
 #ifdef BHYVE_SNAPSHOT
 	pci_vtnet_pause,	/* pause rx/tx threads */
@@ -391,7 +390,7 @@ pci_vtnet_rx(struct pci_vtnet_softc *sc)
 static void
 pci_vtnet_rx_callback(int fd, enum ev_type type, void *param)
 {
-	struct devemu_vtnet_softc *sc = param;
+	struct pci_vtnet_softc *sc = param;
 
 	pthread_mutex_lock(&sc->rx_mtx);
 	pci_vtnet_rx(sc);
@@ -401,9 +400,9 @@ pci_vtnet_rx_callback(int fd, enum ev_type type, void *param)
 
 /* Called on RX kick. */
 static void
-devemu_vtnet_ping_rxq(void *vsc, struct vqueue_info *vq)
+pci_vtnet_ping_rxq(void *vsc, struct vqueue_info *vq)
 {
-	struct devemu_vtnet_softc *sc = vsc;
+	struct pci_vtnet_softc *sc = vsc;
 
 	/*
 	 * A qnotify means that the rx process can now begin.
@@ -416,7 +415,7 @@ devemu_vtnet_ping_rxq(void *vsc, struct vqueue_info *vq)
 
 /* TX virtqueue processing, called by the TX thread. */
 static void
-devemu_vtnet_proctx(struct devemu_vtnet_softc *sc, struct vqueue_info *vq)
+pci_vtnet_proctx(struct pci_vtnet_softc *sc, struct vqueue_info *vq)
 {
 	struct iovec iov[VTNET_MAXSEGS + 1];
 	struct iovec *siov = iov;
@@ -463,9 +462,9 @@ devemu_vtnet_proctx(struct devemu_vtnet_softc *sc, struct vqueue_info *vq)
 
 /* Called on TX kick. */
 static void
-devemu_vtnet_ping_txq(void *vsc, struct vqueue_info *vq)
+pci_vtnet_ping_txq(void *vsc, struct vqueue_info *vq)
 {
-	struct devemu_vtnet_softc *sc = vsc;
+	struct pci_vtnet_softc *sc = vsc;
 
 	/*
 	 * Any ring entries to process?
@@ -485,9 +484,9 @@ devemu_vtnet_ping_txq(void *vsc, struct vqueue_info *vq)
  * Thread which will handle processing of TX desc
  */
 static void *
-devemu_vtnet_tx_thread(void *param)
+pci_vtnet_tx_thread(void *param)
 {
-	struct devemu_vtnet_softc *sc = param;
+	struct pci_vtnet_softc *sc = param;
 	struct vqueue_info *vq;
 	int error;
 
@@ -522,7 +521,7 @@ devemu_vtnet_tx_thread(void *param)
 			 * iovecs and sending when an end-of-packet
 			 * is found
 			 */
-			devemu_vtnet_proctx(sc, vq);
+			pci_vtnet_proctx(sc, vq);
 		} while (vq_has_descs(vq));
 
 		/*
@@ -536,7 +535,7 @@ devemu_vtnet_tx_thread(void *param)
 
 #ifdef notyet
 static void
-devemu_vtnet_ping_ctlq(void *vsc, struct vqueue_info *vq)
+pci_vtnet_ping_ctlq(void *vsc, struct vqueue_info *vq)
 {
 
 	DPRINTF(("vtnet: control qnotify!"));
@@ -544,7 +543,7 @@ devemu_vtnet_ping_ctlq(void *vsc, struct vqueue_info *vq)
 #endif
 
 static int
-devemu_vtnet_init(struct vmctx *ctx, struct devemu_inst *di, char *opts)
+pci_vtnet_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 {
 	struct pci_vtnet_softc *sc;
 	char tname[MAXCOMLEN + 1];
@@ -563,12 +562,12 @@ devemu_vtnet_init(struct vmctx *ctx, struct devemu_inst *di, char *opts)
 	pthread_mutex_init(&sc->vsc_mtx, NULL);
 
 	sc->vsc_queues[VTNET_RXQ].vq_qsize = VTNET_RINGSZ;
-	sc->vsc_queues[VTNET_RXQ].vq_notify = devemu_vtnet_ping_rxq;
+	sc->vsc_queues[VTNET_RXQ].vq_notify = pci_vtnet_ping_rxq;
 	sc->vsc_queues[VTNET_TXQ].vq_qsize = VTNET_RINGSZ;
-	sc->vsc_queues[VTNET_TXQ].vq_notify = devemu_vtnet_ping_txq;
+	sc->vsc_queues[VTNET_TXQ].vq_notify = pci_vtnet_ping_txq;
 #ifdef notyet
 	sc->vsc_queues[VTNET_CTLQ].vq_qsize = VTNET_RINGSZ;
-        sc->vsc_queues[VTNET_CTLQ].vq_notify = devemu_vtnet_ping_ctlq;
+        sc->vsc_queues[VTNET_CTLQ].vq_notify = pci_vtnet_ping_ctlq;
 #endif
  
 	/*
@@ -653,7 +652,11 @@ devemu_vtnet_init(struct vmctx *ctx, struct devemu_inst *di, char *opts)
 	sc->vsc_config.max_virtqueue_pairs = 1;
 
 	/* initialize config space */
-	vi_devemu_init(di, VIRTIO_TYPE_NET);
+	pci_set_cfgdata16(pi, PCIR_DEVICE, VIRTIO_DEV_NET);
+	pci_set_cfgdata16(pi, PCIR_VENDOR, VIRTIO_VENDOR);
+	pci_set_cfgdata8(pi, PCIR_CLASS, PCIC_NETWORK);
+	pci_set_cfgdata16(pi, PCIR_SUBDEV_0, VIRTIO_TYPE_NET);
+	pci_set_cfgdata16(pi, PCIR_SUBVEND_0, VIRTIO_VENDOR);
 
 	/* Link is up if we managed to open backend device. */
 	sc->vsc_config.status = (opts == NULL || sc->vsc_be);
@@ -668,7 +671,7 @@ devemu_vtnet_init(struct vmctx *ctx, struct devemu_inst *di, char *opts)
 	}
 
 	/* use BAR 0 to map config regs in IO space */
-	vi_set_io_res(&sc->vsc_vs, 0);
+	vi_set_io_bar(&sc->vsc_vs, 0);
 
 	sc->resetting = 0;
 
@@ -684,18 +687,18 @@ devemu_vtnet_init(struct vmctx *ctx, struct devemu_inst *di, char *opts)
 	sc->tx_in_progress = 0;
 	pthread_mutex_init(&sc->tx_mtx, NULL);
 	pthread_cond_init(&sc->tx_cond, NULL);
-	pthread_create(&sc->tx_tid, NULL, devemu_vtnet_tx_thread, (void *)sc);
-	snprintf(tname, sizeof(tname), "vtnet-%d:%d tx", di->di_slot,
-	    di->di_func);
-        pthread_set_name_np(sc->tx_tid, tname);
+	pthread_create(&sc->tx_tid, NULL, pci_vtnet_tx_thread, (void *)sc);
+	snprintf(tname, sizeof(tname), "vtnet-%d:%d tx", pi->pi_slot,
+	    pi->pi_func);
+	pthread_set_name_np(sc->tx_tid, tname);
 
 	return (0);
 }
 
 static int
-devemu_vtnet_cfgwrite(void *vsc, int offset, int size, uint32_t value)
+pci_vtnet_cfgwrite(void *vsc, int offset, int size, uint32_t value)
 {
-	struct devemu_vtnet_softc *sc = vsc;
+	struct pci_vtnet_softc *sc = vsc;
 	void *ptr;
 
 	if (offset < (int)sizeof(sc->vsc_config.mac)) {
@@ -714,9 +717,9 @@ devemu_vtnet_cfgwrite(void *vsc, int offset, int size, uint32_t value)
 }
 
 static int
-devemu_vtnet_cfgread(void *vsc, int offset, int size, uint32_t *retval)
+pci_vtnet_cfgread(void *vsc, int offset, int size, uint32_t *retval)
 {
-	struct devemu_vtnet_softc *sc = vsc;
+	struct pci_vtnet_softc *sc = vsc;
 	void *ptr;
 
 	ptr = (uint8_t *)&sc->vsc_config + offset;
@@ -725,7 +728,7 @@ devemu_vtnet_cfgread(void *vsc, int offset, int size, uint32_t *retval)
 }
 
 static void
-devemu_vtnet_neg_features(void *vsc, uint64_t negotiated_features)
+pci_vtnet_neg_features(void *vsc, uint64_t negotiated_features)
 {
 	struct pci_vtnet_softc *sc = vsc;
 
@@ -825,4 +828,4 @@ static struct pci_devemu pci_de_vnet = {
 	.pe_resume =	vi_pci_resume,
 #endif
 };
-DEVEMU_SET(devemu_de_vnet);
+PCI_EMUL_SET(pci_de_vnet);

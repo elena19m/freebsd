@@ -19,10 +19,10 @@ SRCS=	\
 	net_backends.c		\
 	net_utils.c		\
 	block_if.c		\
-	devemu_virtio_block.c	\
-	devemu_virtio_console.c	\
-	devemu_virtio_net.c	\
-	devemu_virtio_rnd.c	\
+	pci_virtio_block.c	\
+	pci_virtio_console.c	\
+	pci_virtio_net.c	\
+	pci_virtio_rnd.c	\
 	mevent.c		\
 	sockstream.c
 
