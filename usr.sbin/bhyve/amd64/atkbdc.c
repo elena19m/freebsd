@@ -50,8 +50,8 @@ __FBSDID("$FreeBSD$");
 #include "acpi.h"
 #include "atkbdc.h"
 #include "inout.h"
-#include "pci_emul.h"
-#include "pci_irq.h"
+#include "devemu.h"
+#include "devemu_irq.h"
 #include "pci_lpc.h"
 #include "ps2kbd.h"
 #include "ps2mouse.h"
@@ -545,10 +545,10 @@ atkbdc_init(struct vmctx *ctx)
 	error = register_inout(&iop);
 	assert(error == 0);
 
-	pci_irq_reserve(KBD_DEV_IRQ);
+	devemu_irq_reserve(KBD_DEV_IRQ);
 	sc->kbd.irq = KBD_DEV_IRQ;
 
-	pci_irq_reserve(AUX_DEV_IRQ);
+	devemu_irq_reserve(AUX_DEV_IRQ);
 	sc->aux.irq = AUX_DEV_IRQ;
 
 	sc->ps2kbd_sc = ps2kbd_init(sc);

@@ -37,7 +37,7 @@ __FBSDID("$FreeBSD$");
 
 #include "bhyverun.h"
 #include "debug.h"
-#include "pci_emul.h"
+#include "devemu.h"
 #include "uart_emul.h"
 
 /*
@@ -51,32 +51,32 @@ __FBSDID("$FreeBSD$");
 static void
 pci_uart_intr_assert(void *arg)
 {
-	struct pci_devinst *pi = arg;
+	struct devemu_inst *di = arg;
 
-	pci_lintr_assert(pi);
+	devemu_lintr_assert(di);
 }
 
 static void
 pci_uart_intr_deassert(void *arg)
 {
-	struct pci_devinst *pi = arg;
+	struct devemu_inst *di = arg;
 
-	pci_lintr_deassert(pi);
+	devemu_lintr_deassert(di);
 }
 
 static void
-pci_uart_write(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
+pci_uart_write(struct vmctx *ctx, int vcpu, struct devemu_inst *di,
 	       int baridx, uint64_t offset, int size, uint64_t value)
 {
 
 	assert(baridx == 0);
 	assert(size == 1);
 
-	uart_write(pi->pi_arg, offset, value);
+	uart_write(di->di_arg, offset, value);
 }
 
 uint64_t
-pci_uart_read(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
+pci_uart_read(struct vmctx *ctx, int vcpu, struct devemu_inst *di,
 	      int baridx, uint64_t offset, int size)
 {
 	uint8_t val;
@@ -84,25 +84,25 @@ pci_uart_read(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
 	assert(baridx == 0);
 	assert(size == 1);
 
-	val = uart_read(pi->pi_arg, offset);
+	val = uart_read(di->di_arg, offset);
 	return (val);
 }
 
 static int
-pci_uart_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
+pci_uart_init(struct vmctx *ctx, struct devemu_inst *di, char *opts)
 {
 	struct uart_softc *sc;
 
-	pci_emul_alloc_bar(pi, 0, PCIBAR_IO, UART_IO_BAR_SIZE);
-	pci_lintr_request(pi);
+	devemu_alloc_bar(di, 0, PCIBAR_IO, UART_IO_BAR_SIZE);
+	devemu_lintr_request(di);
 
 	/* initialize config space */
-	pci_set_cfgdata16(pi, PCIR_DEVICE, COM_DEV);
-	pci_set_cfgdata16(pi, PCIR_VENDOR, COM_VENDOR);
-	pci_set_cfgdata8(pi, PCIR_CLASS, PCIC_SIMPLECOMM);
+	devemu_set_cfgdata16(di, PCIR_DEVICE, COM_DEV);
+	devemu_set_cfgdata16(di, PCIR_VENDOR, COM_VENDOR);
+	devemu_set_cfgdata8(di, PCIR_CLASS, PCIC_SIMPLECOMM);
 
-	sc = uart_init(pci_uart_intr_assert, pci_uart_intr_deassert, pi);
-	pi->pi_arg = sc;
+	sc = uart_init(pci_uart_intr_assert, pci_uart_intr_deassert, di);
+	di->di_arg = sc;
 
 	if (uart_set_backend(sc, opts) != 0) {
 		EPRINTLN("Unable to initialize backend '%s' for "
@@ -113,10 +113,10 @@ pci_uart_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 	return (0);
 }
 
-struct pci_devemu pci_de_com = {
-	.pe_emu =	"uart",
-	.pe_init =	pci_uart_init,
-	.pe_barwrite =	pci_uart_write,
-	.pe_barread =	pci_uart_read
+struct devemu_dev pci_de_com = {
+	.de_emu =	"uart",
+	.de_init =	pci_uart_init,
+	.de_write =	pci_uart_write,
+	.de_read =	pci_uart_read
 };
-PCI_EMUL_SET(pci_de_com);
+DEVEMU_SET(pci_de_com);
