@@ -73,7 +73,7 @@ __FBSDID("$FreeBSD$");
 
 #include "bhyverun.h"
 #include "acpi.h"
-#include "pci_emul.h"
+#include "devemu.h"
 
 /*
  * Define the base address of the ACPI tables, the sizes of some tables, 
@@ -606,7 +606,7 @@ basl_fwrite_mcfg(FILE *fp)
 	EFPRINTF(fp, "[0008]\t\tReserved : 0\n");
 	EFPRINTF(fp, "\n");
 
-	EFPRINTF(fp, "[0008]\t\tBase Address : %016lX\n", pci_ecfg_base());
+	EFPRINTF(fp, "[0008]\t\tBase Address : %016lX\n", devemu_ecfg_base());
 	EFPRINTF(fp, "[0002]\t\tSegment Group: 0000\n");
 	EFPRINTF(fp, "[0001]\t\tStart Bus: 00\n");
 	EFPRINTF(fp, "[0001]\t\tEnd Bus: FF\n");
@@ -739,7 +739,7 @@ basl_fwrite_dsdt(FILE *fp)
 	dsdt_line("      Zero,");
 	dsdt_line("  })");
 
-	pci_write_dsdt();
+	devemu_write_dsdt();
 
 	dsdt_line("");
 	dsdt_line("  Scope (_SB.PC00)");

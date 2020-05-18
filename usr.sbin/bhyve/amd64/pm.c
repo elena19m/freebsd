@@ -40,7 +40,7 @@ __FBSDID("$FreeBSD$");
 #include <vmmapi.h>
 
 #include "acpi.h"
-#include "pci_irq.h"
+#include "devemu_irq.h"
 #include "inout.h"
 #include "mevent.h"
 #include "pci_lpc.h"
@@ -374,6 +374,6 @@ sci_init(struct vmctx *ctx)
 	 * Mark ACPI's SCI as level trigger and bump its use count
 	 * in the PIRQ router.
 	 */
-	pci_irq_use(SCI_INT);
+	devemu_irq_use(SCI_INT);
 	vm_isa_set_irq_trigger(ctx, SCI_INT, LEVEL_TRIGGER);
 }

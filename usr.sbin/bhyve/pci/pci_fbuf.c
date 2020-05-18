@@ -50,7 +50,7 @@ __FBSDID("$FreeBSD$");
 #include "debug.h"
 #include "console.h"
 #include "inout.h"
-#include "pci_emul.h"
+#include "devemu.h"
 #include "rfb.h"
 #include "vga.h"
 
@@ -85,7 +85,7 @@ static int fbuf_debug = 1;
 #define ROWS_MIN	480
 
 struct pci_fbuf_softc {
-	struct pci_devinst *fsc_pi;
+	struct devemu_inst *fsc_di;
 	struct {
 		uint32_t fbsize;
 		uint16_t width;
@@ -125,7 +125,7 @@ pci_fbuf_usage(char *opt)
 }
 
 static void
-pci_fbuf_write(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
+pci_fbuf_write(struct vmctx *ctx, int vcpu, struct devemu_inst *di,
 	       int baridx, uint64_t offset, int size, uint64_t value)
 {
 	struct pci_fbuf_softc *sc;
@@ -133,7 +133,7 @@ pci_fbuf_write(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
 
 	assert(baridx == 0);
 
-	sc = pi->pi_arg;
+	sc = di->di_arg;
 
 	DPRINTF(DEBUG_VERBOSE,
 	    ("fbuf wr: offset 0x%lx, size: %d, value: 0x%lx",
@@ -179,7 +179,7 @@ pci_fbuf_write(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
 }
 
 uint64_t
-pci_fbuf_read(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
+pci_fbuf_read(struct vmctx *ctx, int vcpu, struct devemu_inst *di,
 	      int baridx, uint64_t offset, int size)
 {
 	struct pci_fbuf_softc *sc;
@@ -188,7 +188,7 @@ pci_fbuf_read(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
 
 	assert(baridx == 0);
 
-	sc = pi->pi_arg;
+	sc = di->di_arg;
 
 
 	if (offset + size > DMEMSZ) {
@@ -351,7 +351,7 @@ pci_fbuf_render(struct bhyvegc *gc, void *arg)
 }
 
 static int
-pci_fbuf_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
+pci_fbuf_init(struct vmctx *ctx, struct devemu_inst *di, char *opts)
 {
 	int error, prot;
 	struct pci_fbuf_softc *sc;
@@ -363,24 +363,24 @@ pci_fbuf_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 
 	sc = calloc(1, sizeof(struct pci_fbuf_softc));
 
-	pi->pi_arg = sc;
+	di->di_arg = sc;
 
 	/* initialize config space */
-	pci_set_cfgdata16(pi, PCIR_DEVICE, 0x40FB);
-	pci_set_cfgdata16(pi, PCIR_VENDOR, 0xFB5D);
-	pci_set_cfgdata8(pi, PCIR_CLASS, PCIC_DISPLAY);
-	pci_set_cfgdata8(pi, PCIR_SUBCLASS, PCIS_DISPLAY_VGA);
+	devemu_set_cfgdata16(di, PCIR_DEVICE, 0x40FB);
+	devemu_set_cfgdata16(di, PCIR_VENDOR, 0xFB5D);
+	devemu_set_cfgdata8(di, PCIR_CLASS, PCIC_DISPLAY);
+	devemu_set_cfgdata8(di, PCIR_SUBCLASS, PCIS_DISPLAY_VGA);
 
-	error = pci_emul_alloc_bar(pi, 0, PCIBAR_MEM32, DMEMSZ);
+	error = devemu_alloc_bar(di, 0, PCIBAR_MEM32, DMEMSZ);
 	assert(error == 0);
 
-	error = pci_emul_alloc_bar(pi, 1, PCIBAR_MEM32, FB_SIZE);
+	error = devemu_alloc_bar(di, 1, PCIBAR_MEM32, FB_SIZE);
 	assert(error == 0);
 
-	error = pci_emul_add_msicap(pi, PCI_FBUF_MSI_MSGS);
+	error = pci_emul_add_msicap(di, PCI_FBUF_MSI_MSGS);
 	assert(error == 0);
 
-	sc->fbaddr = pi->pi_bar[1].addr;
+	sc->fbaddr = di->di_bar[1].addr;
 	sc->memregs.fbsize = FB_SIZE;
 	sc->memregs.width  = COLS_DEFAULT;
 	sc->memregs.height = ROWS_DEFAULT;
@@ -389,7 +389,7 @@ pci_fbuf_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 	sc->vga_enabled = 1;
 	sc->vga_full = 0;
 
-	sc->fsc_pi = pi;
+	sc->fsc_di = di;
 
 	error = pci_fbuf_parse_opts(sc, opts);
 	if (error != 0)
@@ -463,4 +463,4 @@ struct pci_devemu pci_fbuf = {
 	.pe_snapshot =	pci_fbuf_snapshot,
 #endif
 };
-PCI_EMUL_SET(pci_fbuf);
+DEVEMU_SET(pci_fbuf);

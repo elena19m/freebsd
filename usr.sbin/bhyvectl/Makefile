@@ -11,7 +11,7 @@ LIBADD=	vmmapi util
 
 WARNS?=	3
 
-CFLAGS+= -I${SRCTOP}/sys/${MACHINE}/vmm
+CFLAGS+= -I${SRCTOP}/sys/amd64/vmm
 
 .if ${MK_BHYVE_SNAPSHOT} != "no"
 CFLAGS+= -DBHYVE_SNAPSHOT

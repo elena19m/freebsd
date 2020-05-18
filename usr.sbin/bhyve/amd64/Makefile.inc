@@ -19,7 +19,6 @@ SRCS+=	\
 	hda_codec.c		\
 	inout.c			\
 	ioapic.c		\
-	iov.c			\
 	mem.c			\
 	mptbl.c			\
 	pci_hda.c		\
