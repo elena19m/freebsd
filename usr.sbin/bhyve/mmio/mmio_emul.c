@@ -12,8 +12,8 @@ __FBSDID("$FreeBSD$");
 #include <string.h>
 
 #include "mem.h"
-#include "devemu.h"
-#include "devemu_irq.h"
+#include "mmio_emul.h"
+#include "mmio_irq.h"
 
 #define	DEVEMU_MEMLIMIT		0xFD00000000UL
 #define	DEVEMU_MEMBASE		0xD000000000UL
@@ -22,23 +22,23 @@ __FBSDID("$FreeBSD$");
 # define max(A, B) ((A) > (B) ? (A) : (B))
 #endif
 
-static uint64_t devemu_membase;
+static uint64_t mmio_membase;
 
-SET_DECLARE(devemu_set, struct devemu_dev);
+SET_DECLARE(mmio_set, struct mmio_devemu);
 
-static struct devemu_dev *devemu_finddef(const char *name);
-static void devemu_lintr_route(struct devemu_inst *di);
-static void devemu_lintr_update(struct devemu_inst *di);
+static struct mmio_devemu *mmio_finddef(const char *name);
+static void mmio_lintr_route(struct mmio_devinst *di);
+static void mmio_lintr_update(struct mmio_devinst *di);
 
-static struct devemu_info {
+static struct mmio_emul_info {
 	uint64_t size;			/* address size */
 	uint64_t baddr;			/* address */
 	int64_t irq;			/* device interrupt number */
 	char *name;			/* device name */
 	char *arg;			/* device arguments */
-	struct devemu_info *next;		/* pointer for linked list */
-	struct devemu_inst *di;	/* pointer to device instance */
-} *devemu_info_head = NULL;
+	struct mmio_emul_info *next;	/* pointer for linked list */
+	struct mmio_devinst *di;	/* pointer to device instance */
+} *mmio_emul_info_head = NULL;
 
 /*
  * MMIO options are in the form:
@@ -58,9 +58,9 @@ static struct devemu_info {
  *   0x100@0x200000#-1:dummy
  */
 static void
-devemu_parse_opts_usage(const char *args)
+mmio_parse_opts_usage(const char *args)
 {
-	fprintf(stderr, "Invalid devemu arguments \"%s\"\r\n", args);
+	fprintf(stderr, "Invalid mmio arguments \"%s\"\r\n", args);
 }
 
 /*
@@ -68,7 +68,7 @@ devemu_parse_opts_usage(const char *args)
  * checks are not required if one of the pointers is null
  */
 static int
-devemu_mem_overlap(uint64_t pa, uint64_t sa, uint64_t pb, uint64_t sb)
+mmio_mem_overlap(uint64_t pa, uint64_t sa, uint64_t pb, uint64_t sb)
 {
 #define IN_INTERVAL(lower, value, upper)	\
 	(((lower) < (value)) && ((value) < (upper)))
@@ -86,13 +86,13 @@ devemu_mem_overlap(uint64_t pa, uint64_t sa, uint64_t pb, uint64_t sb)
 }
 
 int
-devemu_parse_opts(const char *args)
+mmio_parse_opts(const char *args)
 {
 	char *emul, *config, *str;
 	uint64_t size, baddr;
 	int64_t irq;
 	int error;
-	struct devemu_info *dif;
+	struct mmio_emul_info *dif;
 
 	error = -1;
 	emul = config = NULL;
@@ -105,11 +105,11 @@ devemu_parse_opts(const char *args)
 		/* <size>@<base-addr>#<irq> */
 		if (sscanf(str, "%jx@%jx#%jd", &size, &baddr, &irq) != 3 &&
 		    sscanf(str, "%jx@%jx#%jd", &size, &baddr, &irq) != 3) {
-			devemu_parse_opts_usage(str);
+			mmio_parse_opts_usage(str);
 			goto parse_error;
 		}
 	} else {
-		devemu_parse_opts_usage(str);
+		mmio_parse_opts_usage(str);
 		goto parse_error;
 	}
 
@@ -122,8 +122,8 @@ devemu_parse_opts(const char *args)
 	 * (however, an address will have to be later identified)
 	 */
 	if (baddr != 0) {
-		for (dif = devemu_info_head; dif != NULL; dif = dif->next)
-			if (devemu_mem_overlap(dif->baddr, dif->size,
+		for (dif = mmio_emul_info_head; dif != NULL; dif = dif->next)
+			if (mmio_mem_overlap(dif->baddr, dif->size,
 					       baddr, size))
 				break;
 
@@ -135,14 +135,14 @@ devemu_parse_opts(const char *args)
 		}
 	}
 
-	dif = calloc(1, sizeof(struct devemu_info));
+	dif = calloc(1, sizeof(struct mmio_emul_info));
 	if (dif == NULL) {
 		error = ENOMEM;
 		goto parse_error;
 	}
 
-	dif->next = devemu_info_head;
-	devemu_info_head = dif;
+	dif->next = mmio_emul_info_head;
+	mmio_emul_info_head = dif;
 
 	dif->size = size;
 	dif->baddr = baddr;
@@ -165,11 +165,11 @@ parse_error:
 }
 
 static int
-devemu_mem_handler(struct vmctx *ctx, int vcpu, int dir, uint64_t addr,
+mmio_mem_handler(struct vmctx *ctx, int vcpu, int dir, uint64_t addr,
 		      int size, uint64_t *val, void *arg1, long arg2)
 {
-	struct devemu_inst *di = arg1;
-	struct devemu_dev *de = di->di_d;
+	struct mmio_devinst *di = arg1;
+	struct mmio_devemu *de = di->di_d;
 	uint64_t offset;
 	int bidx = (int) arg2;
 
@@ -204,7 +204,7 @@ devemu_mem_handler(struct vmctx *ctx, int vcpu, int dir, uint64_t addr,
 }
 
 static void
-modify_devemu_registration(struct devemu_inst *di, int registration)
+modify_mmio_registration(struct mmio_devinst *di, int registration)
 {
 	int error;
 	struct mem_range mr;
@@ -215,7 +215,7 @@ modify_devemu_registration(struct devemu_inst *di, int registration)
 	mr.size = di->addr.size;
 	if (registration) {
 		mr.flags = MEM_F_RW;
-		mr.handler = devemu_mem_handler;
+		mr.handler = mmio_mem_handler;
 		mr.arg1 = di;
 		mr.arg2 = 0;
 		error = register_mem(&mr);
@@ -227,33 +227,33 @@ modify_devemu_registration(struct devemu_inst *di, int registration)
 }
 
 static void
-register_devemu(struct devemu_inst *di)
+register_mmio(struct mmio_devinst *di)
 {
-	return modify_devemu_registration(di, 1);
+	return modify_mmio_registration(di, 1);
 }
 
 static void
-unregister_devemu(struct devemu_inst *di)
+unregister_mmio(struct mmio_devinst *di)
 {
-	return modify_devemu_registration(di, 0);
+	return modify_mmio_registration(di, 0);
 }
 
 /*
  * Update the MMIO address that is decoded
  */
 static void
-update_mem_address(struct devemu_inst *di, uint64_t addr)
+update_mem_address(struct mmio_devinst *di, uint64_t addr)
 {
 	/* TODO: check if the decoding is running */
-	unregister_devemu(di);
+	unregister_mmio(di);
 
 	di->addr.baddr = addr;
 
-	register_devemu(di);
+	register_mmio(di);
 }
 
 static int
-devemu_alloc_resource(uint64_t *baseptr, uint64_t limit, uint64_t size,
+mmio_alloc_resource(uint64_t *baseptr, uint64_t limit, uint64_t size,
 			uint64_t *addr)
 {
 	uint64_t base;
@@ -271,7 +271,7 @@ devemu_alloc_resource(uint64_t *baseptr, uint64_t limit, uint64_t size,
 }
 
 int
-devemu_alloc_mem(struct devemu_inst *di)
+mmio_alloc_mem(struct mmio_devinst *di)
 {
 	int error;
 	uint64_t *baseptr, limit, addr, size;
@@ -284,23 +284,23 @@ devemu_alloc_mem(struct devemu_inst *di)
 		/* Round up to a power of 2 */
 		size = 1UL << flsl(size);
 
-	error = devemu_alloc_resource(baseptr, limit, size, &addr);
+	error = mmio_alloc_resource(baseptr, limit, size, &addr);
 	if (error != 0)
 		return (error);
 
 	di->addr.baddr = addr;
 
-	register_devemu(di);
+	register_mmio(di);
 
 	return (0);
 }
 
-static struct devemu_dev *
-devemu_finddev(char *name)
+static struct mmio_devemu *
+mmio_finddev(char *name)
 {
-	struct devemu_dev **dpp, *dp;
+	struct mmio_devemu **dpp, *dp;
 
-	SET_FOREACH(dpp, devemu_set) {
+	SET_FOREACH(dpp, mmio_set) {
 		dp = *dpp;
 		if (!strcmp(dp->de_emu, name))
 			return (dp);
@@ -310,12 +310,12 @@ devemu_finddev(char *name)
 }
 
 static int
-devemu_init(struct vmctx *ctx, struct devemu_dev *de, struct devemu_info *dif)
+mmio_init(struct vmctx *ctx, struct mmio_devemu *de, struct mmio_emul_info *dif)
 {
-	struct devemu_inst *di;
+	struct mmio_devinst *di;
 	int error;
 
-	di = calloc(1, sizeof(struct devemu_inst));
+	di = calloc(1, sizeof(struct mmio_devinst));
 	if (di == NULL)
 		return (ENOMEM);
 
@@ -347,38 +347,38 @@ devemu_init(struct vmctx *ctx, struct devemu_dev *de, struct devemu_info *dif)
 }
 
 static void
-init_devemu_error(const char *name)
+init_mmio_error(const char *name)
 {
-	struct devemu_dev **mdpp, *mdp;
+	struct mmio_devemu **mdpp, *mdp;
 
 	fprintf(stderr, "Device \"%s\" does not exist\r\n", name);
 	fprintf(stderr, "The following devices are available:\r\n");
 
-	SET_FOREACH(mdpp, devemu_set) {
+	SET_FOREACH(mdpp, mmio_set) {
 		mdp = *mdpp;
 		fprintf(stderr, "\t%s\r\n", mdp->de_emu);
 	}
 }
 
-int init_devemu(struct vmctx *ctx)
+int init_mmio(struct vmctx *ctx)
 {
-	struct devemu_dev *de;
-	struct devemu_info *dif;
+	struct mmio_devemu *de;
+	struct mmio_emul_info *dif;
 	int error;
 
-	devemu_membase = DEVEMU_MEMBASE;
+	mmio_membase = DEVEMU_MEMBASE;
 
-	for (dif = devemu_info_head; dif != NULL; dif = dif->next) {
+	for (dif = mmio_emul_info_head; dif != NULL; dif = dif->next) {
 		if (dif->name == NULL)
 			continue;
 
-		de = devemu_finddev(dif->name);
+		de = mmio_finddev(dif->name);
 		if (de == NULL) {
-			init_devemu_error(dif->name);
+			init_mmio_error(dif->name);
 			return (1);
 		}
 
-		error = devemu_init(ctx, de, dif);
+		error = mmio_init(ctx, de, dif);
 		if (error != 0)
 			return (error);
 
@@ -387,14 +387,14 @@ int init_devemu(struct vmctx *ctx)
 		 * slop to the memory resources decoded, in order to
 		 * give the guest some flexibility to reprogram the addresses 
 		 */
-		devemu_membase += MEM_ROUNDUP;
-		devemu_membase = roundup2(devemu_membase, MEM_ROUNDUP);
+		mmio_membase += MEM_ROUNDUP;
+		mmio_membase = roundup2(mmio_membase, MEM_ROUNDUP);
 	}
 
 	/* activate the interrupts */
-	for (dif = devemu_info_head; dif != NULL; dif = dif->next)
+	for (dif = mmio_emul_info_head; dif != NULL; dif = dif->next)
 		if (dif->di != NULL)
-			devemu_lintr_route(dif->di);
+			mmio_lintr_route(dif->di);
 
 	/* TODO: register fallback handlers? */
 
@@ -402,34 +402,34 @@ int init_devemu(struct vmctx *ctx)
 }
 
 void
-devemu_lintr_request(struct devemu_inst *di)
+mmio_lintr_request(struct mmio_devinst *di)
 {
 	/* do nothing */
 }
 
 static void
-devemu_lintr_route(struct devemu_inst *di)
+mmio_lintr_route(struct mmio_devinst *di)
 {
 	/* do nothing */
 }
 
 void
-devemu_lintr_assert(struct devemu_inst *di)
+mmio_lintr_assert(struct mmio_devinst *di)
 {
 	pthread_mutex_lock(&di->di_lintr.lock);
 	if (di->di_lintr.state == IDLE) {
 		di->di_lintr.state = ASSERTED;
-		devemu_irq_assert(di);
+		mmio_irq_assert(di);
 	}
 	pthread_mutex_unlock(&di->di_lintr.lock);
 }
 
 void
-devemu_lintr_deassert(struct devemu_inst *di)
+mmio_lintr_deassert(struct mmio_devinst *di)
 {
 	pthread_mutex_lock(&di->di_lintr.lock);
 	if (di->di_lintr.state == ASSERTED) {
-		devemu_irq_deassert(di);
+		mmio_irq_deassert(di);
 		di->di_lintr.state = IDLE;
 	} else if (di->di_lintr.state == PENDING) {
 		di->di_lintr.state = IDLE;

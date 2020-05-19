@@ -9,14 +9,14 @@ __FBSDID("$FreeBSD$");
 #include <stdio.h>
 #include <vmmapi.h>
 
-#include "devemu.h"
-#include "devemu_irq.h"
+#include "mmio_emul.h"
+#include "mmio_irq.h"
 #include "virtio_mmio.h"
 
 /* IRQ count to disable IRQ */
 #define IRQ_DISABLED	    0xff
 
-static struct devemu_irq {
+static struct mmio_irq {
 	uint32_t	use_count;	/* number of binds */
 	uint32_t	active_count;	/* number of asserts */
 	uint32_t	active;		/* irq active */
@@ -24,7 +24,7 @@ static struct devemu_irq {
 } irqs[50];
 
 void
-devemu_irq_reserve(int irq)
+mmio_irq_reserve(int irq)
 {
 	assert(irq >= 0 && irq < nitems(irqs));
 	assert(irqs[irq].active == 0 || irqs[irq].active == IRQ_DISABLED);
@@ -32,15 +32,14 @@ devemu_irq_reserve(int irq)
 }
 
 void
-devemu_irq_use(int irq)
-{
+mmio_irq_use(int irq) {
 	assert(irq >= 0 && irq < nitems(irqs));
 	assert(irqs[irq].active != IRQ_DISABLED);
 	irqs[irq].active++;
 }
 
 void
-devemu_irq_init(struct vmctx *ctx)
+mmio_irq_init(struct vmctx *ctx)
 {
 	int i;
 
@@ -53,9 +52,9 @@ devemu_irq_init(struct vmctx *ctx)
 }
 
 void
-devemu_irq_assert(struct devemu_inst *di)
+mmio_irq_assert(struct mmio_devinst *di)
 {
-	struct devemu_irq *irq;
+	struct mmio_irq *irq;
 	uint32_t irq_status;
 
 	assert(di->di_lintr.irq <= nitems(irqs));
@@ -69,9 +68,9 @@ devemu_irq_assert(struct devemu_inst *di)
 
 	pthread_mutex_lock(&di->di_lintr.lock);
 
-	irq_status = devemu_get_cfgreg(di, VIRTIO_MMIO_INTERRUPT_STATUS);
+	irq_status = mmio_get_cfgreg(di, VIRTIO_MMIO_INTERRUPT_STATUS);
 	irq_status |= VIRTIO_MMIO_INT_VRING;
-	devemu_set_cfgreg(di, VIRTIO_MMIO_INTERRUPT_STATUS, irq_status);
+	mmio_set_cfgreg(di, VIRTIO_MMIO_INTERRUPT_STATUS, irq_status);
 
 	if (irq->active_count == 1)
 		vm_assert_irq(di->di_vmctx, di->di_lintr.irq);
@@ -82,9 +81,9 @@ devemu_irq_assert(struct devemu_inst *di)
 }
 
 void
-devemu_irq_deassert(struct devemu_inst *di)
+mmio_irq_deassert(struct mmio_devinst *di)
 {
-	struct devemu_irq *irq;
+	struct mmio_irq *irq;
 	uint32_t irq_status;
 
 	assert(di->di_lintr.irq <= nitems(irqs));
@@ -98,9 +97,9 @@ devemu_irq_deassert(struct devemu_inst *di)
 
 	pthread_mutex_lock(&di->di_lintr.lock);
 
-	irq_status = devemu_get_cfgreg(di, VIRTIO_MMIO_INTERRUPT_STATUS);
+	irq_status = mmio_get_cfgreg(di, VIRTIO_MMIO_INTERRUPT_STATUS);
 	irq_status &= ~VIRTIO_MMIO_INT_VRING;
-	devemu_set_cfgreg(di, VIRTIO_MMIO_INTERRUPT_STATUS, irq_status);
+	mmio_set_cfgreg(di, VIRTIO_MMIO_INTERRUPT_STATUS, irq_status);
 
 #if 0
 	/* MMIO devices do not require deassertions */

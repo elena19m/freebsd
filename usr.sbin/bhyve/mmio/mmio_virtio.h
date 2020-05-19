@@ -260,7 +260,7 @@ vring_size(u_int qsz, uint32_t align)
 }
 
 struct vmctx;
-struct devemu_inst;
+struct mmio_devinst;
 struct vqueue_info;
 
 /*
@@ -301,7 +301,7 @@ struct virtio_softc {
 	struct virtio_consts *vs_vc;	/* constants (see below) */
 	int	vs_flags;		/* VIRTIO_* flags from above */
 	pthread_mutex_t *vs_mtx;	/* POSIX mutex, if any */
-	struct devemu_inst *vs_di;	/* device instance */
+	struct mmio_devinst *vs_di;	/* device instance */
 	uint32_t vs_negotiated_caps;	/* negotiated capabilities */
 	uint32_t vs_align;		/* virtual queue alignment */
 	struct vqueue_info *vs_queues;	/* one per vc_nvq */
@@ -412,13 +412,13 @@ static inline void
 vq_interrupt(struct virtio_softc *vs, struct vqueue_info *vq)
 {
 	VS_LOCK(vs);
-	devemu_lintr_assert(vs->vs_di);
+	mmio_lintr_assert(vs->vs_di);
 	VS_UNLOCK(vs);
 }
 
 struct iovec;
 void	vi_softc_linkup(struct virtio_softc *vs, struct virtio_consts *vc,
-			void *dev_softc, struct devemu_inst *di,
+			void *dev_softc, struct mmio_devinst *di,
 			struct vqueue_info *queues);
 int	vi_intr_init(struct virtio_softc *vs, int barnum, int use_msix);
 void	vi_reset_dev(struct virtio_softc *);
@@ -430,9 +430,9 @@ void	vq_retchain(struct vqueue_info *vq);
 void	vq_relchain(struct vqueue_info *vq, uint16_t idx, uint32_t iolen);
 void	vq_endchains(struct vqueue_info *vq, int used_all_avail);
 
-uint64_t vi_devemu_read(struct vmctx *ctx, int vcpu, struct devemu_inst *di,
+uint64_t vi_mmio_read(struct vmctx *ctx, int vcpu, struct mmio_devinst *di,
 			int baridx, uint64_t offset, int size);
-void	vi_devemu_write(struct vmctx *ctx, int vcpu, struct devemu_inst *di,
+void	vi_mmio_write(struct vmctx *ctx, int vcpu, struct mmio_devinst *di,
 			int baridx, uint64_t offset, int size, uint64_t value);
-void	vi_devemu_init(struct devemu_inst *di, uint32_t type);
+void	vi_mmio_init(struct mmio_devinst *di, uint32_t type);
 #endif	/* _VIRTIO_H_ */
