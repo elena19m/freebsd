@@ -33,6 +33,9 @@
 #ifndef	_VIRTIO_MMIO_H
 #define	_VIRTIO_MMIO_H
 
+#include <sys/types.h>
+#include <sys/kobj.h>
+
 DECLARE_CLASS(vtmmio_driver);
 
 struct vtmmio_virtqueue;
