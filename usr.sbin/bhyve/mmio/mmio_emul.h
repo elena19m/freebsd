@@ -1,31 +1,31 @@
-#ifndef _DEVEMU_H_
-#define _DEVEMU_H_
+#ifndef _MMIO_EMUL_H_
+#define _MMIO_EMUL_H_
 
 #include <sys/types.h>
 
 #include <assert.h>
 
 struct vmctx;
-struct devemu_inst;
+struct mmio_devinst;
 
-struct devemu_dev {
+struct mmio_devemu {
 	char *de_emu;		/* Device emulation name */
 
 	/* Instance creation */
-	int      (*de_init)(struct vmctx *ctx, struct devemu_inst *di,
+	int      (*de_init)(struct vmctx *ctx, struct mmio_devinst *di,
 			    char *opts);
 
 	/* Read / Write callbacks */
 	void     (*de_write)(struct vmctx *ctx, int vcpu,
-			     struct devemu_inst *di, int baridx,
+			     struct mmio_devinst *di, int baridx,
 			     uint64_t offset, int size, uint64_t val);
 
 	uint64_t (*de_read)(struct vmctx *ctx, int vcpu,
-			    struct devemu_inst *di, int baridx,
+			    struct mmio_devinst *di, int baridx,
 			    uint64_t offset, int size);
 };
 
-#define	DEVEMU_SET(x)	DATA_SET(devemu_set, x);
+#define	MMIO_EMUL_SET(x)	DATA_SET(devemu_set, x);
 #define	DI_NAMESZ		40
 #define	MMIO_REGMAX		0xff
 #define	MMIO_REGNUM		(MMIO_REGMAX + 1)
@@ -41,8 +41,8 @@ enum lintr_stat {
 	PENDING
 };
 
-struct devemu_inst {
-	struct devemu_dev	*di_d;			/* Back ref to device */
+struct mmio_devinst {
+	struct mmio_devemu	*di_d;			/* Back ref to device */
 	struct vmctx		*di_vmctx;		/* Owner VM context */
 	/* unused for mmio device emulation; may be used as uniquifiers */
 	int			di_slot, di_func;
@@ -62,25 +62,25 @@ struct devemu_inst {
 	struct devinst_addr	addr;			/* Address info */
 };
 
-int devemu_parse_opts(const char *args);
-int devemu_alloc_mem(struct devemu_inst *di);
-int init_devemu(struct vmctx *ctx);
-void devemu_lintr_request(struct devemu_inst *di);
-void devemu_lintr_assert(struct devemu_inst *di);
-void devemu_lintr_deassert(struct devemu_inst *di);
+int mmio_parse_opts(const char *args);
+int mmio_alloc_mem(struct mmio_devinst *di);
+int init_mmio(struct vmctx *ctx);
+void mmio_lintr_request(struct mmio_devinst *di);
+void mmio_lintr_assert(struct mmio_devinst *di);
+void mmio_lintr_deassert(struct mmio_devinst *di);
 
 static __inline void
-devemu_set_cfgreg(struct devemu_inst *di, size_t offset, uint32_t val)
+mmio_set_cfgreg(struct mmio_devinst *di, size_t offset, uint32_t val)
 {
 	assert(offset <= (MMIO_REGMAX - 3) && (offset & 3) == 0);
 	*(uint32_t *)(di->di_cfgregs + offset) = val;
 }
 
 static __inline uint32_t
-devemu_get_cfgreg(struct devemu_inst *di, size_t offset)
+mmio_get_cfgreg(struct mmio_devinst *di, size_t offset)
 {
 	assert(offset <= (MMIO_REGMAX - 3) && (offset & 3) == 0);
 	return (*(uint32_t *)(di->di_cfgregs + offset));
 }
 
-#endif /* _DEVEMU_H_ */
+#endif /* _MMIO_EMUL_H_ */
