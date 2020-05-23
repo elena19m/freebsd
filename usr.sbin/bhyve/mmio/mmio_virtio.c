@@ -39,7 +39,6 @@ __FBSDID("$FreeBSD$");
 #include "mmio_emul.h"
 #include "mmio_virtio.h"
 #include "virtio_ids.h"
-#include "virtio_mmio.h"
 
 static int debug_virtio = 0;
 

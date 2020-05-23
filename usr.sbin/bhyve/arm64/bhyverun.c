@@ -45,8 +45,8 @@
 #include <machine/vmm.h>
 
 #include "bhyverun.h"
-#include "devemu.h"
-#include "devemu_irq.h"
+#include "../mmio/mmio_emul.h"
+#include "../mmio/mmio_irq.h"
 #include "mem.h"
 #include "mevent.h"
 
@@ -402,7 +402,7 @@ main(int argc, char *argv[])
 			}
 			break;
 		case 's':
-			if (devemu_parse_opts(optarg) != 0)
+			if (mmio_parse_opts(optarg) != 0)
 				exit(1);
 			break;
 		case 'h':
@@ -440,9 +440,9 @@ main(int argc, char *argv[])
 	}
 
 	init_mem();
-	devemu_irq_init(ctx);
+	mmio_irq_init(ctx);
 
-	if (init_devemu(ctx) != 0) {
+	if (init_mmio(ctx) != 0) {
 		fprintf(stderr, "Failed to initialize device emulation\n");
 		exit(1);
 	}

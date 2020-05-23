@@ -75,8 +75,8 @@ __FBSDID("$FreeBSD$");
 #include <netgraph.h>
 #endif
 
-#include "debug.h"
-#include "amd64/iov.h"
+#include "../debug.h"
+#include "iov.h"
 #include "mevent.h"
 #include "net_backends.h"
 
