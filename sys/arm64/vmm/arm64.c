@@ -164,7 +164,7 @@ arm_init(int ipinum)
 
 	/* Set physical address size */
 	id_aa64mmfr0_el1 = READ_SPECIALREG(id_aa64mmfr0_el1);
-	pa_range_bits = ID_AA64MMFR0_PA_RANGE(id_aa64mmfr0_el1);
+	pa_range_bits = ID_AA64MMFR0_PARange_VAL(id_aa64mmfr0_el1);
 	tcr_el2	|= (pa_range_bits & 0x7) << TCR_EL2_PS_SHIFT;
 
 	/* Use the same address translation attributes as the host */
@@ -205,7 +205,7 @@ arm_init(int ipinum)
 	vtcr_el2 |= VTCR_EL2_IRGN0_WBWA | VTCR_EL2_ORGN0_WBWA;
 	vtcr_el2 |= VTCR_EL2_TG0_4K;
 	vtcr_el2 |= VTCR_EL2_SH0_IS;
-	if (pa_range_bits == ID_AA64MMFR0_PA_RANGE_1T) {
+	if (pa_range_bits == ID_AA64MMFR0_PARange_1T) {
 		/*
 		 * 40 bits of physical addresses, use concatenated level 1
 		 * tables
