@@ -562,6 +562,7 @@ arm_tmr_attach(device_t dev)
 			device_printf(dev, "Unable to alloc int resource.\n");
 			return (ENXIO);
 		}
+	}
 	/* Disable the virtual timer until we are ready */
 	if (sc->res[2] != NULL)
 		arm_tmr_disable(false);
