@@ -1098,23 +1098,23 @@ pmap_bootstrap(vm_offset_t l0pt, vm_offset_t l1pt, vm_paddr_t kernstart,
 	physmem_exclude_region(start_pa, pa - start_pa, EXFLAG_NOALLOC);
 
 	id_aa64mmfr0_el1 = READ_SPECIALREG(id_aa64mmfr0_el1);
-	switch (ID_AA64MMFR0_PA_RANGE(id_aa64mmfr0_el1)) {
-	case ID_AA64MMFR0_PA_RANGE_4G:
+	switch (ID_AA64MMFR0_PARange_VAL(id_aa64mmfr0_el1)) {
+	case ID_AA64MMFR0_PARange_4G:
 		pa_range_bits = 32;
 		break;
-	case ID_AA64MMFR0_PA_RANGE_64G:
+	case ID_AA64MMFR0_PARange_64G:
 		pa_range_bits = 36;
 		break;
-	case ID_AA64MMFR0_PA_RANGE_1T:
+	case ID_AA64MMFR0_PARange_1T:
 		pa_range_bits = 40;
 		break;
-	case ID_AA64MMFR0_PA_RANGE_4T:
+	case ID_AA64MMFR0_PARange_4T:
 		pa_range_bits = 42;
 		break;
-	case ID_AA64MMFR0_PA_RANGE_16T:
+	case ID_AA64MMFR0_PARange_16T:
 		pa_range_bits = 44;
 		break;
-	case ID_AA64MMFR0_PA_RANGE_256T:
+	case ID_AA64MMFR0_PARange_256T:
 		pa_range_bits = 48;
 		break;
 	default:
@@ -1998,14 +1998,14 @@ _pmap_alloc_l3(pmap_t pmap, vm_pindex_t ptepindex, struct rwlock **lockp)
 				}
 			} else {
 				l1pg = PHYS_TO_VM_PAGE(tl0 & ~ATTR_MASK);
-				l1pg->wire_count++;
+				l1pg->ref_count++;
 			}
 
 			l1 = (pd_entry_t *)PHYS_TO_DMAP(pmap_load(l0) & ~ATTR_MASK);
 			l1 = &l1[ptepindex & Ln_ADDR_MASK];
 		} else {
 			l1pg = pmap_l1pg(pmap, l1index);
-			l1pg->wire_count++;
+			l1pg->ref_count++;
 			l1 = &pmap->pm_l0[l1index & STAGE2_L1_ADDR_MASK];
 		}
 		pmap_store(l1, VM_PAGE_TO_PHYS(m) | L1_TABLE);
@@ -2044,7 +2044,7 @@ _pmap_alloc_l3(pmap_t pmap, vm_pindex_t ptepindex, struct rwlock **lockp)
 					}
 				} else {
 					l2pg = PHYS_TO_VM_PAGE(tl1 & ~ATTR_MASK);
-					l2pg->wire_count++;
+					l2pg->ref_count++;
 				}
 			}
 		} else {
