@@ -117,6 +117,9 @@ device		al_pci		# Annapurna Alpine PCI-E
 options 	PCI_HP			# PCI-Express native HotPlug
 options 	PCI_IOV		# PCI SR-IOV support
 
+device		iflib
+device		syscon
+
 # Ethernet NICs
 device		mii
 device		miibus		# MII bus support
@@ -153,7 +156,7 @@ device		pl011
 
 # USB support
 options 	USB_DEBUG		# enable debug msgs
-device		aw_ehci			# Allwinner EHCI USB interface (USB 2.0)
+#device		aw_ehci			# Allwinner EHCI USB interface (USB 2.0)
 device		aw_usbphy		# Allwinner USB PHY
 device		dwcotg			# DWC OTG controller
 device		ohci			# OHCI USB interface
@@ -211,10 +214,10 @@ device		kbdmux
 
 # Pseudo devices.
 device		loop		# Network loopback
-device		random		# Entropy device
+#device		random		# Entropy device
 device		ether		# Ethernet support
 device		vlan		# 802.1Q VLAN support
-device		tun		# Packet tunnel.
+device		tuntap		# Packet tunnel.
 device		md		# Memory "disks"
 device		gif		# IPv6 and IPv4 tunneling
 device		firmware	# firmware assist module

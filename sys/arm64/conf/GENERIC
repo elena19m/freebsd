@@ -218,7 +218,7 @@ device		uart_mvebu	# Armada 3700 UART driver
 device		uart_ns8250	# ns8250-type UART driver
 device		uart_snps
 device		pl011
-
+device		iflib
 # USB support
 options 	USB_HOST_ALIGN=64	# Align usb buffers to cache line size.
 device		aw_usbphy		# Allwinner USB PHY
