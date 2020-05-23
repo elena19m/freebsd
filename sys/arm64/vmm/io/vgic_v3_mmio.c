@@ -1,4 +1,5 @@
 #include <sys/malloc.h>
+#include <sys/mutex.h>
 
 #include <machine/vmm.h>
 #include <machine/vmm_instruction_emul.h>
