@@ -681,12 +681,12 @@ irqbuf_next_enabled(struct vgic_v3_irq *irqbuf, int start, int end,
 }
 
 static inline int
-vgic_v3_lr_next_empty(uint32_t ich_elsr_el2, int start, int end)
+vgic_v3_lr_next_empty(uint32_t ich_elrsr_el2, int start, int end)
 {
 	int i;
 
 	for (i = start; i < end; i++)
-		if (ich_elsr_el2 & (1U << i))
+		if (ich_elrsr_el2 & (1U << i))
 			break;
 
 	if (i < end)
@@ -754,7 +754,7 @@ vgic_v3_irqbuf_to_lr(struct hypctx *hypctx, struct vgic_v3_cpu_if *cpu_if,
 		if (irqbuf_idx == -1)
 			break;
 
-		lr_idx = vgic_v3_lr_next_empty(cpu_if->ich_elsr_el2,
+		lr_idx = vgic_v3_lr_next_empty(cpu_if->ich_elrsr_el2,
 		    lr_idx, cpu_if->ich_lr_num);
 		if (lr_idx == -1)
 			break;
@@ -807,7 +807,7 @@ vgic_v3_sync_hwstate(void *arg)
 	/* Test if all buffered interrupts can fit in the LR regs */
 	lr_free = 0;
 	for (i = 0; i < cpu_if->ich_lr_num; i++)
-		if (cpu_if->ich_elsr_el2 & (1U << i))
+		if (cpu_if->ich_elrsr_el2 & (1U << i))
 			lr_free++;
 
 	by_priority = (lr_free <= cpu_if->ich_lr_num);
@@ -815,7 +815,7 @@ vgic_v3_sync_hwstate(void *arg)
 
 	lr_free = 0;
 	for (i = 0; i < cpu_if->ich_lr_num; i++)
-		if (cpu_if->ich_elsr_el2 & (1U << i))
+		if (cpu_if->ich_elrsr_el2 & (1U << i))
 			lr_free++;
 
 	en_underflow_intr = false;
