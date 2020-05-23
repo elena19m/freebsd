@@ -60,7 +60,7 @@ __FBSDID("$FreeBSD$");
 #include "bhyverun.h"
 #include "debug.h"
 #include "pci/pci_emul.h"
-#include "virtio.h"
+#include "../amd64/virtio.h"
 
 #define VTRND_RINGSZ	64
 

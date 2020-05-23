@@ -11,7 +11,7 @@ __FBSDID("$FreeBSD$");
 
 #include "mmio_emul.h"
 #include "mmio_irq.h"
-#include "virtio_mmio.h"
+#include "mmio_virtio.h"
 
 /* IRQ count to disable IRQ */
 #define IRQ_DISABLED	    0xff
