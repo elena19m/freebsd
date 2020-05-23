@@ -57,8 +57,7 @@ SRCS=	\
 	iov.c			\
 	block_if.c		\
 	mevent.c		\
-	sockstream.c		\
-	virtio.c
+	sockstream.c
 
 .if ${MK_BHYVE_SNAPSHOT} != "no"
 SRCS+=	snapshot.c

@@ -10,6 +10,7 @@ SRCS+=	\
 	acpi.c			\
 	bhyvegc.c		\
 	bhyverun.c		\
+	iblock_if.c		\
 	bootrom.c		\
 	console.c		\
 	consport.c		\
@@ -21,6 +22,8 @@ SRCS+=	\
 	ioapic.c		\
 	mem.c			\
 	mptbl.c			\
+	net_backends.c		\
+	net_utils.c		\
 	pci_hda.c		\
 	pci_nvme.c		\
 	pm.c			\
@@ -35,6 +38,7 @@ SRCS+=	\
 	usb_emul.c		\
 	usb_mouse.c		\
 	vga.c			\
+	virtio.c		\
 	xmsr.c			\
 	spinup_ap.c
 
