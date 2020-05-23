@@ -16,16 +16,8 @@ BHYVE_SYSDIR?=${SRCTOP}
 BHYVE_SRCTOP?=${.CURDIR}
 
 SRCS=	\
-	net_backends.c		\
-	net_utils.c		\
-	block_if.c		\
-	pci_virtio_block.c	\
-	pci_virtio_console.c	\
-	pci_virtio_net.c	\
-	pci_virtio_rnd.c	\
 	mevent.c		\
-	sockstream.c		\
-	virtio.c
+	sockstream.c
 
 .if ${MK_BHYVE_SNAPSHOT} != "no"
 SRCS+=	snapshot.c
