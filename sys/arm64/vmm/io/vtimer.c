@@ -299,7 +299,7 @@ vtimer_phys_ctl_write(void *vm, int vcpuid, uint64_t wval, void *arg)
 	hypctx = &hyp->ctx[vcpuid];
 	vtimer_cpu = &hypctx->vtimer_cpu;
 
-	timer_toggled_on = timer_toggled_off = false;
+	timer_toggled_on = false;
 	ctl_el0 = vtimer_cpu->cntp_ctl_el0;
 
 	if (!timer_enabled(ctl_el0) && timer_enabled(wval))
