@@ -6,8 +6,8 @@
 #define ICH_EISR_EL2_EOI_NOT_HANDLED(lr)	((1 << lr) & ICH_EISR_EL2_STATUS_MASK)
 
 /* Interrupt Controller Empty List Register Status Register */
-#define ICH_ELSR_EL2_STATUS_MASK	0xffff
-#define ICH_ELSR_EL2_LR_EMPTY(x)	((1 << x) & ICH_ELSR_EL2_STATUS_MASK)
+#define ICH_ELRSR_EL2_STATUS_MASK	0xffff
+#define ICH_ELRSR_EL2_LR_EMPTY(x)	((1 << x) & ICH_ELSR_EL2_STATUS_MASK)
 
 /* Interrupt Controller Hyp Control Register */
 #define ICH_HCR_EL2_EOICOUNT_SHIFT	27

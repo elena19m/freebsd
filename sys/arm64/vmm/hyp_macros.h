@@ -352,13 +352,13 @@
 	SAVE_SYS_REG32(HYPCTX_VTIMER_CPU, CNTV_CTL_EL0);\
 							\
 	/*						\
- 	 * ICH_EISR_EL2, ICH_ELSR_EL2 and ICH_MISR_EL2 are read-only and are \
+ 	 * ICH_EISR_EL2, ICH_ELRSR_EL2 and ICH_MISR_EL2 are read-only and are \
 	 * saved because they are modified by the hardware as part of the \
 	 * interrupt virtualization process and we need to inspect them in \
 	 * the VGIC driver. \
  	 */						\
 	SAVE_SYS_REG32(HYPCTX_VGIC, ICH_EISR_EL2);	\
-	SAVE_SYS_REG32(HYPCTX_VGIC, ICH_ELSR_EL2);	\
+	SAVE_SYS_REG32(HYPCTX_VGIC, ICH_ELRSR_EL2);	\
 	SAVE_SYS_REG32(HYPCTX_VGIC, ICH_MISR_EL2);	\
 	SAVE_SYS_REG32(HYPCTX_VGIC, ICH_HCR_EL2);	\
 	SAVE_SYS_REG32(HYPCTX_VGIC, ICH_VMCR_EL2);	\

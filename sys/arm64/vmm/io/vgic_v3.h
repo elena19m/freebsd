@@ -107,7 +107,7 @@ struct vgic_v3_redist {
 struct vgic_v3_irq;
 struct vgic_v3_cpu_if {
 	uint32_t	ich_eisr_el2;	/* End of Interrupt Status Register */
-	uint32_t	ich_elsr_el2;	/* Empty List register Status Register (ICH_ELRSR_EL2) */
+	uint32_t	ich_elrsr_el2;	/* Empty List register Status Register (ICH_ELRSR_EL2) */
 	uint32_t	ich_hcr_el2;	/* Hyp Control Register */
 	uint32_t	ich_misr_el2;	/* Maintenance Interrupt State Register */
 	uint32_t	ich_vmcr_el2;	/* Virtual Machine Control Register */

@@ -117,7 +117,7 @@ ASSYM(HYPCTX_VGIC_ICH_AP0R_NUM, offsetof(struct hypctx, vgic_cpu_if.ich_ap0r_num
 ASSYM(HYPCTX_VGIC_ICH_AP1R_EL2, offsetof(struct hypctx, vgic_cpu_if.ich_ap1r_el2));
 ASSYM(HYPCTX_VGIC_ICH_AP1R_NUM, offsetof(struct hypctx, vgic_cpu_if.ich_ap1r_num));
 ASSYM(HYPCTX_VGIC_ICH_EISR_EL2, offsetof(struct hypctx, vgic_cpu_if.ich_eisr_el2));
-ASSYM(HYPCTX_VGIC_ICH_ELSR_EL2, offsetof(struct hypctx, vgic_cpu_if.ich_elsr_el2));
+ASSYM(HYPCTX_VGIC_ICH_ELRSR_EL2, offsetof(struct hypctx, vgic_cpu_if.ich_elrsr_el2));
 ASSYM(HYPCTX_VGIC_ICH_HCR_EL2, offsetof(struct hypctx, vgic_cpu_if.ich_hcr_el2));
 ASSYM(HYPCTX_VGIC_ICH_MISR_EL2, offsetof(struct hypctx, vgic_cpu_if.ich_misr_el2));
 ASSYM(HYPCTX_VGIC_ICH_VMCR_EL2, offsetof(struct hypctx, vgic_cpu_if.ich_vmcr_el2));
