@@ -15,6 +15,17 @@ MAN=	bhyve.8
 BHYVE_SYSDIR?=${SRCTOP}
 BHYVE_SRCTOP?=${.CURDIR}
 
+#	audio.c			
+#	ctl_util.c		
+#	ctl_scsi_all.c		
+#	fwctl.c			
+#	hda_codec.c		
+#	pci_hda.c		
+#	pci_virtio_scsi.c	
+#	pci_uart.c		
+#	post.c			
+
+
 SRCS=	\
 	net_backends.c		\
 	net_utils.c		\
@@ -59,19 +70,60 @@ SRCS=	\
 	mevent.c		\
 	sockstream.c
 
-.if ${MK_BHYVE_SNAPSHOT} != "no"
-SRCS+=	snapshot.c
+.if ${MACHINE_CPUARCH} == "aarch64"
+# Missing vm_get_ioctls
+CFLAGS+=	-DWITHOUT_CAPSICUM
+
+#SRCS+=	\
+
 .endif
 
-CFLAGS.kernemu_dev.c+=	-I${SRCTOP}/sys/amd64
-
-.PATH:	${BHYVE_SYSDIR}/sys/${BHYVE_ARCH}/vmm
-SRCS+=	vmm_instruction_emul.c
-
-LIBADD=	vmmapi md pthread z util sbuf cam 9p casper cap_pwd cap_grp
-.if ${MK_BHYVE_SNAPSHOT} != "no"
-LIBADD+= ucl xo
+.if ${MACHINE_CPUARCH} == "amd64"
+SRCS+=	\
+	pci_virtio_block.c	\
+	pci_virtio_console.c	\
+	pci_virtio_net.c	\
+	pci_virtio_rnd.c	\
+	pci_emul.c		\
+	pci_irq.c		\
+	pci_virtio.c		\
+	acpi.c			\
+	atkbdc.c		\
+	bhyvegc.c		\
+	bhyverun.c		\
+	bootrom.c		\
+	console.c		\
+	consport.c		\
+	dbgport.c		\
+	gdb.c			\
+	inout.c			\
+	ioapic.c		\
+	mem.c			\
+	mptbl.c			\
+	pci_ahci.c		\
+	pci_hostbridge.c	\
+	pci_e82545.c		\
+	pci_fbuf.c		\
+	pci_lpc.c		\
+	pci_nvme.c		\
+	pci_passthru.c		\
+	pci_xhci.c		\
+	pm.c			\
+	ps2kbd.c		\
+	ps2mouse.c		\
+	uart_emul.c		\
+	usb_emul.c		\
+	usb_mouse.c		\
+	rfb.c			\
+	rtc.c			\
+	task_switch.c		\
+	xmsr.c			\
+	smbiostbl.c		\
+	spinup_ap.c		\
+	vga.c
 .endif
+
+LIBADD=	vmmapi md pthread
 
 .if ${MK_INET_SUPPORT} != "no"
 CFLAGS+=-DINET
