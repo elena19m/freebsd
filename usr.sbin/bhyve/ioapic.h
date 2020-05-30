@@ -32,12 +32,12 @@
 #ifndef _IOAPIC_H_
 #define	_IOAPIC_H_
 
-struct devemu_inst;
+struct pci_devinst;
 
 /*
  * Allocate a PCI IRQ from the I/O APIC.
  */
 void	ioapic_init(struct vmctx *ctx);
-int	ioapic_pci_alloc_irq(struct devemu_inst *pi);
+int	ioapic_pci_alloc_irq(struct pci_devinst *pi);
 
 #endif
