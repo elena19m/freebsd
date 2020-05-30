@@ -50,7 +50,7 @@ __FBSDID("$FreeBSD$");
 #include "debug.h"
 #include "console.h"
 #include "inout.h"
-#include "devemu.h"
+#include "pci_emul.h"
 #include "rfb.h"
 #include "vga.h"
 
@@ -85,7 +85,7 @@ static int fbuf_debug = 1;
 #define ROWS_MIN	480
 
 struct pci_fbuf_softc {
-	struct devemu_inst *fsc_di;
+	struct pci_devinst *fsc_di;
 	struct {
 		uint32_t fbsize;
 		uint16_t width;
@@ -125,7 +125,7 @@ pci_fbuf_usage(char *opt)
 }
 
 static void
-pci_fbuf_write(struct vmctx *ctx, int vcpu, struct devemu_inst *di,
+pci_fbuf_write(struct vmctx *ctx, int vcpu, struct pci_devinst *di,
 	       int baridx, uint64_t offset, int size, uint64_t value)
 {
 	struct pci_fbuf_softc *sc;
@@ -179,7 +179,7 @@ pci_fbuf_write(struct vmctx *ctx, int vcpu, struct devemu_inst *di,
 }
 
 uint64_t
-pci_fbuf_read(struct vmctx *ctx, int vcpu, struct devemu_inst *di,
+pci_fbuf_read(struct vmctx *ctx, int vcpu, struct pci_devinst *di,
 	      int baridx, uint64_t offset, int size)
 {
 	struct pci_fbuf_softc *sc;
@@ -351,7 +351,7 @@ pci_fbuf_render(struct bhyvegc *gc, void *arg)
 }
 
 static int
-pci_fbuf_init(struct vmctx *ctx, struct devemu_inst *di, char *opts)
+pci_fbuf_init(struct vmctx *ctx, struct pci_devinst *di, char *opts)
 {
 	int error, prot;
 	struct pci_fbuf_softc *sc;
@@ -366,15 +366,15 @@ pci_fbuf_init(struct vmctx *ctx, struct devemu_inst *di, char *opts)
 	di->di_arg = sc;
 
 	/* initialize config space */
-	devemu_set_cfgdata16(di, PCIR_DEVICE, 0x40FB);
-	devemu_set_cfgdata16(di, PCIR_VENDOR, 0xFB5D);
-	devemu_set_cfgdata8(di, PCIR_CLASS, PCIC_DISPLAY);
-	devemu_set_cfgdata8(di, PCIR_SUBCLASS, PCIS_DISPLAY_VGA);
+	pci_set_cfgdata16(di, PCIR_DEVICE, 0x40FB);
+	pci_set_cfgdata16(di, PCIR_VENDOR, 0xFB5D);
+	pci_set_cfgdata8(di, PCIR_CLASS, PCIC_DISPLAY);
+	pci_set_cfgdata8(di, PCIR_SUBCLASS, PCIS_DISPLAY_VGA);
 
-	error = devemu_alloc_bar(di, 0, PCIBAR_MEM32, DMEMSZ);
+	error = pci_emul_alloc_bar(di, 0, PCIBAR_MEM32, DMEMSZ);
 	assert(error == 0);
 
-	error = devemu_alloc_bar(di, 1, PCIBAR_MEM32, FB_SIZE);
+	error = pci_emul_alloc_bar(di, 1, PCIBAR_MEM32, FB_SIZE);
 	assert(error == 0);
 
 	error = pci_emul_add_msicap(di, PCI_FBUF_MSI_MSGS);
@@ -463,4 +463,4 @@ struct pci_devemu pci_fbuf = {
 	.pe_snapshot =	pci_fbuf_snapshot,
 #endif
 };
-DEVEMU_SET(pci_fbuf);
+PCI_EMUL_SET(pci_fbuf);

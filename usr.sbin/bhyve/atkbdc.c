@@ -50,7 +50,7 @@ __FBSDID("$FreeBSD$");
 #include "acpi.h"
 #include "atkbdc.h"
 #include "inout.h"
-#include "pci/pci_emul.h"
+#include "pci_emul.h"
 #include "pci/pci_irq.h"
 #include "pci_lpc.h"
 #include "ps2kbd.h"
