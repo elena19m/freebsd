@@ -62,9 +62,9 @@ __FBSDID("$FreeBSD$");
 
 #include "bhyverun.h"
 #include "debug.h"
-#include "pci/pci_emul.h"
-#include "virtio.h"
-#include "amd64/iov.h"
+#include "pci_emul.h"
+#include "pci_virtio.h"
+#include "iov.h"
 
 #define VTSCSI_RINGSZ		64
 #define	VTSCSI_REQUESTQ		1

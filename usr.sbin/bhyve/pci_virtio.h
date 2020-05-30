@@ -28,8 +28,8 @@
  * $FreeBSD$
  */
 
-#ifndef	_VIRTIO_H_
-#define	_VIRTIO_H_
+#ifndef	_PCI_VIRTIO_H_
+#define	_PCI_VIRTIO_H_
 
 #include <machine/atomic.h>
 

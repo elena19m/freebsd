@@ -55,12 +55,12 @@ __FBSDID("$FreeBSD$");
 
 #include "bhyverun.h"
 #include "debug.h"
-#include "pci/pci_emul.h"
+#include "pci_emul.h"
 #include "mevent.h"
-#include "../amd64/virtio.h"
+#include "pci_virtio.h"
 #include "net_utils.h"
 #include "net_backends.h"
-#include "amd64/iov.h"
+#include "iov.h"
 
 #define VTNET_RINGSZ	1024
 
