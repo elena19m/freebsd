@@ -43,8 +43,8 @@ __FBSDID("$FreeBSD$");
 
 #include "bhyverun.h"
 #include "debug.h"
-#include "pci/pci_emul.h"
-#include "virtio.h"
+#include "pci_emul.h"
+#include "pci_virtio.h"
 
 /*
  * Functions for dealing with generalized "virtual devices" as
