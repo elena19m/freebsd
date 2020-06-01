@@ -87,6 +87,7 @@ SRCS+=	\
 	pci_emul.c		\
 	pci_irq.c		\
 	pci_virtio.c		\
+	net_utils.c		\
 	acpi.c			\
 	atkbdc.c		\
 	bhyvegc.c		\
