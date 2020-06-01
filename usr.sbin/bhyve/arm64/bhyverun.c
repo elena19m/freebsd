@@ -73,6 +73,8 @@ char *vmname;
 
 int guest_ncpus;
 
+int raw_stdio = 0;
+
 static int foundcpus;
 
 static char *progname;
