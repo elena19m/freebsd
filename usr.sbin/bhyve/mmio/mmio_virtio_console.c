@@ -42,6 +42,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <dev/pci/pcireg.h>
 
 #ifndef WITHOUT_CAPSICUM
 #include <capsicum_helpers.h>
@@ -643,15 +644,15 @@ pci_vtcon_init(struct vmctx *ctx, struct mmio_devinst *pi, char *opts)
 	}
 
 	/* initialize config space */
-	pci_set_cfgdata16(pi, PCIR_DEVICE, VIRTIO_DEV_CONSOLE);
-	pci_set_cfgdata16(pi, PCIR_VENDOR, VIRTIO_VENDOR);
-	pci_set_cfgdata8(pi, PCIR_CLASS, PCIC_SIMPLECOMM);
-	pci_set_cfgdata16(pi, PCIR_SUBDEV_0, VIRTIO_TYPE_CONSOLE);
-	pci_set_cfgdata16(pi, PCIR_SUBVEND_0, VIRTIO_VENDOR);
+	mmio_set_cfgreg16(pi, PCIR_DEVICE, VIRTIO_DEV_CONSOLE);
+	mmio_set_cfgreg16(pi, PCIR_VENDOR, VIRTIO_VENDOR);
+	mmio_set_cfgreg8(pi, PCIR_CLASS, PCIC_SIMPLECOMM);
+	mmio_set_cfgreg16(pi, PCIR_SUBDEV_0, VIRTIO_TYPE_CONSOLE);
+	mmio_set_cfgreg16(pi, PCIR_SUBVEND_0, VIRTIO_VENDOR);
 
 	if (vi_intr_init(&sc->vsc_vs, 1, fbsdrun_virtio_msix()))
 		return (1);
-	vi_set_io_bar(&sc->vsc_vs, 0);
+	vi_set_io_res(&sc->vsc_vs, 0);
 
 	/* create control port */
 	sc->vsc_control_port.vsp_sc = sc;
@@ -676,9 +677,9 @@ pci_vtcon_init(struct vmctx *ctx, struct mmio_devinst *pi, char *opts)
 }
 
 struct mmio_devemu pci_de_vcon = {
-	.pe_emu =	"virtio-console",
-	.pe_init =	pci_vtcon_init,
-	.pe_barwrite =	vi_devemu_write,
-	.pe_barread =	vi_devemu_read
+	.de_emu =	"virtio-console",
+	.de_init =	pci_vtcon_init,
+	.de_write =	vi_mmio_write,
+	.de_read =	vi_mmio_read
 };
 MMIO_EMUL_SET(pci_de_vcon);
