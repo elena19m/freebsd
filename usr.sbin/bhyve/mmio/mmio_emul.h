@@ -1,5 +1,5 @@
-#ifndef _MMIO_EMUL_H_
-#define _MMIO_EMUL_H_
+#ifndef _EMUL_H_
+#define _EMUL_H_
 
 #include <sys/types.h>
 
@@ -8,6 +8,7 @@
 struct vmctx;
 struct mmio_devinst;
 
+// TODO suggestive naming
 struct mmio_devemu {
 	char *de_emu;		/* Device emulation name */
 
@@ -41,13 +42,14 @@ enum lintr_stat {
 	PENDING
 };
 
+// TODO suggestive naming
 struct mmio_devinst {
-	struct mmio_devemu	*di_d;			/* Back ref to device */
-	struct vmctx		*di_vmctx;		/* Owner VM context */
+	struct mmio_devemu	*pi_d;			/* Back ref to device */
+	struct vmctx		*pi_vmctx;		/* Owner VM context */
 	/* unused for mmio device emulation; may be used as uniquifiers */
-	int			di_slot, di_func;
+	int			pi_slot, di_func;
 
-	char			di_name[DI_NAMESZ];	/* Instance name */
+	char			pi_name[DI_NAMESZ];	/* Instance name */
 
 	struct {
 		enum lintr_stat	state;
@@ -55,9 +57,9 @@ struct mmio_devinst {
 		pthread_mutex_t	lock;
 	} di_lintr;
 
-	void			*di_arg;		/* Private data */
+	void			*pi_arg;		/* Private data */
 
-	u_char			di_cfgregs[MMIO_REGNUM];/* Config regsters */
+	u_char			pi_cfgregs[MMIO_REGNUM];/* Config regsters */
 
 	struct devinst_addr	addr;			/* Address info */
 };
@@ -70,17 +72,45 @@ void mmio_lintr_assert(struct mmio_devinst *di);
 void mmio_lintr_deassert(struct mmio_devinst *di);
 
 static __inline void
-mmio_set_cfgreg(struct mmio_devinst *di, size_t offset, uint32_t val)
+mmio_set_cfgreg8(struct mmio_devinst *di, size_t offset, uint32_t val)
+{
+	assert(offset <= MMIO_REGMAX);
+	*(uint32_t *)(di->pi_cfgregs + offset) = val;
+}
+
+static __inline void
+mmio_set_cfgreg16(struct mmio_devinst *di, size_t offset, uint32_t val)
+{
+	assert(offset <= (MMIO_REGMAX - 1) && (offset & 1) == 0);
+	*(uint32_t *)(di->pi_cfgregs + offset) = val;
+}
+
+static __inline void
+mmio_set_cfgreg32(struct mmio_devinst *di, size_t offset, uint32_t val)
 {
 	assert(offset <= (MMIO_REGMAX - 3) && (offset & 3) == 0);
-	*(uint32_t *)(di->di_cfgregs + offset) = val;
+	*(uint32_t *)(di->pi_cfgregs + offset) = val;
+}
+
+static __inline uint8_t
+mmio_get_cfgreg8(struct mmio_devinst *di, size_t offset)
+{
+	assert(offset <= MMIO_REGMAX);
+	return (*(uint32_t *)(di->pi_cfgregs + offset));
+}
+
+static __inline uint16_t
+mmio_get_cfgreg16(struct mmio_devinst *di, size_t offset)
+{
+	assert(offset <= (MMIO_REGMAX - 1) && (offset & 1) == 0);
+	return (*(uint32_t *)(di->pi_cfgregs + offset));
 }
 
 static __inline uint32_t
-mmio_get_cfgreg(struct mmio_devinst *di, size_t offset)
+mmio_get_cfgreg32(struct mmio_devinst *di, size_t offset)
 {
 	assert(offset <= (MMIO_REGMAX - 3) && (offset & 3) == 0);
-	return (*(uint32_t *)(di->di_cfgregs + offset));
+	return (*(uint32_t *)(di->pi_cfgregs + offset));
 }
 
-#endif /* _MMIO_EMUL_H_ */
+#endif /* _EMUL_H_ */
