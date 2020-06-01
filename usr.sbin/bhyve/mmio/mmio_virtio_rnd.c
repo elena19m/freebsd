@@ -55,6 +55,7 @@ __FBSDID("$FreeBSD$");
 #include <unistd.h>
 #include <assert.h>
 #include <pthread.h>
+#include <dev/pci/pcireg.h>
 #include <sysexits.h>
 
 #include "bhyverun.h"
@@ -188,24 +189,24 @@ pci_vtrnd_init(struct vmctx *ctx, struct mmio_devinst *pi, char *opts)
 	sc->vrsc_fd = fd;
 
 	/* initialize config space */
-	pci_set_cfgdata16(pi, PCIR_DEVICE, VIRTIO_DEV_RANDOM);
-	pci_set_cfgdata16(pi, PCIR_VENDOR, VIRTIO_VENDOR);
-	pci_set_cfgdata8(pi, PCIR_CLASS, PCIC_CRYPTO);
-	pci_set_cfgdata16(pi, PCIR_SUBDEV_0, VIRTIO_TYPE_ENTROPY);
-	pci_set_cfgdata16(pi, PCIR_SUBVEND_0, VIRTIO_VENDOR);
+	mmio_set_cfgreg16(pi, PCIR_DEVICE, VIRTIO_DEV_RANDOM);
+	mmio_set_cfgreg16(pi, PCIR_VENDOR, VIRTIO_VENDOR);
+	mmio_set_cfgreg8(pi, PCIR_CLASS, PCIC_CRYPTO);
+	mmio_set_cfgreg16(pi, PCIR_SUBDEV_0, VIRTIO_TYPE_ENTROPY);
+	mmio_set_cfgreg16(pi, PCIR_SUBVEND_0, VIRTIO_VENDOR);
 
 	if (vi_intr_init(&sc->vrsc_vs, 1, fbsdrun_virtio_msix()))
 		return (1);
-	vi_set_io_bar(&sc->vrsc_vs, 0);
+	vi_set_io_res(&sc->vrsc_vs, 0);
 
 	return (0);
 }
 
 
 struct mmio_devemu pci_de_vrnd = {
-	.pe_emu =	"virtio-rnd",
-	.pe_init =	pci_vtrnd_init,
-	.pe_barwrite =	vi_devemu_write,
-	.pe_barread =	vi_devemu_read
+	.de_emu =	"virtio-rnd",
+	.de_init =	pci_vtrnd_init,
+	.de_write =	vi_mmio_write,
+	.de_read =	vi_mmio_read
 };
 MMIO_EMUL_SET(pci_de_vrnd);

@@ -718,24 +718,24 @@ pci_vtscsi_init(struct vmctx *ctx, struct mmio_devinst *pi, char *opts)
 	}
 
 	/* initialize config space */
-	pci_set_cfgdata16(pi, PCIR_DEVICE, VIRTIO_DEV_SCSI);
-	pci_set_cfgdata16(pi, PCIR_VENDOR, VIRTIO_VENDOR);
-	pci_set_cfgdata8(pi, PCIR_CLASS, PCIC_STORAGE);
-	pci_set_cfgdata16(pi, PCIR_SUBDEV_0, VIRTIO_TYPE_SCSI);
-	pci_set_cfgdata16(pi, PCIR_SUBVEND_0, VIRTIO_VENDOR);
+	mmio_set_cfgreg16(pi, PCIR_DEVICE, VIRTIO_DEV_SCSI);
+	mmio_set_cfgreg16(pi, PCIR_VENDOR, VIRTIO_VENDOR);
+	mmio_set_cfgreg8(pi, PCIR_CLASS, PCIC_STORAGE);
+	mmio_set_cfgreg16(pi, PCIR_SUBDEV_0, VIRTIO_TYPE_SCSI);
+	mmio_set_cfgreg16(pi, PCIR_SUBVEND_0, VIRTIO_VENDOR);
 
 	if (vi_intr_init(&sc->vss_vs, 1, fbsdrun_virtio_msix()))
 		return (1);
-	vi_set_io_bar(&sc->vss_vs, 0);
+	vi_set_io_res(&sc->vss_vs, 0);
 
 	return (0);
 }
 
 
 struct mmio_devemu pci_de_vscsi = {
-	.pe_emu =	"virtio-scsi",
-	.pe_init =	pci_vtscsi_init,
-	.pe_barwrite =	vi_devemu_write,
-	.pe_barread =	vi_devemu_read
+	.de_emu =	"virtio-scsi",
+	.de_init =	pci_vtscsi_init,
+	.de_write =	vi_mmio_write,
+	.de_read =	vi_mmio_read
 };
 MMIO_EMUL_SET(pci_de_vscsi);

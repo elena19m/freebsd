@@ -51,6 +51,7 @@ __FBSDID("$FreeBSD$");
 #include <assert.h>
 #include <pthread.h>
 #include <pthread_np.h>
+#include <dev/pci/pcireg.h>
 
 #include "bhyverun.h"
 #include "debug.h"
@@ -285,14 +286,15 @@ pci_vtnet_rx(struct pci_vtnet_softc *sc)
 				if (iolen > ulen) {
 					iolen = ulen;
 				}
-				vq_relchain_prepare(vq, info[i].idx, iolen);
+				vq_relchain(vq, info[i].idx, iolen);
 				ulen -= iolen;
 				i++;
 				assert(i <= n_chains);
 			} while (ulen > 0);
 
 			hdr->vrh_bufs = i;
-			vq_relchain_publish(vq);
+			// TODO add publish for arm64
+			//vq_relchain_publish(vq);
 			vq_retchains(vq, n_chains - i);
 		}
 	}
@@ -498,11 +500,11 @@ pci_vtnet_init(struct vmctx *ctx, struct mmio_devinst *pi, char *opts)
 	}
 
 	/* initialize config space */
-	pci_set_cfgdata16(pi, PCIR_DEVICE, VIRTIO_DEV_NET);
-	pci_set_cfgdata16(pi, PCIR_VENDOR, VIRTIO_VENDOR);
-	pci_set_cfgdata8(pi, PCIR_CLASS, PCIC_NETWORK);
-	pci_set_cfgdata16(pi, PCIR_SUBDEV_0, VIRTIO_TYPE_NET);
-	pci_set_cfgdata16(pi, PCIR_SUBVEND_0, VIRTIO_VENDOR);
+	mmio_set_cfgreg16(pi, PCIR_DEVICE, VIRTIO_DEV_NET);
+	mmio_set_cfgreg16(pi, PCIR_VENDOR, VIRTIO_VENDOR);
+	mmio_set_cfgreg8(pi, PCIR_CLASS, PCIC_NETWORK);
+	mmio_set_cfgreg16(pi, PCIR_SUBDEV_0, VIRTIO_TYPE_NET);
+	mmio_set_cfgreg16(pi, PCIR_SUBVEND_0, VIRTIO_VENDOR);
 
 	/* Link is up if we managed to open backend device. */
 	sc->vsc_config.status = (opts == NULL || sc->vsc_be);
@@ -517,7 +519,7 @@ pci_vtnet_init(struct vmctx *ctx, struct mmio_devinst *pi, char *opts)
 	}
 
 	/* use BAR 0 to map config regs in IO space */
-	vi_set_io_bar(&sc->vsc_vs, 0);
+	vi_set_io_res(&sc->vsc_vs, 0);
 
 	sc->resetting = 0;
 
@@ -534,7 +536,7 @@ pci_vtnet_init(struct vmctx *ctx, struct mmio_devinst *pi, char *opts)
 	pthread_cond_init(&sc->tx_cond, NULL);
 	pthread_create(&sc->tx_tid, NULL, pci_vtnet_tx_thread, (void *)sc);
 	snprintf(tname, sizeof(tname), "vtnet-%d:%d tx", pi->pi_slot,
-	    pi->pi_func);
+	    pi->di_func);
 	pthread_set_name_np(sc->tx_tid, tname);
 
 	return (0);
@@ -597,9 +599,9 @@ pci_vtnet_neg_features(void *vsc, uint64_t negotiated_features)
 }
 
 static struct mmio_devemu pci_de_vnet = {
-	.pe_emu = 	"virtio-net",
-	.pe_init =	pci_vtnet_init,
-	.pe_barwrite =	vi_devemu_write,
-	.pe_barread =	vi_devemu_read
+	.de_emu = 	"virtio-net",
+	.de_init =	pci_vtnet_init,
+	.de_write =	vi_mmio_write,
+	.de_read =	vi_mmio_read
 };
 MMIO_EMUL_SET(pci_de_vnet);
