@@ -50,6 +50,7 @@ __FBSDID("$FreeBSD$");
 #include <assert.h>
 #include <pthread.h>
 #include <md5.h>
+#include <dev/pci/pcireg.h>
 
 #include "bhyverun.h"
 #include "debug.h"
@@ -313,7 +314,7 @@ pci_vtblk_init(struct vmctx *ctx, struct mmio_devinst *pi, char *opts)
 	/*
 	 * The supplied backing file has to exist
 	 */
-	snprintf(bident, sizeof(bident), "%d:%d", pi->pi_slot, pi->pi_func);
+	snprintf(bident, sizeof(bident), "%d:%d", pi->pi_slot, pi->di_func);
 	bctxt = blockif_open(opts, bident);
 	if (bctxt == NULL) {
 		perror("Could not open backing file");
@@ -383,18 +384,18 @@ pci_vtblk_init(struct vmctx *ctx, struct mmio_devinst *pi, char *opts)
 	 * have the device, class, and subdev_0 as fields in
 	 * the virtio constants structure.
 	 */
-	pci_set_cfgdata16(pi, PCIR_DEVICE, VIRTIO_DEV_BLOCK);
-	pci_set_cfgdata16(pi, PCIR_VENDOR, VIRTIO_VENDOR);
-	pci_set_cfgdata8(pi, PCIR_CLASS, PCIC_STORAGE);
-	pci_set_cfgdata16(pi, PCIR_SUBDEV_0, VIRTIO_TYPE_BLOCK);
-	pci_set_cfgdata16(pi, PCIR_SUBVEND_0, VIRTIO_VENDOR);
+	mmio_set_cfgreg16(pi, PCIR_DEVICE, VIRTIO_DEV_BLOCK);
+	mmio_set_cfgreg16(pi, PCIR_VENDOR, VIRTIO_VENDOR);
+	mmio_set_cfgreg8(pi, PCIR_CLASS, PCIC_STORAGE);
+	mmio_set_cfgreg16(pi, PCIR_SUBDEV_0, VIRTIO_TYPE_BLOCK);
+	mmio_set_cfgreg16(pi, PCIR_SUBVEND_0, VIRTIO_VENDOR);
 
 	if (vi_intr_init(&sc->vbsc_vs, 1, fbsdrun_virtio_msix())) {
 		blockif_close(sc->bc);
 		free(sc);
 		return (1);
 	}
-	vi_set_io_bar(&sc->vbsc_vs, 0);
+	vi_set_io_res(&sc->vbsc_vs, 0);
 	return (0);
 }
 
@@ -419,9 +420,9 @@ pci_vtblk_cfgread(void *vsc, int offset, int size, uint32_t *retval)
 }
 
 struct mmio_devemu pci_de_vblk = {
-	.pe_emu =	"virtio-blk",
-	.pe_init =	pci_vtblk_init,
-	.pe_barwrite =	vi_devemu_write,
-	.pe_barread =	vi_devemu_read
+	.de_emu =	"virtio-blk",
+	.de_init =	pci_vtblk_init,
+	.de_write =	vi_mmio_write,
+	.de_read =	vi_mmio_read
 };
 MMIO_EMUL_SET(pci_de_vblk);
