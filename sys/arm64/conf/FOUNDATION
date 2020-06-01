@@ -106,6 +106,7 @@ device		virtio
 device		virtio_pci
 device		virtio_mmio
 device		virtio_blk
+device		virtio_random
 device		vtnet
 
 # CPU frequency control
