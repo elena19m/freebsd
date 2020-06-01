@@ -28,8 +28,8 @@
  * $FreeBSD$
  */
 
-#ifndef _PCI_EMUL_H_
-#define _PCI_EMUL_H_
+#ifndef _EMUL_H_
+#define _EMUL_H_
 
 #include <sys/types.h>
 #include <sys/queue.h>
@@ -296,4 +296,4 @@ pci_get_cfgdata32(struct pci_devinst *pi, int offset)
 	return (*(uint32_t *)(pi->pi_cfgdata + offset));
 }
 
-#endif /* _PCI_EMUL_H_ */
+#endif /* _EMUL_H_ */
