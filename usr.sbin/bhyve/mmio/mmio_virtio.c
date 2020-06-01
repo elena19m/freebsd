@@ -74,7 +74,7 @@ vi_softc_linkup(struct virtio_softc *vs, struct virtio_consts *vc,
 	assert((void *)vs == dev_softc);
 	vs->vs_vc = vc;
 	vs->vs_di = di;
-	di->di_arg = vs;
+	di->pi_arg = vs;
 
 	vs->vs_queues = queues;
 	for (i = 0; i < vc->vc_nvq; i++) {
@@ -147,7 +147,7 @@ vi_vq_init(struct virtio_softc *vs, uint32_t pfn)
 	vq->vq_pfn = pfn;
 	phys = (uint64_t)pfn * vs->vs_guest_page_size;
 	size = vring_size(vq->vq_qsize, vs->vs_align);
-	base = paddr_guest2host(vs->vs_di->di_vmctx, phys, size);
+	base = paddr_guest2host(vs->vs_di->pi_vmctx, phys, size);
 
 	/* First page(s) are descriptors... */
 	vq->vq_desc = (struct virtio_desc *)base;
@@ -273,7 +273,7 @@ vq_getchain(struct vqueue_info *vq, uint16_t *pidx,
 	 * check whether we're re-visiting a previously visited
 	 * index, but we just abort if the count gets excessive.
 	 */
-	ctx = vs->vs_di->di_vmctx;
+	ctx = vs->vs_di->pi_vmctx;
 	*pidx = next = vq->vq_avail->va_ring[idx & (vq->vq_qsize - 1)];
 	vq->vq_last_avail++;
 	for (i = 0; i < VQ_MAX_DESCRIPTORS; next = vdir->vd_next) {
@@ -355,10 +355,10 @@ loopy:
  * and used its positive return value.)
  */
 void
-vq_retchain(struct vqueue_info *vq)
+vq_retchains(struct vqueue_info *vq, uint16_t n_chains)
 {
 
-	vq->vq_last_avail--;
+	vq->vq_last_avail -= n_chains;
 }
 
 /*
@@ -455,10 +455,10 @@ vq_endchains(struct vqueue_info *vq, int used_all_avail)
  * Otherwise dispatch to the actual driver.
  */
 uint64_t
-vi_devemu_read(struct vmctx *ctx, int vcpu, struct mmio_devinst *di,
+vi_mmio_read(struct vmctx *ctx, int vcpu, struct mmio_devinst *di,
 	       int baridx, uint64_t offset, int size)
 {
-	struct virtio_softc *vs = di->di_arg;
+	struct virtio_softc *vs = di->pi_arg;
 	struct virtio_consts *vc;
 	const char *name;
 	uint64_t sel;
@@ -489,31 +489,31 @@ vi_devemu_read(struct vmctx *ctx, int vcpu, struct mmio_devinst *di,
 
 	switch (offset) {
 	case VIRTIO_MMIO_MAGIC_VALUE:
-		value = mmio_get_cfgreg(di, offset);
+		value = mmio_get_cfgreg32(di, offset);
 		CFG_RW_DBG(VIRTIO_MMIO_MAGIC_VALUE, value);
 		break;
 	case VIRTIO_MMIO_VERSION:
-		value = mmio_get_cfgreg(di, offset);
+		value = mmio_get_cfgreg32(di, offset);
 		CFG_RW_DBG(VIRTIO_MMIO_VERSION, value);
 		break;
 	case VIRTIO_MMIO_DEVICE_ID:
-		value = mmio_get_cfgreg(di, offset);
+		value = mmio_get_cfgreg32(di, offset);
 		CFG_RW_DBG(VIRTIO_MMIO_DEVICE_ID, value);
 		break;
 	case VIRTIO_MMIO_VENDOR_ID:
-		value = mmio_get_cfgreg(di, offset);
+		value = mmio_get_cfgreg32(di, offset);
 		CFG_RW_DBG(VIRTIO_MMIO_VENDOR_ID, value);
 		break;
 	case VIRTIO_MMIO_INTERRUPT_STATUS:
-		value = mmio_get_cfgreg(di, offset);
+		value = mmio_get_cfgreg32(di, offset);
 		CFG_RW_DBG(VIRTIO_MMIO_INTERRUPT_STATUS, value);
 		break;
 	case VIRTIO_MMIO_STATUS:
-		value = mmio_get_cfgreg(di, offset);
+		value = mmio_get_cfgreg32(di, offset);
 		CFG_RW_DBG(VIRTIO_MMIO_STATUS, value);
 		break;
 	case VIRTIO_MMIO_HOST_FEATURES:
-		sel = mmio_get_cfgreg(di, VIRTIO_MMIO_HOST_FEATURES_SEL);
+		sel = mmio_get_cfgreg32(di, VIRTIO_MMIO_HOST_FEATURES_SEL);
 		value = (vc->vc_hv_caps >> (32 * sel)) & 0xffffffff;
 		CFG_RW_DBG(VIRTIO_MMIO_HOST_FEATURES, value);
 		break;
@@ -552,10 +552,10 @@ done:
  * Otherwise dispatch to the actual driver.
  */
 void
-vi_devemu_write(struct vmctx *ctx, int vcpu, struct mmio_devinst *di,
+vi_mmio_write(struct vmctx *ctx, int vcpu, struct mmio_devinst *di,
 		int baridx, uint64_t offset, int size, uint64_t value)
 {
-	struct virtio_softc *vs = di->di_arg;
+	struct virtio_softc *vs = di->pi_arg;
 	struct vqueue_info *vq;
 	struct virtio_consts *vc;
 	const char *name;
@@ -584,45 +584,45 @@ vi_devemu_write(struct vmctx *ctx, int vcpu, struct mmio_devinst *di,
 	switch (offset) {
 	case VIRTIO_MMIO_HOST_FEATURES_SEL:
 		CFG_RW_DBG(VIRTIO_MMIO_HOST_FEATURES_SEL, value);
-		mmio_set_cfgreg(di, offset, value);
+		mmio_set_cfgreg32(di, offset, value);
 		break;
 	case VIRTIO_MMIO_GUEST_FEATURES_SEL:
 		CFG_RW_DBG(VIRTIO_MMIO_GUEST_FEATURES_SEL, value);
-		mmio_set_cfgreg(di, offset, value);
+		mmio_set_cfgreg32(di, offset, value);
 		break;
 	case VIRTIO_MMIO_INTERRUPT_ACK:
 		CFG_RW_DBG(VIRTIO_MMIO_INTERRUPT_ACK, value);
 		mmio_lintr_deassert(di);
-		mmio_set_cfgreg(di, offset, value);
+		mmio_set_cfgreg32(di, offset, value);
 		break;
 	case VIRTIO_MMIO_STATUS:
 		CFG_RW_DBG(VIRTIO_MMIO_STATUS, value);
-		mmio_set_cfgreg(di, offset, value);
+		mmio_set_cfgreg32(di, offset, value);
 		vs->vs_status = value;
 		if (value == 0)
 			(*vc->vc_reset)(DEV_SOFTC(vs));
 		break;
 	case VIRTIO_MMIO_QUEUE_NUM:
 		CFG_RW_DBG(VIRTIO_MMIO_QUEUE_NUM, value);
-		mmio_set_cfgreg(di, offset, value);
+		mmio_set_cfgreg32(di, offset, value);
 		vq = &vs->vs_queues[vs->vs_curq];
 		vq->vq_qsize = value;
 		break;
 	case VIRTIO_MMIO_GUEST_FEATURES:
 		CFG_RW_DBG(VIRTIO_MMIO_GUEST_FEATURES, value);
-		mmio_set_cfgreg(di, offset, value);
+		mmio_set_cfgreg32(di, offset, value);
 		vs->vs_negotiated_caps = value & vc->vc_hv_caps;
 		if (vc->vc_apply_features)
 			(*vc->vc_apply_features)(DEV_SOFTC(vs),
 			    vs->vs_negotiated_caps);
 		break;
 	case VIRTIO_MMIO_GUEST_PAGE_SIZE:
-		mmio_set_cfgreg(di, offset, value);
+		mmio_set_cfgreg32(di, offset, value);
 		vs->vs_guest_page_size = value;
 		break;
 	case VIRTIO_MMIO_QUEUE_SEL:
 		CFG_RW_DBG(VIRTIO_MMIO_QUEUE_SEL, value);
-		mmio_set_cfgreg(di, offset, value);
+		mmio_set_cfgreg32(di, offset, value);
 		/*
 		 * Note that the guest is allowed to select an
 		 * invalid queue; we just need to return a QNUM
@@ -632,12 +632,12 @@ vi_devemu_write(struct vmctx *ctx, int vcpu, struct mmio_devinst *di,
 		break;
 	case VIRTIO_MMIO_QUEUE_ALIGN:
 		CFG_RW_DBG(VIRTIO_MMIO_QUEUE_ALIGN, value);
-		mmio_set_cfgreg(di, offset, value);
+		mmio_set_cfgreg32(di, offset, value);
 		vs->vs_align = value;
 		break;
 	case VIRTIO_MMIO_QUEUE_PFN:
 		CFG_RW_DBG(VIRTIO_MMIO_QUEUE_PFN, value);
-		mmio_set_cfgreg(di, offset, value);
+		mmio_set_cfgreg32(di, offset, value);
 		if (vs->vs_curq >= vc->vc_nvq)
 			fprintf(stderr, "%s: curq %d >= max %d\r\n",
 				name, vs->vs_curq, vc->vc_nvq);
@@ -651,7 +651,7 @@ vi_devemu_write(struct vmctx *ctx, int vcpu, struct mmio_devinst *di,
 				name, (int)value);
 			break;
 		}
-		mmio_set_cfgreg(di, offset, value);
+		mmio_set_cfgreg32(di, offset, value);
 		vq = &vs->vs_queues[value];
 		if (vq->vq_notify)
 			(*vq->vq_notify)(DEV_SOFTC(vs), vq);
@@ -700,8 +700,8 @@ vi_devemu_init(struct mmio_devinst *di, uint32_t type)
 		return;
 	}
 
-	mmio_set_cfgreg(di, VIRTIO_MMIO_MAGIC_VALUE, VIRTIO_MMIO_MAGIC_NUM);
-	mmio_set_cfgreg(di, VIRTIO_MMIO_VERSION, VIRTIO_MMIO_VERSION_NUM);
-	mmio_set_cfgreg(di, VIRTIO_MMIO_DEVICE_ID, id);
-	mmio_set_cfgreg(di, VIRTIO_MMIO_VENDOR_ID, VIRTIO_VENDOR);
+	mmio_set_cfgreg32(di, VIRTIO_MMIO_MAGIC_VALUE, VIRTIO_MMIO_MAGIC_NUM);
+	mmio_set_cfgreg32(di, VIRTIO_MMIO_VERSION, VIRTIO_MMIO_VERSION_NUM);
+	mmio_set_cfgreg32(di, VIRTIO_MMIO_DEVICE_ID, id);
+	mmio_set_cfgreg32(di, VIRTIO_MMIO_VENDOR_ID, VIRTIO_VENDOR);
 }

@@ -11,7 +11,7 @@ __FBSDID("$FreeBSD$");
 #include <stdlib.h>
 #include <string.h>
 
-#include "mem.h"
+#include "arm64/mem.h"
 #include "mmio_emul.h"
 #include "mmio_irq.h"
 
@@ -169,7 +169,7 @@ mmio_mem_handler(struct vmctx *ctx, int vcpu, int dir, uint64_t addr,
 		      int size, uint64_t *val, void *arg1, long arg2)
 {
 	struct mmio_devinst *di = arg1;
-	struct mmio_devemu *de = di->di_d;
+	struct mmio_devemu *de = di->pi_d;
 	uint64_t offset;
 	int bidx = (int) arg2;
 
@@ -210,7 +210,7 @@ modify_mmio_registration(struct mmio_devinst *di, int registration)
 	struct mem_range mr;
 
 	bzero(&mr, sizeof(struct mem_range));
-	mr.name = di->di_name;
+	mr.name = di->pi_name;
 	mr.base = di->addr.baddr;
 	mr.size = di->addr.size;
 	if (registration) {
@@ -319,9 +319,9 @@ mmio_init(struct vmctx *ctx, struct mmio_devemu *de, struct mmio_emul_info *dif)
 	if (di == NULL)
 		return (ENOMEM);
 
-	di->di_d = de;
-	di->di_vmctx = ctx;
-	snprintf(di->di_name, DI_NAMESZ, "%s-mmio", de->de_emu);
+	di->pi_d = de;
+	di->pi_vmctx = ctx;
+	snprintf(di->pi_name, DI_NAMESZ, "%s-mmio", de->de_emu);
 	di->di_lintr.state = IDLE;
 	di->di_lintr.irq = dif->irq;
 	pthread_mutex_init(&di->di_lintr.lock, NULL);
@@ -329,7 +329,7 @@ mmio_init(struct vmctx *ctx, struct mmio_devemu *de, struct mmio_emul_info *dif)
 	di->addr.size = dif->size;
 	/* some devices (e.g., virtio-net) use these as uniquifiers; irq number
 	 * should be unique and sufficient */
-	di->di_slot = dif->irq;
+	di->pi_slot = dif->irq;
 	di->di_func = dif->irq;
 
 	error = (*de->de_init)(ctx, di, dif->arg);
@@ -338,7 +338,7 @@ mmio_init(struct vmctx *ctx, struct mmio_devemu *de, struct mmio_emul_info *dif)
 		dif->di = di;
 	} else {
 		fprintf(stderr, "Device \"%s\": initialization failed\r\n",
-			di->di_name);
+			di->pi_name);
 		fprintf(stderr, "Device arguments were: %s\r\n", dif->arg);
 		free(di);
 	}

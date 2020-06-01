@@ -68,12 +68,12 @@ mmio_irq_assert(struct mmio_devinst *di)
 
 	pthread_mutex_lock(&di->di_lintr.lock);
 
-	irq_status = mmio_get_cfgreg(di, VIRTIO_MMIO_INTERRUPT_STATUS);
+	irq_status = mmio_get_cfgreg32(di, VIRTIO_MMIO_INTERRUPT_STATUS);
 	irq_status |= VIRTIO_MMIO_INT_VRING;
-	mmio_set_cfgreg(di, VIRTIO_MMIO_INTERRUPT_STATUS, irq_status);
+	mmio_set_cfgreg32(di, VIRTIO_MMIO_INTERRUPT_STATUS, irq_status);
 
 	if (irq->active_count == 1)
-		vm_assert_irq(di->di_vmctx, di->di_lintr.irq);
+		vm_assert_irq(di->pi_vmctx, di->di_lintr.irq);
 
 	pthread_mutex_unlock(&di->di_lintr.lock);
 
@@ -97,9 +97,9 @@ mmio_irq_deassert(struct mmio_devinst *di)
 
 	pthread_mutex_lock(&di->di_lintr.lock);
 
-	irq_status = mmio_get_cfgreg(di, VIRTIO_MMIO_INTERRUPT_STATUS);
+	irq_status = mmio_get_cfgreg32(di, VIRTIO_MMIO_INTERRUPT_STATUS);
 	irq_status &= ~VIRTIO_MMIO_INT_VRING;
-	mmio_set_cfgreg(di, VIRTIO_MMIO_INTERRUPT_STATUS, irq_status);
+	mmio_set_cfgreg32(di, VIRTIO_MMIO_INTERRUPT_STATUS, irq_status);
 
 #if 0
 	/* MMIO devices do not require deassertions */
