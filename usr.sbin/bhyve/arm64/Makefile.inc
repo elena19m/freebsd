@@ -2,12 +2,12 @@
 # $FreeBSD$
 #
 .PATH: ${BHYVE_SRCTOP}/arm64/
-SRCS+=			\
-	bhyverun.c 	\
-	mem.c 		\
-	consport.c
+SRCS+=				\
+	arm64/bhyverun.c 	\
+	arm64/mem.c		\
+	arm64/consport.c
 
-.PATH:	${.CURDIR}/../../sys/arm64/vmm
+.PATH:	${BHYVE_SYSDIR}/sys/${BHYVE_ARCH}/vmm
 
 MK_MAN=no
 
