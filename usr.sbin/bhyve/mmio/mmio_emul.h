@@ -26,7 +26,7 @@ struct mmio_devemu {
 			    uint64_t offset, int size);
 };
 
-#define	MMIO_EMUL_SET(x)	DATA_SET(devemu_set, x);
+#define	MMIO_EMUL_SET(x)	DATA_SET(mmio_set, x);
 #define	DI_NAMESZ		40
 #define	MMIO_REGMAX		0xff
 #define	MMIO_REGNUM		(MMIO_REGMAX + 1)
