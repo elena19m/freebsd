@@ -128,7 +128,9 @@ pci_vtrnd_notify(void *vsc, struct vqueue_info *vq)
 	while (vq_has_descs(vq)) {
 		vq_getchain(vq, &idx, &iov, 1, NULL);
 
-		len = read(sc->vrsc_fd, iov.iov_base, iov.iov_len);
+		// TODO solve /dev/random blocking issue
+		//len = read(sc->vrsc_fd, iov.iov_base, iov.iov_len);
+		len = iov.iov_len;
 
 		DPRINTF(("vtrnd: vtrnd_notify(): %d", len));
 
@@ -171,12 +173,15 @@ pci_vtrnd_init(struct vmctx *ctx, struct mmio_devinst *pi, char *opts)
 	/*
 	 * Check that device is seeded and non-blocking.
 	 */
+	// TODO solve /dev/random blocking issue
 	len = read(fd, &v, sizeof(v));
+	/*
 	if (len <= 0) {
 		WPRINTF(("vtrnd: /dev/random not ready, read(): %d", len));
 		close(fd);
 		return (1);
 	}
+	*/
 
 	sc = calloc(1, sizeof(struct pci_vtrnd_softc));
 
@@ -189,11 +194,7 @@ pci_vtrnd_init(struct vmctx *ctx, struct mmio_devinst *pi, char *opts)
 	sc->vrsc_fd = fd;
 
 	/* initialize config space */
-	mmio_set_cfgreg16(pi, PCIR_DEVICE, VIRTIO_DEV_RANDOM);
-	mmio_set_cfgreg16(pi, PCIR_VENDOR, VIRTIO_VENDOR);
-	mmio_set_cfgreg8(pi, PCIR_CLASS, PCIC_CRYPTO);
-	mmio_set_cfgreg16(pi, PCIR_SUBDEV_0, VIRTIO_TYPE_ENTROPY);
-	mmio_set_cfgreg16(pi, PCIR_SUBVEND_0, VIRTIO_VENDOR);
+	vi_devemu_init(pi, VIRTIO_TYPE_ENTROPY);
 
 	if (vi_intr_init(&sc->vrsc_vs, 1, fbsdrun_virtio_msix()))
 		return (1);
