@@ -480,5 +480,5 @@ uint64_t vi_mmio_read(struct vmctx *ctx, int vcpu, struct mmio_devinst *di,
 			int baridx, uint64_t offset, int size);
 void	vi_mmio_write(struct vmctx *ctx, int vcpu, struct mmio_devinst *di,
 			int baridx, uint64_t offset, int size, uint64_t value);
-void	vi_mmio_init(struct mmio_devinst *di, uint32_t type);
+void	vi_devemu_init(struct mmio_devinst *di, uint32_t type);
 #endif	/* _VIRTIO_H_ */
