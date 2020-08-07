@@ -384,11 +384,7 @@ pci_vtblk_init(struct vmctx *ctx, struct mmio_devinst *pi, char *opts)
 	 * have the device, class, and subdev_0 as fields in
 	 * the virtio constants structure.
 	 */
-	mmio_set_cfgreg16(pi, PCIR_DEVICE, VIRTIO_DEV_BLOCK);
-	mmio_set_cfgreg16(pi, PCIR_VENDOR, VIRTIO_VENDOR);
-	mmio_set_cfgreg8(pi, PCIR_CLASS, PCIC_STORAGE);
-	mmio_set_cfgreg16(pi, PCIR_SUBDEV_0, VIRTIO_TYPE_BLOCK);
-	mmio_set_cfgreg16(pi, PCIR_SUBVEND_0, VIRTIO_VENDOR);
+	vi_devemu_init(pi, VIRTIO_TYPE_BLOCK);
 
 	if (vi_intr_init(&sc->vbsc_vs, 1, fbsdrun_virtio_msix())) {
 		blockif_close(sc->bc);

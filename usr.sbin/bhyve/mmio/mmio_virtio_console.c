@@ -644,11 +644,7 @@ pci_vtcon_init(struct vmctx *ctx, struct mmio_devinst *pi, char *opts)
 	}
 
 	/* initialize config space */
-	mmio_set_cfgreg16(pi, PCIR_DEVICE, VIRTIO_DEV_CONSOLE);
-	mmio_set_cfgreg16(pi, PCIR_VENDOR, VIRTIO_VENDOR);
-	mmio_set_cfgreg8(pi, PCIR_CLASS, PCIC_SIMPLECOMM);
-	mmio_set_cfgreg16(pi, PCIR_SUBDEV_0, VIRTIO_TYPE_CONSOLE);
-	mmio_set_cfgreg16(pi, PCIR_SUBVEND_0, VIRTIO_VENDOR);
+	vi_devemu_init(pi, VIRTIO_TYPE_CONSOLE);
 
 	if (vi_intr_init(&sc->vsc_vs, 1, fbsdrun_virtio_msix()))
 		return (1);
