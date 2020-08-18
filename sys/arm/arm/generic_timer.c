@@ -542,8 +542,7 @@ arm_tmr_attach(device_t dev)
 	arm_tmr_sc = sc;
 
 	/* Setup secure, non-secure and virtual IRQs handler */
-	//for (i = GT_PHYS_SECURE; i <= GT_PHYS_NONSECURE; i++) {
-	for (i = first_timer; i <= last_timer; i++) {
+	for (i = GT_PHYS_SECURE; i <= GT_PHYS_NONSECURE; i++) {
 		/* If we do not have the interrupt, skip it. */
 		if (sc->res[i] == NULL)
 			continue;
