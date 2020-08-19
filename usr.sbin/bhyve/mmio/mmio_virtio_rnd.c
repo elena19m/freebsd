@@ -128,9 +128,7 @@ pci_vtrnd_notify(void *vsc, struct vqueue_info *vq)
 	while (vq_has_descs(vq)) {
 		vq_getchain(vq, &idx, &iov, 1, NULL);
 
-		// TODO solve /dev/random blocking issue
-		//len = read(sc->vrsc_fd, iov.iov_base, iov.iov_len);
-		len = iov.iov_len;
+		len = read(sc->vrsc_fd, iov.iov_base, iov.iov_len);
 
 		DPRINTF(("vtrnd: vtrnd_notify(): %d", len));
 
@@ -173,15 +171,12 @@ pci_vtrnd_init(struct vmctx *ctx, struct mmio_devinst *pi, char *opts)
 	/*
 	 * Check that device is seeded and non-blocking.
 	 */
-	// TODO solve /dev/random blocking issue
 	len = read(fd, &v, sizeof(v));
-	/*
 	if (len <= 0) {
 		WPRINTF(("vtrnd: /dev/random not ready, read(): %d", len));
 		close(fd);
 		return (1);
 	}
-	*/
 
 	sc = calloc(1, sizeof(struct pci_vtrnd_softc));
 
