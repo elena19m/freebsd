@@ -1,0 +1,100 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Device Tree file for Globalscale Marvell ESPRESSOBin Board
+ * Copyright (C) 2016 Marvell
+ *
+ * Romain Perier <romain.perier@free-electrons.com>
+ *
+ */
+/*
+ * Schematic available at http://espressobin.net/wp-content/uploads/2017/08/ESPRESSObin_V5_Schematics.pdf
+ */
+
+/dts-v1/;
+
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+
+/ {
+	model = "Globalscale Marvell ESPRESSOBin Board";
+	compatible = "globalscale,espressobin", "marvell,armada3720", "marvell,armada3710", "marvell,armada3700", "arm,vexpress";
+	interrupt-parent = <&gic>;
+	#address-cells = <2>;
+	#size-cells = <2>;
+
+	chosen { };
+
+	aliases {
+	        serial0 = &uart0;
+                serial1 = &uart1;
+		serial2 = &v2m_serial0;
+	};
+	
+	psci {
+		compatible = "arm,psci-0.2";
+		method = "smc";
+	};
+	
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+		cpu0: cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,armv8";
+			reg = <0>;
+			//enable-method = "psci";
+		};
+
+	};
+
+	/* 128 MB of memory from address 0x80000000 to 0x88000000 (64bit) */
+	memory@80000000 {
+		device_type = "memory";
+		reg = <0x00000000 0x80000000 0  0x08000000>;
+	};
+
+        gic: interrupt-controller@2f000000 {
+                compatible = "arm,gic-v3";
+                #interrupt-cells = <3>;
+                #size-cells = <2>;
+                interrupt-controller;
+                reg =   <0x0 0x2f000000 0x0 0x10000>,   /* Distributor */
+                        <0x0 0x2f100000 0x0 0x200000>;  /* Redistributor */
+                interrupts = <1 9 4>;                   /* IRQ 25, edge triggered */
+        };
+
+	timer {
+		compatible = "arm,armv8-timer";
+		interrupts = <GIC_PPI 13 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_PPI 14 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_PPI 11 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_PPI 10 IRQ_TYPE_LEVEL_HIGH>;
+	};
+
+	virtio_rnd@4000 {
+                compatible = "virtio,mmio";
+                reg = <0x0 0x4000 0x0 0x200>;
+        };
+
+        virtio_console@5000 {
+                compatible = "virtio,mmio";
+                reg = <0x0 0x5000 0x0 0x200>;
+                interrupt-parent=<&gic>;
+                interrupts = <1 6 4>;
+        };
+
+        virtio_net@6000 {
+                compatible = "virtio,mmio";
+                reg = <0x0 0x6000 0x0 0x200>;
+                interrupt-parent=<&gic>;
+                interrupts = <1 7 4>;
+        };
+
+        virtio_blk@7000 {
+                compatible = "virtio,mmio";
+                reg = <0x0 0x7000 0x0 0x200>;
+                interrupt-parent=<&gic>;
+                interrupts = <1 8 4>;
+        };
+
+};
