@@ -46,8 +46,8 @@ __FBSDID("$FreeBSD$");
 #include "debug.h"
 #include "bootrom.h"
 #include "inout.h"
-#include "devemu.h"
-#include "devemu_irq.h"
+#include "pci_emul.h"
+#include "pci_irq.h"
 #include "pci_lpc.h"
 #include "pctestdev.h"
 #include "uart_emul.h"
@@ -66,7 +66,7 @@ SYSRES_IO(ELCR_PORT, 2);
 #define	NMISC_PORT	0x61
 SYSRES_IO(NMISC_PORT, 1);
 
-static struct devemu_inst *lpc_bridge;
+static struct pci_devinst *lpc_bridge;
 
 static const char *romfile;
 
@@ -156,7 +156,7 @@ lpc_uart_intr_assert(void *arg)
 
 	assert(sc->irq >= 0);
 
-	vm_isa_pulse_irq(lpc_bridge->di_vmctx, sc->irq, sc->irq);
+	vm_isa_pulse_irq(lpc_bridge->pi_vmctx, sc->irq, sc->irq);
 }
 
 static void
@@ -224,7 +224,7 @@ lpc_init(struct vmctx *ctx)
 			    "LPC device %s", name);
 			return (-1);
 		}
-		devemu_irq_reserve(sc->irq);
+		pci_irq_reserve(sc->irq);
 
 		sc->uart_softc = uart_init(lpc_uart_intr_assert,
 				    lpc_uart_intr_deassert, sc);
@@ -259,14 +259,14 @@ lpc_init(struct vmctx *ctx)
 }
 
 static void
-pci_lpc_write_dsdt(struct devemu_inst *di)
+pci_lpc_write_dsdt(struct pci_devinst *di)
 {
 	struct lpc_dsdt **ldpp, *ldp;
 
 	dsdt_line("");
 	dsdt_line("Device (ISA)");
 	dsdt_line("{");
-	dsdt_line("  Name (_ADR, 0x%04X%04X)", di->di_slot, di->di_func);
+	dsdt_line("  Name (_ADR, 0x%04X%04X)", di->pi_slot, di->pi_func);
 	dsdt_line("  OperationRegion (LPCR, PCI_Config, 0x00, 0x100)");
 	dsdt_line("  Field (LPCR, AnyAcc, NoLock, Preserve)");
 	dsdt_line("  {");
@@ -379,7 +379,7 @@ pci_lpc_uart_dsdt(void)
 LPC_DSDT(pci_lpc_uart_dsdt);
 
 static int
-pci_lpc_cfgwrite(struct vmctx *ctx, int vcpu, struct devemu_inst *di,
+pci_lpc_cfgwrite(struct vmctx *ctx, int vcpu, struct pci_devinst *di,
 		  int coff, int bytes, uint32_t val)
 {
 	int pirq_pin;
@@ -392,7 +392,7 @@ pci_lpc_cfgwrite(struct vmctx *ctx, int vcpu, struct devemu_inst *di,
 			pirq_pin = coff - 0x68 + 5;
 		if (pirq_pin != 0) {
 			pirq_write(ctx, pirq_pin, val);
-			devemu_set_cfgdata8(di, coff, pirq_read(pirq_pin));
+			pci_set_cfgdata8(di, coff, pirq_read(pirq_pin));
 			return (0);
 		}
 	}
@@ -400,13 +400,13 @@ pci_lpc_cfgwrite(struct vmctx *ctx, int vcpu, struct devemu_inst *di,
 }
 
 static void
-pci_lpc_write(struct vmctx *ctx, int vcpu, struct devemu_inst *di,
+pci_lpc_write(struct vmctx *ctx, int vcpu, struct pci_devinst *di,
 	       int baridx, uint64_t offset, int size, uint64_t value)
 {
 }
 
 static uint64_t
-pci_lpc_read(struct vmctx *ctx, int vcpu, struct devemu_inst *di,
+pci_lpc_read(struct vmctx *ctx, int vcpu, struct pci_devinst *di,
 	      int baridx, uint64_t offset, int size)
 {
 	return (0);
@@ -416,7 +416,7 @@ pci_lpc_read(struct vmctx *ctx, int vcpu, struct devemu_inst *di,
 #define	LPC_VENDOR	0x8086
 
 static int
-pci_lpc_init(struct vmctx *ctx, struct devemu_inst *di, char *opts)
+pci_lpc_init(struct vmctx *ctx, struct pci_devinst *di, char *opts)
 {
 
 	/*
@@ -432,7 +432,7 @@ pci_lpc_init(struct vmctx *ctx, struct devemu_inst *di, char *opts)
 	 * simplifies the ACPI DSDT because it can provide a decode for
 	 * all legacy i/o ports behind bus 0.
 	 */
-	if (pi->pi_bus != 0) {
+	if (di->pi_bus != 0) {
 		EPRINTLN("LPC bridge can be present only on bus 0.");
 		return (-1);
 	}
@@ -441,10 +441,10 @@ pci_lpc_init(struct vmctx *ctx, struct devemu_inst *di, char *opts)
 		return (-1);
 
 	/* initialize config space */
-	devemu_set_cfgdata16(di, PCIR_DEVICE, LPC_DEV);
-	devemu_set_cfgdata16(di, PCIR_VENDOR, LPC_VENDOR);
-	devemu_set_cfgdata8(di, PCIR_CLASS, PCIC_BRIDGE);
-	devemu_set_cfgdata8(di, PCIR_SUBCLASS, PCIS_BRIDGE_ISA);
+	pci_set_cfgdata16(di, PCIR_DEVICE, LPC_DEV);
+	pci_set_cfgdata16(di, PCIR_VENDOR, LPC_VENDOR);
+	pci_set_cfgdata8(di, PCIR_CLASS, PCIC_BRIDGE);
+	pci_set_cfgdata8(di, PCIR_SUBCLASS, PCIS_BRIDGE_ISA);
 
 	lpc_bridge = di;
 
@@ -471,9 +471,9 @@ lpc_pirq_routed(void)
 		return;
 
  	for (pin = 0; pin < 4; pin++)
-		devemu_set_cfgdata8(lpc_bridge, 0x60 + pin, pirq_read(pin + 1));
+		pci_set_cfgdata8(lpc_bridge, 0x60 + pin, pirq_read(pin + 1));
 	for (pin = 0; pin < 4; pin++)
-		devemu_set_cfgdata8(lpc_bridge, 0x68 + pin, pirq_read(pin + 5));
+		pci_set_cfgdata8(lpc_bridge, 0x68 + pin, pirq_read(pin + 5));
 }
 
 #ifdef BHYVE_SNAPSHOT
@@ -507,4 +507,4 @@ struct pci_devemu pci_de_lpc = {
 	.pe_snapshot =	pci_lpc_snapshot,
 #endif
 };
-DEVEMU_SET(pci_de_lpc);
+PCI_EMUL_SET(pci_de_lpc);
