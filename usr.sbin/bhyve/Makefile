@@ -15,16 +15,17 @@ MAN=	bhyve.8
 BHYVE_SYSDIR?=${SRCTOP}
 BHYVE_SRCTOP?=${.CURDIR}
 
-#	audio.c			
-#	ctl_util.c		
-#	ctl_scsi_all.c		
-#	fwctl.c			
-#	hda_codec.c		
-#	pci_hda.c		
-#	pci_virtio_scsi.c	
-#	pci_uart.c		
-#	post.c			
 
+
+
+
+.if exists(${BHYVE_SRCTOP}/${MACHINE})
+BHYVE_ARCH=	${MACHINE}
+.elif exists(${BHYVE_SRCTOP}/${MACHINE_ARCH})
+BHYVE_ARCH=	${MACHINE_ARCH}
+.else
+BHYVE_ARCH=	${MACHINE_CPUARCH}
+.endif
 
 SRCS=	\
 	net_backends.c		\
@@ -68,63 +69,78 @@ SRCS=	\
 	iov.c			\
 	block_if.c		\
 	mevent.c		\
+	net_backends.c		\
 	sockstream.c
 
-.if ${MACHINE_CPUARCH} == "aarch64"
+.if ${BHYVE_ARCH} != "amd64"
 # Missing vm_get_ioctls
 CFLAGS+=	-DWITHOUT_CAPSICUM
+.include "${BHYVE_SRCTOP}/${BHYVE_ARCH}/Makefile.inc"
+.include "${BHYVE_SRCTOP}/${BHYVE_BUS}/Makefile.inc"
 
-#SRCS+=	\
-
-.endif
-
-.if ${MACHINE_CPUARCH} == "amd64"
+.else
 SRCS+=	\
-	pci_virtio_block.c	\
-	pci_virtio_console.c	\
-	pci_virtio_net.c	\
-	pci_virtio_rnd.c	\
-	pci_emul.c		\
-	pci_irq.c		\
-	pci_virtio.c		\
-	net_utils.c		\
-	acpi.c			\
-	atkbdc.c		\
-	bhyvegc.c		\
-	bhyverun.c		\
-	bootrom.c		\
-	console.c		\
-	consport.c		\
-	dbgport.c		\
-	gdb.c			\
-	inout.c			\
-	ioapic.c		\
-	mem.c			\
-	mptbl.c			\
-	pci_ahci.c		\
-	pci_hostbridge.c	\
-	pci_e82545.c		\
-	pci_fbuf.c		\
-	pci_lpc.c		\
-	pci_nvme.c		\
-	pci_passthru.c		\
-	pci_xhci.c		\
-	pm.c			\
-	ps2kbd.c		\
-	ps2mouse.c		\
-	uart_emul.c		\
-	usb_emul.c		\
-	usb_mouse.c		\
-	rfb.c			\
-	rtc.c			\
-	task_switch.c		\
-	xmsr.c			\
-	smbiostbl.c		\
-	spinup_ap.c		\
-	vga.c
+        acpi.c			\
+        atkbdc.c		\
+        audio.c			\
+        bhyvegc.c		\
+        bhyverun.c		\
+        bootrom.c		\
+        console.c		\
+        consport.c		\
+        ctl_scsi_all.c		\
+        ctl_util.c		\
+        dbgport.c		\
+        fwctl.c			\
+        gdb.c			\
+        hda_codec.c		\
+        inout.c			\
+        ioapic.c		\
+        mem.c			\
+        mptbl.c			\
+        net_utils.c		\
+        pci_ahci.c		\
+        pci_e82545.c		\
+        pci_emul.c		\
+        pci_fbuf.c		\
+        pci_hda.c		\
+        pci_hostbridge.c	\
+        pci_irq.c		\
+        pci_lpc.c		\
+        pci_nvme.c		\
+        pci_passthru.c		\
+        pci_uart.c		\
+        pci_virtio.c		\
+        pci_virtio_block.c	\
+        pci_virtio_console.c	\
+        pci_virtio_net.c	\
+        pci_virtio_rnd.c	\
+        pci_virtio_scsi.c	\
+        pci_xhci.c		\
+        pm.c			\
+        post.c			\
+        ps2kbd.c		\
+        ps2mouse.c		\
+        rfb.c			\
+        rtc.c			\
+        smbiostbl.c		\
+        spinup_ap.c		\
+        task_switch.c		\
+        uart_emul.c		\
+        usb_emul.c		\
+        usb_mouse.c		\
+        vga.c			\
+        xmsr.c
+
 .endif
 
 LIBADD=	vmmapi md pthread
+.if ${MACHINE_CPUARCH} == "amd64"
+LIBADD+= z util sbuf cam crypto
+CFLAGS+=	-I${BHYVE_SYSDIR}/sys/dev/e1000
+CFLAGS+=	-I${BHYVE_SYSDIR}/sys/dev/mii
+CFLAGS+=	-I${BHYVE_SYSDIR}/sys/dev/usb/controller
+.endif
 
 .if ${MK_INET_SUPPORT} != "no"
 CFLAGS+=-DINET
@@ -158,9 +174,6 @@ CFLAGS+= -DBHYVE_SNAPSHOT
 .endif
 .PATH:	${BHYVE_SYSDIR}/sys/${BHYVE_ARCH}/vmm
 SRCS+=	vmm_instruction_emul.c
-
-.include "${BHYVE_SRCTOP}/${BHYVE_ARCH}/Makefile.inc"
-.include "${BHYVE_SRCTOP}/${BHYVE_BUS}/Makefile.inc"
 
 CFLAGS+=	-I${BHYVE_SRCTOP}
 CFLAGS+=	-I${BHYVE_SRCTOP}/${BHYVE_ARCH}
