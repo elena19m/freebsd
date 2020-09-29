@@ -3,10 +3,10 @@
 #
 .PATH: ${BHYVE_SRCTOP}/arm/
 SRCS+=				\
-	bhyverun.c		\
-	consport.c		\
-	mem.c			\
-	reset.c
+	arm/bhyverun.c		\
+	arm/consport.c		\
+	arm/mem.c		\
+	arm/reset.c
 
 .PATH:	${BHYVE_SYSDIR}/sys/${BHYVE_ARCH}/vmm
 MK_MAN=no
