@@ -43,8 +43,8 @@
 #include <vmmapi.h>
 
 #include "bhyverun.h"
-#include "devemu.h"
-#include "devemu_irq.h"
+#include "../mmio/mmio_emul.h"
+#include "../mmio/mmio_irq.h"
 #include "mem.h"
 #include "mevent.h"
 #include "reset.h"
@@ -65,6 +65,8 @@ typedef int (*vmexit_handler_t)(struct vmctx *, struct vm_exit *, int *vcpu);
 char *vmname;
 
 int guest_ncpus;
+
+int raw_stdio = 0;
 
 static int pincpu = -1;
 
@@ -333,7 +335,7 @@ main(int argc, char *argv[])
 			guest_ncpus = atoi(optarg);
 			break;
 		case 's':
-			if (devemu_parse_opts(optarg) != 0)
+			if (mmio_parse_opts(optarg) != 0)
 				exit(1);
 			break;
 		case 'B':
@@ -374,9 +376,9 @@ main(int argc, char *argv[])
 	}
 
 	init_mem();
-	devemu_irq_init(ctx);
+	mmio_irq_init(ctx);
 
-	if (init_devemu(ctx) != 0) {
+	if (init_mmio(ctx) != 0) {
 		fprintf(stderr, "Failed to initialize device emulation\n");
 		exit(1);
 	}
