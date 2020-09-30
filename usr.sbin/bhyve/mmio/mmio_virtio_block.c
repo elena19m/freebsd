@@ -256,9 +256,9 @@ pci_vtblk_proc(struct pci_vtblk_softc *sc, struct vqueue_info *vq)
 	}
 	io->io_req.br_resid = iolen;
 
-	DPRINTF(("virtio-block: %s op, %zd bytes, %d segs, offset %ld",
+	DPRINTF(("virtio-block: %s op, %zd bytes, %d segs, offset %lld",
 		 writeop ? "write" : "read/ident", iolen, i - 1,
-		 io->io_req.br_offset));
+		 (long long) io->io_req.br_offset));
 
 	switch (type) {
 	case VBH_OP_READ:
