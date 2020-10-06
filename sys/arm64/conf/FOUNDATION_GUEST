@@ -25,7 +25,7 @@ makeoptions	DEBUG=-g		# Build kernel with gdb(1) debug symbols
 
 options 	MD_ROOT			# MD is a potential root device
 options	   	MD_ROOT_SIZE=47232
-makeoptions	MFS_IMAGE=/root/reps/bhyvearm64-utils/files_guest/ramdisk-guest.img
+#makeoptions	MFS_IMAGE=/root/reps/bhyvearm64-utils/files_guest/ramdisk-guest.img
 options		ROOTDEVNAME=\"ufs:md0\"
 
 options 	SCHED_ULE		# ULE scheduler
@@ -121,6 +121,7 @@ options 	PCI_HP		# PCI-Express native HotPlug
 options 	PCI_IOV		# PCI SR-IOV support
 
 # Ethernet NICs
+device		mdio
 #device		mii
 #device		miibus		# MII bus support
 #device		awg		# Allwinner EMAC Gigabit Ethernet
