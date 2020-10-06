@@ -74,6 +74,7 @@ __FBSDID("$FreeBSD$");
 #include "bhyverun.h"
 #include "acpi.h"
 #include "pci_emul.h"
+#include "vmgenc.h"
 
 /*
  * Define the base address of the ACPI tables, the sizes of some tables, 

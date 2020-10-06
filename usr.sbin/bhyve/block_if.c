@@ -58,7 +58,10 @@ __FBSDID("$FreeBSD$");
 #include <unistd.h>
 
 #include <machine/atomic.h>
+
+#ifdef BHYVE_SNAPSHOT
 #include <machine/vmm_snapshot.h>
+#endif
 
 #include "bhyverun.h"
 #include "debug.h"
