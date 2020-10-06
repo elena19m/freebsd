@@ -78,9 +78,6 @@ __FBSDID("$FreeBSD$");
 #include <dev/acpica/acpivar.h>
 #endif
 
-/* TODO: delete me */
-#include <arm64/vmm/arm64.h>
-
 #include "generic_timer.h"
 
 #define	GT_CTRL_ENABLE		(1 << 0)
@@ -96,6 +93,8 @@ __FBSDID("$FreeBSD$");
 #define	GT_CNTKCTL_EVNTEN	(1 << 2) /* Enables virtual counter events */
 #define	GT_CNTKCTL_PL0VCTEN	(1 << 1) /* PL0 CNTVCT and CNTFRQ access */
 #define	GT_CNTKCTL_PL0PCTEN	(1 << 0) /* PL0 CNTPCT and CNTFRQ access */
+
+#define DEBUG_ME 0
 
 #ifdef __arm__
 extern char hypmode_enabled[];
