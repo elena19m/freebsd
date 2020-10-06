@@ -145,7 +145,7 @@ arm_init(int ipinum)
 
 	/* Create the mappings for the hypervisor translation table. */
 	hyp_pmap = malloc(sizeof(*hyp_pmap), M_HYP, M_WAITOK | M_ZERO);
-	hypmap_init(hyp_pmap, PT_STAGE1);
+	hypmap_init(hyp_pmap, PM_STAGE1);
 	hyp_code_len = (size_t)hyp_code_end - (size_t)hyp_code_start;
 	hypmap_map(hyp_pmap, (vm_offset_t)hyp_code_start, hyp_code_len, VM_PROT_EXECUTE);
 
@@ -279,7 +279,7 @@ arm_vminit(struct vm *vm)
 
 	hyp->stage2_map = malloc(sizeof(*hyp->stage2_map),
 	    M_HYP, M_WAITOK | M_ZERO);
-	hypmap_init(hyp->stage2_map, PT_STAGE2);
+	hypmap_init(hyp->stage2_map, PM_STAGE2);
 	arm64_set_vttbr(hyp);
 
 	for (i = 0; i < VM_MAXCPU; i++) {
