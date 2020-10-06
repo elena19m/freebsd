@@ -216,7 +216,7 @@ arm_vminit(struct vm *vm, pmap_t pmap)
 		hypctx->vcpu = i;
 		hypctx->hyp = hyp;
 		hypctx->hcr = HCR_GUEST_MASK & ~HCR_TSW & ~HCR_TAC;
-		hypctx->midr = cpu_ident();
+		hypctx->midr = cp15_midr_get();
 		hypctx->mpidr = (cp15_mpidr_get() & MPIDR_SMP_MASK) |
 		    MPIDR_AFF1_LEVEL(i) |
 		    MPIDR_AFF0_LEVEL(i);
