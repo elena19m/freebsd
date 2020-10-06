@@ -123,6 +123,7 @@ device		iflib
 device		syscon
 
 # Ethernet NICs
+device		mdio
 device		mii
 device		miibus		# MII bus support
 device		awg		# Allwinner EMAC Gigabit Ethernet
