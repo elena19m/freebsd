@@ -52,7 +52,6 @@ options                ROOTDEVNAME=\"ffs:/dev/md0\"
 # Pseudo devices
 device		loop
 device		ether
-device		random
 device		pty
 device		md
 device		bpf
@@ -61,7 +60,7 @@ device		miibus
 
 # Network devices
 device		if_bridge
-device		tap
+device		tuntap
 
 device		smc
 device		smcphy
