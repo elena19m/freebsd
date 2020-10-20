@@ -1820,7 +1820,6 @@ pmap_pinit_stage(pmap_t pmap, enum pmap_stage stage, int levels)
 {
 	vm_page_t m;
 
-	KASSERT(stage < PM_INVALID, ("Unknown pmap type"));
 	KASSERT(!((stage == PM_STAGE2) && (pa_range_bits == 0)),
 	    ("Unknown PARange bits"));
 
@@ -4031,30 +4030,12 @@ pmap_enter(pmap_t pmap, vm_offset_t va, vm_page_t m, vm_prot_t prot,
 			new_l3 |= ATTR_S1_UXN;
 		if (pmap != kernel_pmap)
 			new_l3 |= ATTR_S1_nG;
-	} else {
-		/*
-		 * Clear the access flag on executable mappings, this will be
-		 * set later when the page is accessed. The fault handler is
-		 * required to invalidate the I-cache.
-		 *
-		 * TODO: Switch to the valid flag to allow hardware management
-		 * of the access flag. Much of the pmap code assumes the
-		 * valid flag is set and fails to destroy the old page tables
-		 * correctly if it is clear.
-		 */
-		if (prot & VM_PROT_EXECUTE)
-			new_l3 &= ~ATTR_AF;
-	}
-	if ((m->oflags & VPO_UNMANAGED) == 0) {
-		new_l3 |= ATTR_SW_MANAGED;
-		if ((prot & VM_PROT_WRITE) != 0) {
-			new_l3 |= ATTR_SW_DBM;
-			if ((flags & VM_PROT_WRITE) == 0) {
-				if (pmap->pm_stage == PM_STAGE1)
-					new_l3 |= ATTR_S1_AP(ATTR_S1_AP_RO);
-				else
-					new_l3 &=
-					    ~ATTR_S2_S2AP(ATTR_S2_S2AP_WRITE);
+		if ((m->oflags & VPO_UNMANAGED) == 0) {
+			new_l3 |= ATTR_SW_MANAGED;
+			if ((prot & VM_PROT_WRITE) != 0) {
+				new_l3 |= ATTR_SW_DBM;
+				if ((flags & VM_PROT_WRITE) == 0)
+						new_l3 |= ATTR_S1_AP(ATTR_S1_AP_RO);
 			}
 		}
 	} else {
