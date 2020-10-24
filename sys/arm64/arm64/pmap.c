@@ -4037,7 +4037,7 @@ pmap_enter(pmap_t pmap, vm_offset_t va, vm_page_t m, vm_prot_t prot,
 				if ((flags & VM_PROT_WRITE) == 0)
 						new_l3 |= ATTR_S1_AP(ATTR_S1_AP_RO);
 			}
-		} 
+		}
 	} else {
 		new_l3 = (pd_entry_t)(pa | ATTR_ST2_DEFAULT | L3_PAGE);
 	}
