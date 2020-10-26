@@ -2715,6 +2715,7 @@ pci_ahci_snapshot(struct vm_snapshot_meta *meta)
 		SNAPSHOT_VAR_OR_LEAVE(port->fbs, meta, ret, done);
 		SNAPSHOT_VAR_OR_LEAVE(port->ioqsz, meta, ret, done);
 
+		SNAPSHOT_ADD_INTERN_ARR(iorequests, meta);
 		for (j = 0; j < port->ioqsz; j++) {
 			ioreq = &port->ioreq[j];
 
@@ -2731,12 +2732,15 @@ pci_ahci_snapshot(struct vm_snapshot_meta *meta)
 			SNAPSHOT_VAR_OR_LEAVE(ioreq->more, meta, ret, done);
 			SNAPSHOT_VAR_OR_LEAVE(ioreq->readop, meta, ret, done);
 		}
+		SNAPSHOT_REMOVE_INTERN_ARR(iorequests, meta);
 
 		/* Perform save / restore specific operations. */
 		if (meta->op == VM_SNAPSHOT_SAVE) {
+			SNAPSHOT_ADD_INTERN_ARR(queues, meta);
 			ret = pci_ahci_snapshot_save_queues(port, meta);
 			if (ret != 0)
 				goto done;
+			SNAPSHOT_REMOVE_INTERN_ARR(queues, meta);
 		} else if (meta->op == VM_SNAPSHOT_RESTORE) {
 			ret = pci_ahci_snapshot_restore_queues(port, meta);
 			if (ret != 0)

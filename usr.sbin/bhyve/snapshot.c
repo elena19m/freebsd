@@ -184,6 +184,7 @@ add_device_info(struct vm_snapshot_device_info *field_info, char *field_name,
 {
 	size_t field_len, arr_name_len;
 
+	fprintf(stderr, "adding arr_name %s and field %s\n", arr_name, field_name);
 	if (arr_name != NULL) {
 		arr_name_len = strlen(arr_name);
 		field_info->intern_arr_name = calloc(arr_name_len + 1, sizeof(char));
@@ -1255,6 +1256,77 @@ err:
 	return (error);
 }
 
+#ifdef JSON_SNAPSHOT_V2
+	//if (meta->dev_info_list.ident < curr_el->ident) {
+			//	curr_arr = curr_el->intern_arr_name;
+			//	xo_open_list_h(xop, curr_arr);
+			//	fprintf(stderr, "Opening list %s\n", curr_arr);
+			//}
+			//if (curr_arr != NULL)
+			//	xo_open_instance_h(xop, curr_arr);
+
+			//fprintf(stderr, "intern_arr_name = %s, field_name = %s\n", curr_arr, curr_el->field_name);
+			//xo_emit_h(xop, "{:" "param_name" "/%s}\n", curr_el->field_name);
+			//xo_emit_h(xop, "{:" "param_data" "/%s}\n", "TODO - Add encoded data"); // (uint8_t *)curr_el->field_data);
+			//xo_emit_h(xop, "{:" "data_size" "/%lu}\n", curr_el->data_size);
+
+			//if (curr_arr != NULL)
+			//	xo_close_instance_h(xop, curr_arr);
+			//if (meta->dev_info_list.ident > curr_el->ident) {
+			//	xo_close_list_h(xop, curr_arr);
+			//	fprintf(stderr, "Closing list %s\n", curr_arr);
+			//}
+
+			//xo_close_instance_h(xop, "device_params");
+			//meta->dev_info_list.ident = curr_el->ident;
+			//curr_arr = curr_el->intern_arr_name;
+static void
+vm_snapshot_dev_intern_arr(xo_handle_t *xop, int ident,
+				struct vm_snapshot_device_info **curr_el)
+{
+	char *intern_arr;
+	unsigned char closed;
+
+	intern_arr = (*curr_el)->intern_arr_name;
+	xo_open_list_h(xop, intern_arr);
+	closed = 0;
+	while (*curr_el != NULL) {
+		if ((*curr_el)->ident < ident) {
+			break;
+		}
+		if ((*curr_el)->intern_arr_name == NULL)
+			break;
+
+		if (!strcmp((*curr_el)->intern_arr_name, intern_arr))
+			xo_open_instance_h(xop, intern_arr);
+
+		if (strcmp((*curr_el)->intern_arr_name, intern_arr) &&
+			(*curr_el)->ident == ident) {
+			xo_close_list_h(xop, intern_arr);
+			closed = 1;
+			vm_snapshot_dev_intern_arr(xop, (*curr_el)->ident, curr_el);
+			// fprintf(stderr, "Returning for arr_name %s \n", intern_arr);
+		} else if ((*curr_el)->ident > ident) {
+			vm_snapshot_dev_intern_arr(xop, (*curr_el)->ident, curr_el);
+			// fprintf(stderr, "Returning for arr_name %s \n", intern_arr);
+		} else {
+			xo_emit_h(xop, "{:" "param_name" "/%s}\n", (*curr_el)->field_name);
+			xo_emit_h(xop, "{:" "param_data" "/%s}\n", "TODO - Add encoded data");
+			xo_emit_h(xop, "{:" "data_size" "/%lu}\n", (*curr_el)->data_size);
+		}
+
+		if (!closed)
+			xo_close_instance_h(xop, intern_arr);
+		if (*curr_el == NULL)
+			break;
+
+		*curr_el = (*curr_el)->next_field;
+	}
+	// fprintf(stderr, "Exiting %s for %s\n", __func__, intern_arr);
+	xo_close_list_h(xop, intern_arr);
+}
+#endif
+
 static int
 vm_snapshot_dev_write_data(int data_fd, xo_handle_t *xop, const char *array_key,
 			   struct vm_snapshot_meta *meta, off_t *offset)
@@ -1287,27 +1359,23 @@ vm_snapshot_dev_write_data(int data_fd, xo_handle_t *xop, const char *array_key,
 		xo_open_list_h(xop, "device_params");
 
 		curr_el = meta->dev_info_list.first;
+		meta->dev_info_list.ident = 0;
 		while (curr_el != NULL) {
 			xo_open_instance_h(xop, "device_params");
-			if (meta->dev_info_list.ident < curr_el->ident) {
-				curr_arr = curr_el->intern_arr_name;
-				xo_open_list_h(xop, curr_arr);
+
+			if (curr_el->ident > meta->dev_info_list.ident)
+				vm_snapshot_dev_intern_arr(xop, curr_el->ident, &curr_el);
+
+			if (curr_el == NULL) {
+				xo_close_instance_h(xop, "device_params");
+				break;
 			}
-			if (curr_arr != NULL)
-				xo_open_instance_h(xop, curr_arr);
 
 			xo_emit_h(xop, "{:" "param_name" "/%s}\n", curr_el->field_name);
-			xo_emit_h(xop, "{:" "param_data" "/%s}\n", "TODO - Add encoded data"); // (uint8_t *)curr_el->field_data);
+			xo_emit_h(xop, "{:" "param_data" "/%s}\n", "TODO - Add encoded data");
 			xo_emit_h(xop, "{:" "data_size" "/%lu}\n", curr_el->data_size);
-			
-			if (curr_arr != NULL)
-				xo_close_instance_h(xop, curr_arr);
-			if (meta->dev_info_list.ident > curr_el->ident) {
-				xo_close_list_h(xop, curr_arr);
-			}
-			xo_close_instance_h(xop, "device_params");
+
 			meta->dev_info_list.ident = curr_el->ident;
-			curr_arr = curr_el->intern_arr_name;
 			curr_el = curr_el->next_field;
 		}
 
