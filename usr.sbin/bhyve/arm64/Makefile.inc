@@ -5,7 +5,8 @@
 SRCS+=				\
 	arm64/bhyverun.c 	\
 	arm64/mem.c		\
-	arm64/consport.c
+	arm64/consport.c	\
+	arm64/reset.c
 
 .PATH:	${BHYVE_SYSDIR}/sys/${BHYVE_ARCH}/vmm
 
