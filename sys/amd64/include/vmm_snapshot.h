@@ -87,6 +87,7 @@ struct vm_snapshot_buffer {
 
 #ifndef JSON_SNAPSHOT_V2
 #define JSON_SNAPSHOT_V2
+#define IDENT_LEVEL		10
 
 struct vm_snapshot_device_info {
 	unsigned char ident;
@@ -100,7 +101,7 @@ struct vm_snapshot_device_info {
 
 struct list_device_info {
 	unsigned char ident;
-	const char *intern_arr_name;
+	const char *intern_arr_names[IDENT_LEVEL];
 
 	struct vm_snapshot_device_info *first;
 	struct vm_snapshot_device_info *last;
@@ -159,6 +160,14 @@ do {													\
 
 #define	SNAPSHOT_BUF_OR_LEAVE(DATA, LEN, META, RES, LABEL)			\
 do {										\
+	if ((META)->version == 2) {														\
+		(RES) = vm_snapshot_save_fieldname(#DATA, (DATA), (LEN), (META));			\
+		if ((RES) != 0) {															\
+			vm_snapshot_buf_err(#DATA, (META)->op);									\
+			goto LABEL;																\
+		}																			\
+	}																				\
+	/* TODO - Add else case */														\
 	(RES) = vm_snapshot_buf((DATA), (LEN), (META));				\
 	if ((RES) != 0) {							\
 		vm_snapshot_buf_err(#DATA, (META)->op);				\
@@ -167,16 +176,7 @@ do {										\
 } while (0)
 
 #define	SNAPSHOT_VAR_OR_LEAVE(DATA, META, RES, LABEL)								\
-do {																				\
-	if ((META)->version == 2) {														\
-		(RES) = vm_snapshot_save_fieldname(#DATA, &(DATA), sizeof(DATA), (META));	\
-		if ((RES) != 0) {															\
-			vm_snapshot_buf_err(#DATA, (META)->op);									\
-			goto LABEL;																\
-		}																			\
-	}																				\
-	SNAPSHOT_BUF_OR_LEAVE(&(DATA), sizeof(DATA), (META), (RES), LABEL);				\
-} while (0)
+		SNAPSHOT_BUF_OR_LEAVE(&(DATA), sizeof(DATA), (META), (RES), LABEL);			\
 
 /*
  * Address variables are pointers to guest memory.

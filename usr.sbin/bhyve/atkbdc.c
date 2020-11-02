@@ -585,12 +585,15 @@ atkbdc_snapshot(struct vm_snapshot_meta *meta)
 	SNAPSHOT_VAR_OR_LEAVE(atkbdc_sc->aux.irq_active, meta, ret, done);
 	SNAPSHOT_VAR_OR_LEAVE(atkbdc_sc->aux.irq, meta, ret, done);
 
+	SNAPSHOT_ADD_INTERN_ARR(ps2kbd, meta);
 	ret = ps2kbd_snapshot(atkbdc_sc->ps2kbd_sc, meta);
 	if (ret != 0)
 		goto done;
+	SNAPSHOT_REMOVE_INTERN_ARR(ps2kbd, meta);
 
+	SNAPSHOT_ADD_INTERN_ARR(ps2mouse, meta);
 	ret = ps2mouse_snapshot(atkbdc_sc->ps2mouse_sc, meta);
-
+	SNAPSHOT_REMOVE_INTERN_ARR(ps2kbd, meta);
 done:
 	return (ret);
 }

@@ -2750,12 +2750,14 @@ pci_ahci_snapshot(struct vm_snapshot_meta *meta)
 			goto done;
 		}
 
+		SNAPSHOT_ADD_INTERN_ARR(block_context, meta);
 		ret = blockif_snapshot(port->bctx, meta);
 		if (ret != 0) {
 			fprintf(stderr, "%s: failed to restore blockif\r\n",
 				__func__);
 			goto done;
 		}
+		SNAPSHOT_REMOVE_INTERN_ARR(block_context, meta);
 	}
 	SNAPSHOT_REMOVE_INTERN_ARR(ports, meta);
 
