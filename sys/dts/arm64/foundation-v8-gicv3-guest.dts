@@ -39,6 +39,17 @@
 			next-level-cache = <&L2_0>;
 		};
 
+		// TODO uncomment when SMP is implemented in hyp
+		/*
+		cpu@1 {
+			device_type = "cpu";
+			compatible = "arm,armv8";
+			reg = <0x0 0x1>;
+			//enable-method = "spin-table";
+			//cpu-release-addr = <0x0 0x8000fff8>;
+			next-level-cache = <&L2_0>;
+		};
+		*/
 		L2_0: l2-cache0 {
 			compatible = "cache";
 		};
