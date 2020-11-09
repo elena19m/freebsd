@@ -598,6 +598,7 @@ lookup_dev(const char *dev_name, struct restore_state *rstate,
 	return (NULL);
 }
 
+
 static const ucl_object_t *
 lookup_basic_metadata_object(struct restore_state *rstate)
 {
@@ -1014,6 +1015,88 @@ vm_restore_kern_structs(struct vmctx *ctx, struct restore_state *rstate)
 	return (0);
 }
 
+#ifdef JSON_SNAPSHOT_V2
+/*
+#define JSON_PARAMS_KEY		"device_params"
+#define JSON_PARAM_KEY		"param_name"
+#define JSON_PARAM_DATA_KEY		"param_data"
+#define JSON_PARAM_DATA_SIZE_KEY	"data_size"
+*/
+
+static void*
+lookup_check_dev_v2(const char *dev_name, struct restore_state *rstate,
+		 const ucl_object_t *obj)
+{
+	const ucl_object_t *dev_params = NULL, *obj1 = NULL;
+	const ucl_object_t *iobj = NULL;
+	ucl_object_iter_t it = NULL, iit = NULL;
+	const char *snapshot_req;
+	const char *param_name;
+
+	snapshot_req = NULL;
+	JSON_GET_STRING_OR_RETURN(JSON_SNAPSHOT_REQ_KEY, obj,
+				  &snapshot_req, NULL);
+
+	dev_params = ucl_object_lookup(obj, JSON_PARAMS_KEY);
+	// fprintf(stderr, "dev_params key = '%s'\n", dev_params->key);
+	if (dev_params == NULL) {
+		fprintf(stderr, "Failed to find '%s' object.\n",
+			JSON_PARAMS_KEY);
+		return(NULL);
+	}
+
+	if (ucl_object_type((ucl_object_t *)dev_params) != UCL_ARRAY) {
+		fprintf(stderr, "Object '%s' is not an array.\n",
+			JSON_PARAMS_KEY);
+		return (NULL);
+	}
+
+	while ((obj1 = ucl_object_iterate(dev_params, &it, true)) != NULL) {
+		// fprintf(stderr, "%s: obj is '%s'\n", snapshot_req, obj1->key);
+		param_name = NULL;
+		JSON_GET_STRING_OR_RETURN(JSON_PARAM_KEY, obj1, &param_name, NULL);
+		//if (ucl_object_type(obj1) == UCL_ARRAY)
+		//	fprintf(stderr, "%s: Found an array\n", snapshot_req);
+		//fprintf(stderr, "%s: param : '%s'\n", snapshot_req, param_name);
+		while ((iobj = ucl_object_iterate(obj1, &iit, true)) != NULL) {
+			if (ucl_object_type(iobj) == UCL_ARRAY)
+				fprintf(stderr, "%s iobj is '%s'\n", snapshot_req, iobj->key);
+		}
+	}
+
+	return (NULL);
+}
+
+static void*
+lookup_dev_v2(const char *dev_name, struct restore_state *rstate)
+{
+	const ucl_object_t *devs = NULL, *obj = NULL;
+	ucl_object_iter_t it = NULL;
+	void *ret;
+
+	devs = ucl_object_lookup(rstate->meta_root_obj, JSON_DEV_ARR_KEY);
+	if (devs == NULL) {
+		fprintf(stderr, "Failed to find '%s' object.\n",
+			JSON_DEV_ARR_KEY);
+		return (NULL);
+	}
+
+	if (ucl_object_type((ucl_object_t *)devs) != UCL_ARRAY) {
+		fprintf(stderr, "Object '%s' is not an array.\n",
+			JSON_DEV_ARR_KEY);
+		return (NULL);
+	}
+
+	while ((obj = ucl_object_iterate(devs, &it, true)) != NULL) {
+		ret = lookup_check_dev_v2(dev_name, rstate, obj);
+		if (ret != NULL)
+			return (ret);
+	}
+
+	return (NULL);
+}
+#endif
+
 int
 vm_restore_user_dev(struct vmctx *ctx, struct restore_state *rstate,
 		    const struct vm_snapshot_dev_info *info)
@@ -1023,6 +1106,10 @@ vm_restore_user_dev(struct vmctx *ctx, struct restore_state *rstate,
 	int ret;
 	struct vm_snapshot_meta *meta;
 
+	/* TODO - Don't forget to delete move this in the right place */
+	lookup_dev_v2(info->dev_name, rstate);
+
+	
 	dev_ptr = lookup_dev(info->dev_name, rstate, &dev_size);
 	if (dev_ptr == NULL) {
 		fprintf(stderr, "Failed to lookup dev: %s\r\n", info->dev_name);
@@ -1035,7 +1122,7 @@ vm_restore_user_dev(struct vmctx *ctx, struct restore_state *rstate,
 			"Assuming %s is not used\r\n",
 			__func__, info->dev_name);
 		return (0);
-	}
+	}	
 
 	meta = &(struct vm_snapshot_meta) {
 		.ctx = ctx,
@@ -1310,13 +1397,13 @@ vm_snapshot_dev_write_data(int data_fd, xo_handle_t *xop, const char *array_key,
 
 	data_size = vm_get_snapshot_size(meta);
 
-	if (meta->version == JSON_V1) {
+	//if (meta->version == JSON_V1) {
 		ret = write(data_fd, meta->buffer.buf_start, data_size);
 		if (ret != data_size) {
 			perror("Failed to write all snapshotted data.");
 			return (-1);
 		}
-	}
+	//}
 	
 	/* Write metadata. */
 	xo_open_instance_h(xop, array_key);
@@ -1812,10 +1899,11 @@ vm_snapshot_save_fieldname(const char *fullname, volatile void *data,
 {
 	size_t len;
 	char *ffield_name;
+	char *aux;
     char *field_name;
 	int op;
 	struct list_device_info *list;
-    const char s[2] = ">";
+    const char delim[5] = "&(>)";
 
 	op = meta->op;
 
@@ -1824,11 +1912,11 @@ vm_snapshot_save_fieldname(const char *fullname, volatile void *data,
 	assert(ffield_name != NULL);
 
     memcpy(ffield_name, fullname, len);
-    strtok(ffield_name, s);
-	field_name = strtok(NULL, s);
+    aux = strtok(ffield_name, delim);
+	field_name = strtok(NULL, delim);
 
 	if (field_name == NULL)
-		field_name = ffield_name;
+		field_name = aux;
 
 	if (meta->op == VM_SNAPSHOT_SAVE) {
 		list = &meta->dev_info_list;

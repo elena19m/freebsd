@@ -2971,6 +2971,7 @@ pci_xhci_snapshot(struct vm_snapshot_meta *meta)
 	SNAPSHOT_VAR_OR_LEAVE(sc->regsend, meta, ret, done);
 
 	/* opregs */
+	SNAPSHOT_ADD_INTERN_ARR(opregs, meta);
 	SNAPSHOT_VAR_OR_LEAVE(sc->opregs.usbcmd, meta, ret, done);
 	SNAPSHOT_VAR_OR_LEAVE(sc->opregs.usbsts, meta, ret, done);
 	SNAPSHOT_VAR_OR_LEAVE(sc->opregs.pgsz, meta, ret, done);
@@ -3011,8 +3012,10 @@ pci_xhci_snapshot(struct vm_snapshot_meta *meta)
 	SNAPSHOT_VAR_OR_LEAVE(sc->rtsregs.er_enq_seg, meta, ret, done);
 	SNAPSHOT_VAR_OR_LEAVE(sc->rtsregs.er_events_cnt, meta, ret, done);
 	SNAPSHOT_VAR_OR_LEAVE(sc->rtsregs.event_pcs, meta, ret, done);
+	SNAPSHOT_REMOVE_INTERN_ARR(opregs, meta);
 
 	/* sanity checking */
+	SNAPSHOT_ADD_INTERN_ARR(sanity_checks, meta);
 	for (i = 1; i <= XHCI_MAX_DEVS; i++) {
 		dev = XHCI_DEVINST_PTR(sc, i);
 		if (dev == NULL)
@@ -3049,8 +3052,10 @@ pci_xhci_snapshot(struct vm_snapshot_meta *meta)
 			}
 		}
 	}
+	SNAPSHOT_REMOVE_INTERN_ARR(sanity_checks, meta);
 
 	/* portregs */
+	SNAPSHOT_ADD_INTERN_ARR(portregs, meta);
 	for (i = 1; i <= XHCI_MAX_DEVS; i++) {
 		port = XHCI_PORTREG_PTR(sc, i);
 		dev = XHCI_DEVINST_PTR(sc, i);
@@ -3063,8 +3068,10 @@ pci_xhci_snapshot(struct vm_snapshot_meta *meta)
 		SNAPSHOT_VAR_OR_LEAVE(port->portli, meta, ret, done);
 		SNAPSHOT_VAR_OR_LEAVE(port->porthlpmc, meta, ret, done);
 	}
+	SNAPSHOT_REMOVE_INTERN_ARR(portregs, meta);
 
 	/* slots */
+	SNAPSHOT_ADD_INTERN_ARR(slots, meta);
 	if (meta->op == VM_SNAPSHOT_SAVE)
 		pci_xhci_map_devs_slots(sc, maps);
 
@@ -3107,6 +3114,7 @@ pci_xhci_snapshot(struct vm_snapshot_meta *meta)
 		SNAPSHOT_VAR_OR_LEAVE(dev->hci.hci_address, meta, ret, done);
 		SNAPSHOT_VAR_OR_LEAVE(dev->hci.hci_port, meta, ret, done);
 	}
+	SNAPSHOT_REMOVE_INTERN_ARR(slots, meta);
 
 	SNAPSHOT_VAR_OR_LEAVE(sc->ndevices, meta, ret, done);
 	SNAPSHOT_VAR_OR_LEAVE(sc->usb2_port_start, meta, ret, done);

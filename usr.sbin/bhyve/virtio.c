@@ -929,19 +929,25 @@ vi_pci_snapshot(struct vm_snapshot_meta *meta)
 	vc = vs->vs_vc;
 
 	/* Save virtio softc */
+	SNAPSHOT_ADD_INTERN_ARR(softc, meta);
 	ret = vi_pci_snapshot_softc(vs, meta);
 	if (ret != 0)
 		goto done;
+	SNAPSHOT_REMOVE_INTERN_ARR(softc, meta);
 
 	/* Save virtio consts */
+	SNAPSHOT_ADD_INTERN_ARR(consts, meta);
 	ret = vi_pci_snapshot_consts(vc, meta);
 	if (ret != 0)
 		goto done;
+	SNAPSHOT_REMOVE_INTERN_ARR(consts, meta);
 
 	/* Save virtio queue info */
+	SNAPSHOT_ADD_INTERN_ARR(queues, meta);
 	ret = vi_pci_snapshot_queues(vs, meta);
 	if (ret != 0)
 		goto done;
+	SNAPSHOT_REMOVE_INTERN_ARR(queues, meta);
 
 	/* Save device softc, if needed */
 	if (vc->vc_snapshot != NULL) {
