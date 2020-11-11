@@ -94,12 +94,6 @@ __FBSDID("$FreeBSD$");
 #define	GT_CNTKCTL_PL0VCTEN	(1 << 1) /* PL0 CNTVCT and CNTFRQ access */
 #define	GT_CNTKCTL_PL0PCTEN	(1 << 0) /* PL0 CNTPCT and CNTFRQ access */
 
-#define DEBUG_ME 0
-
-#ifdef __arm__
-extern char hypmode_enabled[];
-#endif
-
 struct arm_tmr_softc {
 	struct resource		*res[4];
 	void			*ihl[4];
@@ -272,13 +266,6 @@ arm_tmr_start(struct eventtimer *et, sbintime_t first,
 	struct arm_tmr_softc *sc;
 	int counts, ctrl;
 
-#if DEBUG_ME == 1
-	if (!virt_enabled()) {
-		ctrl = READ_SPECIALREG(cntv_ctl_el0);
-		eprintf("Old cntv_ctl_el0 = 0x%08x\n", ctrl);
-	}
-#endif
-
 	sc = (struct arm_tmr_softc *)et->et_priv;
 
 	if (first != 0) {
@@ -287,10 +274,6 @@ arm_tmr_start(struct eventtimer *et, sbintime_t first,
 		ctrl &= ~GT_CTRL_INT_MASK;
 		ctrl |= GT_CTRL_ENABLE;
 		set_tval(counts, sc->physical);
-#if DEBUG_ME == 1
-		if (!virt_enabled())
-			eprintf("New cntv_ctl_el0 = 0x%08x\n", ctrl);
-#endif
 		set_ctrl(ctrl, sc->physical);
 		return (0);
 	}
@@ -314,24 +297,8 @@ arm_tmr_stop(struct eventtimer *et)
 {
 	struct arm_tmr_softc *sc;
 
-	/* TODO: delete me */
-#if DEBUG_ME == 1
-	int ctrl;
-	if (!virt_enabled()) {
-		ctrl = READ_SPECIALREG(cntv_ctl_el0);
-		eprintf("Old cntv_ctl_el0 = 0x%08x\n", ctrl);
-	}
-#endif
-
 	sc = (struct arm_tmr_softc *)et->et_priv;
 	arm_tmr_disable(sc->physical);
-
-#if DEBUG_ME == 1
-	if (!virt_enabled()) {
-		ctrl = READ_SPECIALREG(cntv_ctl_el0);
-		eprintf("New cntv_ctl_el0 = 0x%08x\n", ctrl);
-	}
-#endif
 
 	return (0);
 }
@@ -342,24 +309,11 @@ arm_tmr_intr(void *arg)
 	struct arm_tmr_softc *sc;
 	int ctrl;
 
-#if DEBUG_ME == 1
-	if (!virt_enabled()) {
-		ctrl = READ_SPECIALREG(cntv_ctl_el0);
-		eprintf("Old cntv_ctl_el0 = 0x%08x\n", ctrl);
-	}
-#endif
-
 	sc = (struct arm_tmr_softc *)arg;
 	ctrl = get_ctrl(sc->physical);
 	if (ctrl & GT_CTRL_INT_STAT) {
 		ctrl |= GT_CTRL_INT_MASK;
 		set_ctrl(ctrl, sc->physical);
-#if DEBUG_ME == 1
-		if (!virt_enabled()) {
-			ctrl = READ_SPECIALREG(cntv_ctl_el0);
-			eprintf("New cntv_ctl_el0 = 0x%08x\n", ctrl);
-		}
-#endif
 	}
 
 	if (sc->et.et_active)
@@ -538,10 +492,6 @@ arm_tmr_attach(device_t dev)
 	sc->physical |= virt_enabled();
 #endif
 
-#ifdef __arm__
-	sc->physical = (sc->res[GT_VIRT] == NULL);
-	sc->physical |= (hypmode_enabled[0] == 0);
-#endif
 	arm_tmr_sc = sc;
 
 	/* Setup secure, non-secure and virtual IRQs handler */
