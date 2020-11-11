@@ -1820,9 +1820,6 @@ pmap_pinit_stage(pmap_t pmap, enum pmap_stage stage, int levels)
 {
 	vm_page_t m;
 
-	KASSERT(!((stage == PM_STAGE2) && (pa_range_bits == 0)),
-	    ("Unknown PARange bits"));
-
 	KASSERT((stage == PM_STAGE1 || stage == PM_STAGE2), 
 		("Invalid pmap stage %d", stage));
 	KASSERT(!((stage == PM_STAGE2) && (pa_range_bits == 0)),
@@ -1832,7 +1829,7 @@ pmap_pinit_stage(pmap_t pmap, enum pmap_stage stage, int levels)
 	 * allocate the l0 page
 	 */
 	if (stage == PM_STAGE1) {
-		while ((l0pt = vm_page_alloc(NULL, 0, VM_ALLOC_NORMAL |
+		while ((m = vm_page_alloc(NULL, 0, VM_ALLOC_NORMAL |
 		    VM_ALLOC_NOOBJ | VM_ALLOC_WIRED | VM_ALLOC_ZERO)) == NULL)
 			vm_wait(NULL);
 	} else {
@@ -1859,7 +1856,7 @@ pmap_pinit_stage(pmap_t pmap, enum pmap_stage stage, int levels)
 			npages = 1 << (pa_range_bits - L0_SHIFT);
 			alignment = 1 << (PAGE_SHIFT + pa_range_bits - L0_SHIFT);
 		}
-		while ((l0pt = vm_page_alloc_contig(NULL, 0, VM_ALLOC_NORMAL |
+		while ((m = vm_page_alloc_contig(NULL, 0, VM_ALLOC_NORMAL |
 		    VM_ALLOC_NOOBJ | VM_ALLOC_WIRED | VM_ALLOC_ZERO,
 		    npages, DMAP_MIN_PHYSADDR, DMAP_MAX_PHYSADDR,
 		    alignment, 0, VM_MEMATTR_DEFAULT)) == NULL)
