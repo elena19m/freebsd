@@ -48,7 +48,7 @@ void
 hypmap_init(pmap_t map, enum pmap_stage pm_stage)
 {
 	mtx_init(&map->pm_mtx, "hypmap_pm_mtx", NULL, MTX_DEF);
-	pmap_pinit_stage(map, pm_stage);
+	pmap_pinit_stage(map, pm_stage, 4);
 }
 
 void
