@@ -119,7 +119,7 @@ static void arm_tmr_do_delay(int usec, void *);
 
 static timecounter_get_t arm_tmr_get_timecount;
 
-struct timecounter arm_tmr_timecount = {
+static struct timecounter arm_tmr_timecount = {
 	.tc_name           = "ARM MPCore Timecounter",
 	.tc_get_timecount  = arm_tmr_get_timecount,
 	.tc_poll_pps       = NULL,
