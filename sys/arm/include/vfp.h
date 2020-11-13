@@ -139,7 +139,7 @@
 #define COPROC10		(0x3 << 20)
 #define COPROC11		(0x3 << 22)
 
-#if !defined(LOCORE) && !defined(__ASSEMBLER__)
+#ifndef LOCORE
 struct vfp_state {
 	uint64_t reg[32];
 	uint32_t fpscr;
@@ -149,14 +149,12 @@ struct vfp_state {
 };
 
 #ifdef _KERNEL
-#include <sys/ucontext.h>
-
 void	get_vfpcontext(struct thread *, mcontext_vfp_t *);
 void	set_vfpcontext(struct thread *, mcontext_vfp_t *);
 void    vfp_init(void);
 void    vfp_store(struct vfp_state *, boolean_t);
 void    vfp_discard(struct thread *);
 #endif	/* _KERNEL */
-#endif	/* !LOCORE && !__ASSEMBLER__ */
+#endif	/* LOCORE */
 
 #endif
