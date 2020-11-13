@@ -426,7 +426,7 @@ VA_TO_PA_POINTER(Lpagetable, boot_pt1)
 
 	.global _C_LABEL(hypmode_enabled)
 _C_LABEL(hypmode_enabled):
-	.word -1
+	.word 0
 
 .Lstart:
 	.word	_edata			/* Note that these three items are */
