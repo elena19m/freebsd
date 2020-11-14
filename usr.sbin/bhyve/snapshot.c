@@ -201,22 +201,27 @@ add_device_info(struct vm_snapshot_device_info *field_info, char *field_name,
 	assert(field_info->field_name != NULL);
 	memcpy(field_info->field_name, field_name, field_len);
 
-	field_info->field_data = calloc(data_size + 1, sizeof(char));
-	assert(field_info->field_data != NULL);
-	memcpy(field_info->field_data, (uint8_t *)data, data_size);
-	field_info->data_size = data_size;
+	if (data_size != 0 && data != NULL) {
+		field_info->field_data = calloc(data_size + 1, sizeof(char));
+		assert(field_info->field_data != NULL);
+		memcpy(field_info->field_data, (uint8_t *)data, data_size);
+		field_info->data_size = data_size;
+	}
 }
 
 void
 alloc_device_info_elem(struct list_device_info *list, char *field_name,
 						volatile void *data, size_t data_size)
 {
+	const char *arr_name = NULL;
 	struct vm_snapshot_device_info *aux;
 
 	aux = calloc(1, sizeof(struct vm_snapshot_device_info));
 	assert(aux != NULL);
 	aux->ident = list->ident;
-	add_device_info(aux, field_name, list->intern_arr_names[list->ident - 1], data, data_size);
+	if (aux->ident > 0)
+		arr_name = list->intern_arr_names[aux->ident - 1];
+	add_device_info(aux, field_name, arr_name, data, data_size);
 
 	if (list->first == NULL) {
 		list->first = aux;
@@ -1023,44 +1028,97 @@ vm_restore_kern_structs(struct vmctx *ctx, struct restore_state *rstate)
 #define JSON_PARAM_DATA_SIZE_KEY	"data_size"
 */
 
+/* TODO - Return error code */
+static void *
+intern_arr_restore(const char *intern_arr_name, struct list_device_info *list,
+		const ucl_object_t *obj, unsigned int nr_tabs)
+{
+	const ucl_object_t *iobj = NULL, *iobj1 = NULL;
+	ucl_object_iter_t it = NULL, iit = NULL;
+	// unsigned int i;
+	const char *param_name;
+	int64_t data_size;
+	char is_list;
+	
+	//for (i = 0; i < nr_tabs; ++i) {
+	//	fprintf(stderr, "\t");
+	//}
+	//fprintf(stderr, "\r\n");
+
+	while ((iobj = ucl_object_iterate(obj, &it, true)) != NULL) {
+		is_list = 0;
+		while ((iobj1 = ucl_object_iterate(iobj, &iit, true)) != NULL)
+			if (ucl_object_type(iobj1) == UCL_ARRAY) {
+				list->intern_arr_names[list->ident++] = iobj1->key;
+				intern_arr_restore(iobj1->key, list, iobj1, nr_tabs + 1);
+				list->ident--;
+				is_list = 1;
+			}
+		if (!is_list) {
+			param_name = NULL;
+			JSON_GET_STRING_OR_RETURN(JSON_PARAM_KEY, iobj, &param_name, NULL);
+			data_size = -1;
+			JSON_GET_INT_OR_RETURN(JSON_PARAM_DATA_SIZE_KEY, iobj, &data_size, NULL);
+			alloc_device_info_elem(list, (char *)param_name, NULL, (size_t)data_size);
+		}
+		//for (i = 0; i < nr_tabs + 1; ++i)
+		//	fprintf(stderr, "\t");
+	}
+
+	return (NULL);
+}
+
 static void*
 lookup_check_dev_v2(const char *dev_name, struct restore_state *rstate,
-		 const ucl_object_t *obj)
+		 const ucl_object_t *obj,
+		 struct list_device_info *list)
 {
 	const ucl_object_t *dev_params = NULL, *obj1 = NULL;
 	const ucl_object_t *iobj = NULL;
 	ucl_object_iter_t it = NULL, iit = NULL;
 	const char *snapshot_req;
 	const char *param_name;
+	int64_t data_size;
+	char is_list;
 
 	snapshot_req = NULL;
 	JSON_GET_STRING_OR_RETURN(JSON_SNAPSHOT_REQ_KEY, obj,
 				  &snapshot_req, NULL);
+	assert(snapshot_req != NULL);
 
-	dev_params = ucl_object_lookup(obj, JSON_PARAMS_KEY);
-	// fprintf(stderr, "dev_params key = '%s'\n", dev_params->key);
-	if (dev_params == NULL) {
-		fprintf(stderr, "Failed to find '%s' object.\n",
-			JSON_PARAMS_KEY);
-		return(NULL);
-	}
+	if (!strcmp(snapshot_req, dev_name)) {
+		dev_params = ucl_object_lookup(obj, JSON_PARAMS_KEY);
+		// fprintf(stderr, "dev_params key = '%s'\n", dev_params->key);
+		if (dev_params == NULL) {
+			fprintf(stderr, "Failed to find '%s' object.\n",
+				JSON_PARAMS_KEY);
+			return(NULL);
+		}
 
-	if (ucl_object_type((ucl_object_t *)dev_params) != UCL_ARRAY) {
-		fprintf(stderr, "Object '%s' is not an array.\n",
-			JSON_PARAMS_KEY);
-		return (NULL);
-	}
+		if (ucl_object_type((ucl_object_t *)dev_params) != UCL_ARRAY) {
+			fprintf(stderr, "Object '%s' is not an array.\n",
+				JSON_PARAMS_KEY);
+			return (NULL);
+		}
 
-	while ((obj1 = ucl_object_iterate(dev_params, &it, true)) != NULL) {
-		// fprintf(stderr, "%s: obj is '%s'\n", snapshot_req, obj1->key);
-		param_name = NULL;
-		JSON_GET_STRING_OR_RETURN(JSON_PARAM_KEY, obj1, &param_name, NULL);
-		//if (ucl_object_type(obj1) == UCL_ARRAY)
-		//	fprintf(stderr, "%s: Found an array\n", snapshot_req);
-		//fprintf(stderr, "%s: param : '%s'\n", snapshot_req, param_name);
-		while ((iobj = ucl_object_iterate(obj1, &iit, true)) != NULL) {
-			if (ucl_object_type(iobj) == UCL_ARRAY)
-				fprintf(stderr, "%s iobj is '%s'\n", snapshot_req, iobj->key);
+		while ((obj1 = ucl_object_iterate(dev_params, &it, true)) != NULL) {
+			is_list = 0;
+			while ((iobj = ucl_object_iterate(obj1, &iit, true)) != NULL) {
+				if (ucl_object_type(iobj) == UCL_ARRAY) {
+					list->intern_arr_names[list->ident++] = iobj->key;
+					intern_arr_restore(iobj->key, list, iobj, 1);
+					list->intern_arr_names[list->ident--] = NULL;
+					is_list = 1;
+				}
+			}
+			if (!is_list) {
+				param_name = NULL;
+				JSON_GET_STRING_OR_RETURN(JSON_PARAM_KEY, obj1, &param_name, NULL);
+				data_size = -1;
+				JSON_GET_INT_OR_RETURN(JSON_PARAM_DATA_SIZE_KEY, obj1, &data_size, NULL);
+				alloc_device_info_elem(list, (char *)param_name, NULL, (size_t)data_size);
+			}
+			// fprintf(stderr, "param_name = '%s', data_size = %ld\r\n", param_name, data_size);
 		}
 	}
 
@@ -1068,7 +1126,8 @@ lookup_check_dev_v2(const char *dev_name, struct restore_state *rstate,
 }
 
 static void*
-lookup_dev_v2(const char *dev_name, struct restore_state *rstate)
+lookup_dev_v2(const char *dev_name, struct restore_state *rstate,
+		struct list_device_info *list)
 {
 	const ucl_object_t *devs = NULL, *obj = NULL;
 	ucl_object_iter_t it = NULL;
@@ -1088,12 +1147,24 @@ lookup_dev_v2(const char *dev_name, struct restore_state *rstate)
 	}
 
 	while ((obj = ucl_object_iterate(devs, &it, true)) != NULL) {
-		ret = lookup_check_dev_v2(dev_name, rstate, obj);
+		ret = lookup_check_dev_v2(dev_name, rstate, obj, list);
 		if (ret != NULL)
 			return (ret);
 	}
 
 	return (NULL);
+}
+void look_test_func(struct vmctx *ctx, struct restore_state *rstate,
+			const struct vm_snapshot_dev_info *info,
+			struct list_device_info *list) {
+	//if (!strcmp(info->dev_name, "atkbdc")) {
+	//	fprintf(stderr, "dev_name = '%s'\n", info->dev_name);
+	//alloc_device_info_elem(struct list_device_info *list, char *field_name,
+	//					volatile void *data, size_t data_size)
+
+	lookup_dev_v2(info->dev_name, rstate, list);
+
+	//}
 }
 #endif
 
@@ -1106,10 +1177,6 @@ vm_restore_user_dev(struct vmctx *ctx, struct restore_state *rstate,
 	int ret;
 	struct vm_snapshot_meta *meta;
 
-	/* TODO - Don't forget to delete move this in the right place */
-	lookup_dev_v2(info->dev_name, rstate);
-
-	
 	dev_ptr = lookup_dev(info->dev_name, rstate, &dev_size);
 	if (dev_ptr == NULL) {
 		fprintf(stderr, "Failed to lookup dev: %s\r\n", info->dev_name);
@@ -1159,14 +1226,37 @@ vm_restore_user_dev(struct vmctx *ctx, struct restore_state *rstate,
 int
 vm_restore_user_devs(struct vmctx *ctx, struct restore_state *rstate)
 {
-	int ret;
+	//int ret;
 	int i;
+	struct list_device_info list;
+	struct vm_snapshot_device_info *aux;
 
 	for (i = 0; i < nitems(snapshot_devs); i++) {
-		ret = vm_restore_user_dev(ctx, rstate, &snapshot_devs[i]);
-		if (ret != 0)
-			return (ret);
+		//ret = vm_restore_user_dev(ctx, rstate, &snapshot_devs[i]);
+		//if (ret != 0)
+		//	return (ret);
+		memset(&list, 0, sizeof(list));
+		list.first = NULL;
+		list.last = NULL;
+
+		look_test_func(ctx, rstate, &snapshot_devs[i], &list);
+
+		/* TODO - Print and free array */
+		aux = list.first;
+		while (aux != NULL) {
+			if (aux->intern_arr_name != NULL) {
+				fprintf(stderr, "\tintern_arr_name : '%s'\r\n", aux->intern_arr_name);
+				fprintf(stderr, "\tfield_name: '%s'\r\n", aux->field_name);
+			} else {
+				fprintf(stderr, "field_name: '%s'\r\n", aux->field_name);
+			}
+			aux = aux->next_field;
+		}
+		free_device_info_list(&list);
+		fprintf(stderr, "\r\n\r\n");
 	}
+
+	while (1) {}
 
 	return 0;
 }
