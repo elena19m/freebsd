@@ -31,7 +31,7 @@
 #define _NET_UTILS_H_
 
 #include <stdint.h>
-#include "pci_emul.h"
+#include "mmio_emul.h"
 
 void	net_genmac(struct mmio_devinst *pi, uint8_t *macaddr);
 int	net_parsemac(char *mac_str, uint8_t *mac_addr);
