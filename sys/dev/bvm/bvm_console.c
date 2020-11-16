@@ -40,7 +40,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/reboot.h>
 #include <sys/bus.h>
 
-#if defined(__arm__) || defined(__aarch64__)
+#if defined(__aarch64__)
 #include <vm/vm.h>
 #include <vm/pmap.h>
 #endif
@@ -73,8 +73,6 @@ static int			alt_break_state;
 
 #if defined(__i386__) || defined(__amd64__)
 #define	BVM_CONS_PORT	0x220
-#elif defined(__arm__)
-#define	BVM_CONS_PORT	0x1c090000
 #elif defined(__aarch64__)
 #define	BVM_CONS_PORT	0x090000
 #endif
