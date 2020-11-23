@@ -1974,6 +1974,7 @@ static int
 pci_snapshot_pci_dev(struct vm_snapshot_meta *meta)
 {
 	struct pci_devinst *pi;
+	struct pcibar *pb;
 	int i;
 	int ret;
 
@@ -1997,11 +1998,17 @@ pci_snapshot_pci_dev(struct vm_snapshot_meta *meta)
 	SNAPSHOT_BUF_OR_LEAVE(pi->pi_cfgdata, sizeof(pi->pi_cfgdata),
 			      meta, ret, done);
 
+	SNAPSHOT_ADD_INTERN_ARR(pi_bars, meta);
 	for (i = 0; i < nitems(pi->pi_bar); i++) {
-		SNAPSHOT_VAR_OR_LEAVE(pi->pi_bar[i].type, meta, ret, done);
-		SNAPSHOT_VAR_OR_LEAVE(pi->pi_bar[i].size, meta, ret, done);
-		SNAPSHOT_VAR_OR_LEAVE(pi->pi_bar[i].addr, meta, ret, done);
+		pb = &(pi->pi_bar[i]);
+		//SNAPSHOT_VAR_OR_LEAVE(pi->pi_bar[i].type, meta, ret, done);
+		//SNAPSHOT_VAR_OR_LEAVE(pi->pi_bar[i].size, meta, ret, done);
+		//SNAPSHOT_VAR_OR_LEAVE(pi->pi_bar[i].addr, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(pb->type, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(pb->size, meta, ret, done);
+		SNAPSHOT_VAR_OR_LEAVE(pb->addr, meta, ret, done);
 	}
+	SNAPSHOT_REMOVE_INTERN_ARR(pi_bars, meta);
 
 	/* Restore MSI-X table. */
 	for (i = 0; i < pi->pi_msix.table_count; i++) {

@@ -92,6 +92,7 @@ struct vm_snapshot_buffer {
 struct vm_snapshot_device_info {
 	unsigned char ident;
 	char *field_name;
+	int index;
 	char *intern_arr_name;
 	void *field_data;
 	size_t data_size;
@@ -102,6 +103,7 @@ struct vm_snapshot_device_info {
 struct list_device_info {
 	unsigned char ident;
 	const char *intern_arr_names[IDENT_LEVEL];
+	int index;
 
 	struct vm_snapshot_device_info *first;
 	struct vm_snapshot_device_info *last;
@@ -132,8 +134,12 @@ struct vm_snapshot_meta {
 
 int vm_snapshot_save_fieldname(const char *fullname, volatile void *data,
 				size_t data_size, struct vm_snapshot_meta *meta);
-void vm_snapshot_add_intern_list(const char *arr_name, struct vm_snapshot_meta *meta);
+void vm_snapshot_add_intern_list(const char *arr_name,
+				struct vm_snapshot_meta *meta);
 void vm_snapshot_remove_intern_list(struct vm_snapshot_meta *meta);
+int vm_snapshot_save_fieldname_cmp(const char *fullname, volatile void *data,
+				size_t data_size, struct vm_snapshot_meta *meta);
+
 
 void vm_snapshot_buf_err(const char *bufname, const enum vm_snapshot_op op);
 int vm_snapshot_buf(volatile void *data, size_t data_size,
@@ -148,12 +154,22 @@ int vm_snapshot_buf_cmp(volatile void *data, size_t data_size,
 
 #define SNAPSHOT_ADD_INTERN_ARR(ARR_NAME, META)			\
 do {													\
-	vm_snapshot_add_intern_list(#ARR_NAME, (META));				\
+	vm_snapshot_add_intern_list(#ARR_NAME, (META));		\
 } while (0)
 
 #define SNAPSHOT_REMOVE_INTERN_ARR(ARR_NAME, META)		\
 do {													\
 	vm_snapshot_remove_intern_list((META));				\
+} while (0)
+
+#define SNAPSHOT_SET_INTERN_ARR_INDEX(META, IDX)		\
+do {													\
+	vm_snapshot_set_intern_arr_index((META), (IDX));	\
+} while (0)
+
+#define SNAPSHOT_CLEAR_INTERN_ARR_INDEX(META)			\
+do {													\
+	vm_snapshot_clear_intern_arr_index((META));			\
 } while (0)
 
 #endif
@@ -166,13 +182,14 @@ do {										\
 			vm_snapshot_buf_err(#DATA, (META)->op);									\
 			goto LABEL;																\
 		}																			\
+	} else {																		\
+		/* TODO - Add else case */													\
+		(RES) = vm_snapshot_buf((DATA), (LEN), (META));								\
+		if ((RES) != 0) {															\
+			vm_snapshot_buf_err(#DATA, (META)->op);									\
+			goto LABEL;																\
+		}																			\
 	}																				\
-	/* TODO - Add else case */														\
-	(RES) = vm_snapshot_buf((DATA), (LEN), (META));				\
-	if ((RES) != 0) {							\
-		vm_snapshot_buf_err(#DATA, (META)->op);				\
-		goto LABEL;							\
-	}									\
 } while (0)
 
 #define	SNAPSHOT_VAR_OR_LEAVE(DATA, META, RES, LABEL)								\
@@ -197,13 +214,21 @@ do {										\
 } while (0)
 
 /* compare the value in the meta buffer with the data */
-#define	SNAPSHOT_BUF_CMP_OR_LEAVE(DATA, LEN, META, RES, LABEL)			\
-do {										\
-	(RES) = vm_snapshot_buf_cmp((DATA), (LEN), (META));			\
-	if ((RES) != 0) {							\
-		vm_snapshot_buf_err(#DATA, (META)->op);				\
-		goto LABEL;							\
-	}									\
+#define	SNAPSHOT_BUF_CMP_OR_LEAVE(DATA, LEN, META, RES, LABEL)					\
+do {																			\
+	if ((META)->version == 2) {													\
+		(RES) = vm_snapshot_save_fieldname_cmp(#DATA, (DATA), (LEN), (META));	\
+		if ((RES) != 0) {														\
+			vm_snapshot_buf_err(#DATA, (META)->op);								\
+			goto LABEL;															\
+		}																		\
+	} else {																	\
+		(RES) = vm_snapshot_buf_cmp((DATA), (LEN), (META));						\
+		if ((RES) != 0) {														\
+			vm_snapshot_buf_err(#DATA, (META)->op);								\
+			goto LABEL;															\
+		}																		\
+	}																			\
 } while (0)
 
 #define	SNAPSHOT_VAR_CMP_OR_LEAVE(DATA, META, RES, LABEL)			\
