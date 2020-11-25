@@ -390,3 +390,15 @@ vm_deassert_irq(struct vmctx *ctx, uint32_t irq)
 
 	return (ioctl(ctx->fd, VM_DEASSERT_IRQ, &vi));
 }
+
+int
+vm_activate_cpu(struct vmctx *ctx, int vcpu)
+{
+	struct vm_activate_cpu ac;
+	int error;
+
+	bzero(&ac, sizeof(struct vm_activate_cpu));
+	ac.vcpuid = vcpu;
+	error = ioctl(ctx->fd, VM_ACTIVATE_CPU, &ac);
+	return (error);
+}

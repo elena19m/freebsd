@@ -73,6 +73,7 @@ const char *vm_get_stat_desc(struct vmctx *ctx, int index);
 
 /* Reset vcpu register state */
 int	vcpu_reset(struct vmctx *ctx, int vcpu);
+int	vm_activate_cpu(struct vmctx *ctx, int vcpu);
 
 int	vm_attach_vgic(struct vmctx *ctx, uint64_t dist_start, size_t dist_size,
 		uint64_t redist_start, size_t redist_size);

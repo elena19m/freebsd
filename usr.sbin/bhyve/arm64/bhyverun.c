@@ -43,6 +43,7 @@
 #include <vmmapi.h>
 
 #include <machine/vmm.h>
+#include <machine/atomic.h>
 
 #include "bhyverun.h"
 #include "../mmio/mmio_emul.h"
@@ -79,8 +80,8 @@ static int foundcpus;
 
 static char *progname;
 static const int BSP = 0;
-/* TODO Change this to cpuset_t */
-static int cpumask;
+
+static cpuset_t cpumask;
 
 static void vm_loop(struct vmctx *ctx, int vcpu, uint64_t pc);
 
@@ -187,13 +188,13 @@ fbsdrun_addcpu(struct vmctx *ctx, int vcpu, uint64_t pc)
 {
 	int error;
 
-	if (cpumask & (1 << vcpu)) {
-		fprintf(stderr, "addcpu: attempting to add existing cpu %d\n",
-		    vcpu);
-		exit(4);
-	}
+	assert(vcpu == BSP);
 
-	cpumask |= 1 << vcpu;
+	error = vm_activate_cpu(ctx, vcpu);
+	if (error != 0)
+		err(EX_OSERR, "could not activate CPU %d", vcpu);
+
+	CPU_SET_ATOMIC(vcpu, &cpumask);
 	foundcpus++;
 
 	/*
@@ -203,14 +204,12 @@ fbsdrun_addcpu(struct vmctx *ctx, int vcpu, uint64_t pc)
 	vmexit[vcpu].pc = pc;
 	vmexit[vcpu].inst_length = 0;
 
-	if (vcpu == BSP) {
-		mt_vmm_info[vcpu].mt_ctx = ctx;
-		mt_vmm_info[vcpu].mt_vcpu = vcpu;
+	mt_vmm_info[vcpu].mt_ctx = ctx;
+	mt_vmm_info[vcpu].mt_vcpu = vcpu;
 
-		error = pthread_create(&mt_vmm_info[vcpu].mt_thr, NULL,
-				fbsdrun_start_thread, &mt_vmm_info[vcpu]);
-		assert(error == 0);
-	}
+	error = pthread_create(&mt_vmm_info[vcpu].mt_thr, NULL,
+			fbsdrun_start_thread, &mt_vmm_info[vcpu]);
+	assert(error == 0);
 }
 
 static int
@@ -292,12 +291,38 @@ vmexit_suspend(struct vmctx *ctx, struct vm_exit *vmexit, int *pvcpu)
 
 }
 
+static int
+vmexit_spinup_ap(struct vmctx *ctx, struct vm_exit *vmexit, int *pvcpu)
+{
+	/*
+	 * AMD64
+	 * (void)spinup_ap(ctx, *pvcpu,
+         *     vmexit->u.spinup_ap.vcpu, vmexit->u.spinup_ap.rip);
+	 * Variables mapping
+	 * vcpu -> *pvcpu
+	 * newcpu -> vmexit->u.spinup_ap.vcpu
+	 */
+	int error;
+	int newcpu = vmexit->u.spinup_ap.vcpu;
+
+	assert(newcpu != 0);
+	assert(newcpu < guest_ncpus);
+
+	error = vm_set_capability(ctx, newcpu, VM_CAP_UNRESTRICTED_GUEST, 1);
+	assert(error == 0);
+
+	fbsdrun_addcpu(ctx, newcpu, vmexit->u.spinup_ap.rip);
+
+	return (newcpu);
+}
+
 static vmexit_handler_t handler[VM_EXITCODE_MAX] = {
 	[VM_EXITCODE_BOGUS]  = vmexit_bogus,
 	[VM_EXITCODE_INST_EMUL] = vmexit_inst_emul,
 	[VM_EXITCODE_REG_EMUL] = vmexit_hyp,
 	[VM_EXITCODE_SUSPENDED] = vmexit_suspend,
 	[VM_EXITCODE_HYP]    = vmexit_hyp,
+	[VM_EXITCODE_SPINUP_AP] = vmexit_spinup_ap,
 };
 
 static void

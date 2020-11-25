@@ -106,6 +106,7 @@ struct vm {
 	 * explicitly (AP) by sending it a startup ipi.
 	 */
 	cpuset_t	active_cpus;
+	uint16_t	maxcpus;
 };
 
 static bool vmm_initialized = false;
@@ -171,15 +172,25 @@ vcpu_cleanup(struct vm *vm, int i, bool destroy)
 }
 
 static void
-vcpu_init(struct vm *vm, uint32_t vcpu_id)
+vcpu_init(struct vm *vm, uint32_t vcpu_id, bool create)
 {
 	struct vcpu *vcpu;
 
+	KASSERT(vcpu_id >= 0 && vcpu_id < vm->maxcpus,
+	    ("cpus_init: invalid vcpu %d", vcpu_id));
+
 	vcpu = &vm->vcpu[vcpu_id];
 
-	vcpu_lock_init(vcpu);
-	vcpu->hostcpu = NOCPU;
-	vcpu->vcpuid = vcpu_id;
+	if (create) {
+		KASSERT(!vcpu_lock_initialized(vcpu), ("vcpu %d already "
+		    "initialized", vcpu_id));
+		printf("vmm: create vcpu %d\n", vcpu_id);
+		vcpu_lock_init(vcpu);
+		vcpu->hostcpu = NOCPU;
+		vcpu->vcpuid = vcpu_id;
+	}
+
+
 }
 
 struct vm_exit *
@@ -263,12 +274,12 @@ vm_create(const char *name, struct vm **retvm)
 
 	vm = malloc(sizeof(struct vm), M_VMM, M_WAITOK | M_ZERO);
 	strcpy(vm->name, name);
+	vm->maxcpus = VM_MAXCPU;
 	vm->cookie = VMINIT(vm);
 
-	for (i = 0; i < VM_MAXCPU; i++)
-		vcpu_init(vm, i);
-
-	vm_activate_cpu(vm, BSP);
+	CPU_ZERO(&vm->active_cpus);
+	for (i = 0; i < vm->maxcpus; i++)
+		vcpu_init(vm, i, true);
 
 	*retvm = vm;
 	return (0);

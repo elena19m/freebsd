@@ -292,7 +292,7 @@ struct vm_copyinfo {
 int vcpu_trace_exceptions(struct vm *vm, int vcpuid);
 #endif	/* _KERNEL */
 
-#define	VM_MAXCPU	1
+#define	VM_MAXCPU	2
 
 #define	VM_DIR_READ	0
 #define	VM_DIR_WRITE	1
@@ -326,6 +326,7 @@ enum vm_exitcode {
 	VM_EXITCODE_SUSPENDED,
 	VM_EXITCODE_HYP,
 	VM_EXITCODE_WFI,
+	VM_EXITCODE_SPINUP_AP,
 	VM_EXITCODE_MAX
 };
 
