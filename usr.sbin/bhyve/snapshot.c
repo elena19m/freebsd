@@ -31,6 +31,8 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
+ *
+ * $FreeBSD$
  */
 
 #include <sys/cdefs.h>
@@ -85,6 +87,7 @@ __FBSDID("$FreeBSD$");
 #include "ioapic.h"
 #include "mem.h"
 #include "mevent.h"
+#include "migration.h"
 #include "mptbl.h"
 #include "pci_emul.h"
 #include "pci_irq.h"
@@ -122,7 +125,6 @@ static sig_t old_winch_handler;
 
 #define	MAX_MSG_SIZE 1024
 
-#define	SNAPSHOT_BUFFER_SIZE (20 * MB)
 
 #define	JSON_STRUCT_ARR_KEY		"structs"
 #define	JSON_DEV_ARR_KEY		"devices"
@@ -168,6 +170,24 @@ const struct vm_snapshot_kern_info snapshot_kern_structs[] = {
 	{ "vpmtmr",	STRUCT_VPMTMR	},
 	{ "vrtc",	STRUCT_VRTC	},
 };
+
+const struct vm_snapshot_dev_info *
+get_snapshot_devs(int *ndevs)
+{
+	if (ndevs != NULL)
+		*ndevs = nitems(snapshot_devs);
+
+	return (snapshot_devs);
+}
+
+const struct vm_snapshot_kern_info *
+get_snapshot_kern_structs(int *ndevs)
+{
+	if (ndevs != NULL)
+		*ndevs = nitems(snapshot_kern_structs);
+
+	return (snapshot_kern_structs);
+}
 
 static cpuset_t vcpus_active, vcpus_suspended;
 static pthread_mutex_t vcpu_lock;
@@ -1468,6 +1488,19 @@ get_checkpoint_msg(int conn_fd, struct vmctx *ctx)
 			break;
 		case START_SUSPEND:
 			err = vm_checkpoint(ctx, checkpoint_op->snapshot_filename, true);
+			break;
+		case START_MIGRATE:
+			memset(&req, 0, sizeof(struct migrate_req));
+			req.port = checkpoint_op->port;
+			memcpy(req.host, checkpoint_op->host, MAX_HOSTNAME_LEN);
+			req.host[MAX_HOSTNAME_LEN - 1] = 0;
+			fprintf(stderr, "%s: IP address used for migration: %s;\r\n"
+				"Port used for migration: %d\r\n",
+				__func__,
+				checkpoint_op->host,
+				checkpoint_op->port);
+
+			err = vm_send_migrate_req(ctx, req);
 			break;
 		default:
 			fprintf(stderr, "Unrecognized checkpoint operation.\n");
