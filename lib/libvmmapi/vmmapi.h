@@ -257,14 +257,32 @@ void	vm_setup_freebsd_gdt(uint64_t *gdtr);
 
 #define MAX_SNAPSHOT_VMNAME 100
 
+#define MAX_HOSTNAME_LEN	255
+#define MAX_IP_LEN		64
+#define DEFAULT_MIGRATION_PORT	24983
+#define MAX_SPEC_LEN		256
+
+#define MIGRATION_SPECS_OK	0
+#define MIGRATION_SPECS_NOT_OK	1
+
+#define KERN_DATA_BUFFER_SIZE (4 * MB)
+
 enum checkpoint_opcodes {
 	START_CHECKPOINT = 0,
 	START_SUSPEND = 1,
+	START_MIGRATE = 2,
 };
 
 struct checkpoint_op {
 	unsigned int op;
 	char snapshot_filename[MAX_SNAPSHOT_VMNAME];
+	char host[MAX_HOSTNAME_LEN];
+	unsigned int port;
+};
+
+struct __attribute__((packed)) migrate_req {
+	char host[MAX_HOSTNAME_LEN];
+	unsigned int port;
 };
 
 int	vm_snapshot_req(struct vm_snapshot_meta *meta);
