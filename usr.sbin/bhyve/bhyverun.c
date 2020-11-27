@@ -1111,7 +1111,7 @@ main(int argc, char *argv[])
 	memflags = 0;
 
 #ifdef BHYVE_SNAPSHOT
-	optstr = "abehuwxACDHIPSWYp:g:G:c:s:m:l:U:r:R:
+	optstr = "abehuwxACDHIPSWYp:g:G:c:s:m:l:U:r:R:";
 #else
 	optstr = "abehuwxACDHIPSWYp:g:G:c:s:m:l:U:";
 #endif

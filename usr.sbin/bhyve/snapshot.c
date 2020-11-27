@@ -1324,7 +1324,7 @@ checkpoint_cpu_resume(int vcpu)
 	pthread_mutex_unlock(&vcpu_lock);
 }
 
-static void
+void
 vm_vcpu_pause(struct vmctx *ctx)
 {
 
@@ -1336,7 +1336,7 @@ vm_vcpu_pause(struct vmctx *ctx)
 	pthread_mutex_unlock(&vcpu_lock);
 }
 
-static void
+void
 vm_vcpu_resume(struct vmctx *ctx)
 {
 
@@ -1468,6 +1468,7 @@ get_checkpoint_msg(int conn_fd, struct vmctx *ctx)
 {
 	unsigned char buf[MAX_MSG_SIZE];
 	struct checkpoint_op *checkpoint_op;
+	struct migrate_req req;
 	int len, recv_len, total_recv = 0;
 	int err = 0;
 
