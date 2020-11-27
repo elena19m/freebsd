@@ -59,15 +59,6 @@ __FBSDID("$FreeBSD$");
 #include <machine/vmm_dev.h>
 #include <machine/vmm_snapshot.h>
 
-/*
- * Libraries for sockets API
- */
-#include <sys/socket.h>
-#include <netdb.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/types.h>
-
 #include "vmmapi.h"
 
 #define	MB	(1024 * 1024UL)

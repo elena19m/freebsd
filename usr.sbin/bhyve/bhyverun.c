@@ -1393,7 +1393,7 @@ main(int argc, char *argv[])
 			exit(1);
 		}
 	}
-#endif
+#endif /* BHYVE_SNAPSHOT */
 
 	error = vm_get_register(ctx, BSP, VM_REG_GUEST_RIP, &rip);
 	assert(error == 0);

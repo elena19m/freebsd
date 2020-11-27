@@ -1,3 +1,36 @@
+/*-
+ * SPDX-License-Identifier: BSD-2-Clause-FreeBSD
+ *
+ * Copyright (c) 2017-2020 Elena Mihailescu
+ * Copyright (c) 2017-2020 Darius Mihai
+ * Copyright (c) 2017-2020 Mihai Carabas
+ * All rights reserved.
+ * The migration feature was developed under sponsorships
+ * from Matthew Grooms.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY NETAPP, INC ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL NETAPP, INC OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ * $FreeBSD$
+ */
 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
@@ -71,7 +104,9 @@ receive_vm_migration(struct vmctx *ctx, char *migration_data)
 	return (rc);
 }
 
-// Warm Migration
+/*
+ * This represents the implementation of the warm migration feature for bhyve.
+ */
 
 static int
 get_system_specs_for_migration(struct migration_system_specs *specs)
@@ -182,7 +217,7 @@ migration_send_specs(int socket)
 		return (rc);
 	}
 
-	// Send message type to server: specs & len
+	/* Send message type to server: specs & len */
 	mesg.type = MESSAGE_TYPE_SPECS;
 	mesg.len = sizeof(local_specs);
 	rc = migration_send_data_remote(socket, &mesg, sizeof(mesg));
@@ -191,14 +226,14 @@ migration_send_specs(int socket)
 		return (-1);
 	}
 
-	// Send specs to server
+	/* Send specs to server */
 	rc = migration_send_data_remote(socket, &local_specs, sizeof(local_specs));
 	if (rc < 0) {
 		fprintf(stderr, "%s: Could not send system specs\r\n", __func__);
 		return (-1);
 	}
 
-	// Recv OK/NOT_OK from server
+	/* Recv OK/NOT_OK from server */
 	rc = migration_recv_data_from_remote(socket, &response, sizeof(response));
 	if (rc < 0) {
 		fprintf(stderr,
@@ -207,7 +242,7 @@ migration_send_specs(int socket)
 		return (-1);
 	}
 
-	//  Return OK/NOT_OK
+	/*  Return OK/NOT_OK */
 	if (response == MIGRATION_SPECS_NOT_OK) {
 		fprintf(stderr,
 			"%s: System specification mismatch\r\n",
@@ -229,7 +264,7 @@ migration_recv_and_check_specs(int socket)
 	size_t response;
 	int rc;
 
-	// TODO1: Get specs size from remote (from client)
+	/* TODO1: Get specs size from remote (from client) */
 	rc = migration_recv_data_from_remote(socket, &msg, sizeof(msg));
 	if (rc < 0) {
 		fprintf(stderr,
@@ -245,7 +280,7 @@ migration_recv_and_check_specs(int socket)
 		return (-1);
 	}
 
-	// Get specs from remote (from client)
+	/* Get specs from remote (from client) */
 	rc = migration_recv_data_from_remote(socket, &remote_specs, msg.len);
 	if (rc < 0) {
 		fprintf(stderr,
@@ -261,7 +296,7 @@ migration_recv_and_check_specs(int socket)
 		return (rc);
 	}
 
-	// Check specs
+	/* Check specs */
 	response = MIGRATION_SPECS_OK;
 	if ((strncmp(local_specs.hw_model, remote_specs.hw_model, MAX_SPEC_LEN) != 0)
 		|| (strncmp(local_specs.hw_machine, remote_specs.hw_machine, MAX_SPEC_LEN) != 0)
@@ -269,7 +304,7 @@ migration_recv_and_check_specs(int socket)
 	   ) {
 		fprintf(stderr, "%s: System specification mismatch\r\n", __func__);
 
-		// Debug message
+#ifdef BHYVE_DEBUG
 		fprintf(stderr,
 			"%s: Local specs vs Remote Specs: \r\n"
 			"\tmachine: %s vs %s\r\n"
@@ -283,10 +318,11 @@ migration_recv_and_check_specs(int socket)
 			local_specs.hw_pagesize,
 			remote_specs.hw_pagesize
 			);
+#endif
 		response = MIGRATION_SPECS_NOT_OK;
 	}
 
-	// Send OK/NOT_OK to client
+	/* Send OK/NOT_OK to client */
 	rc = migration_send_data_remote(socket, &response, sizeof(response));
 	if (rc < 0) {
 		fprintf(stderr,
@@ -295,7 +331,6 @@ migration_recv_and_check_specs(int socket)
 		return (-1);
 	}
 
-	// If NOT_OK, return NOT_OK
 	if (response == MIGRATION_SPECS_NOT_OK)
 		return (-1);
 
@@ -383,7 +418,7 @@ migrate_recv_memory(struct vmctx *ctx, int socket)
 		return (rc);
 	}
 
-	// recv remote_lowmem_size
+	/* Receive the size of the lowmem segment */
 	rc = migration_recv_data_from_remote(socket,
 			&remote_lowmem_size,
 			sizeof(size_t));
@@ -393,7 +428,8 @@ migrate_recv_memory(struct vmctx *ctx, int socket)
 			__func__);
 		return (rc);
 	}
-	// recv remote_highmem_size
+
+	/* Recieve the size of the highmem segment */
 	rc = migration_recv_data_from_remote(socket,
 			&remote_highmem_size,
 			sizeof(size_t));
@@ -403,11 +439,11 @@ migrate_recv_memory(struct vmctx *ctx, int socket)
 			__func__);
 		return (rc);
 	}
-	// check if local low/high mem is equal with remote low/high mem
+
+	/* Check if local {low,high}mem is equal with remote {low,high}mem */
 	memsize_ok = migrate_check_memsize(local_lowmem_size, local_highmem_size,
 					   remote_lowmem_size, remote_highmem_size);
 
-	// Send migration_ok to remote
 	rc = migration_send_data_remote(socket,
 			&memsize_ok, sizeof(memsize_ok));
 	if (rc < 0) {
@@ -424,7 +460,7 @@ migrate_recv_memory(struct vmctx *ctx, int socket)
 		return (-1);
 	}
 
-	// recv lowmem
+	/* Receive the lowmem segment */
 	rc = migration_recv_data_from_remote(socket, baseaddr, local_lowmem_size);
 	if (rc < 0) {
 		fprintf(stderr,
@@ -433,7 +469,7 @@ migrate_recv_memory(struct vmctx *ctx, int socket)
 		return (-1);
 	}
 
-	// recv highmem
+	/* Receive the highmem segment */
 	if (local_highmem_size > 0 ){
 		rc = migration_recv_data_from_remote(socket,
 				baseaddr + 4 * GB,
@@ -468,7 +504,7 @@ migrate_send_memory(struct vmctx *ctx, int socket)
 		return (rc);
 	}
 
-	// send lowmem_size
+	/* Send the size of the lowmem segment */
 	rc = migration_send_data_remote(socket, &lowmem_size, sizeof(size_t));
 	if (rc < 0) {
 		fprintf(stderr,
@@ -477,7 +513,7 @@ migrate_send_memory(struct vmctx *ctx, int socket)
 		return (rc);
 	}
 
-	// send highmem_size
+	/* Send the size of the highmem segment */
 	rc = migration_send_data_remote(socket, &highmem_size, sizeof(size_t));
 	if (rc < 0) {
 		fprintf(stderr,
@@ -486,7 +522,7 @@ migrate_send_memory(struct vmctx *ctx, int socket)
 		return (rc);
 	}
 
-	// wait for answer - params ok
+	/* Wait for answer - params ok (if memory size matches) */
 	rc = migration_recv_data_from_remote(socket, &memsize_ok, sizeof(memsize_ok));
 	if (rc < 0) {
 		fprintf(stderr,
@@ -505,7 +541,7 @@ migrate_send_memory(struct vmctx *ctx, int socket)
 	mmap_vm_lowmem = baseaddr;
 	mmap_vm_highmem = baseaddr + 4 * GB;
 
-	// send lowmem
+	/* Send the lowmem segment */
 	rc = migration_send_data_remote(socket, mmap_vm_lowmem, lowmem_size);
 	if (rc < 0) {
 		fprintf(stderr,
@@ -514,7 +550,7 @@ migrate_send_memory(struct vmctx *ctx, int socket)
 		return (-1);
 	}
 
-	// send highmem
+	/* Send the highmem segment */
 	if (highmem_size > 0 ){
 		rc = migration_send_data_remote(socket, mmap_vm_highmem, highmem_size);
 		if (rc < 0) {
@@ -630,7 +666,6 @@ migrate_recv_kern_struct(struct vmctx *ctx, int socket, char *buffer)
 	meta->buffer.buf = meta->buffer.buf_start;
 	meta->buffer.buf_rem = meta->buffer.buf_size;
 
-	// restore struct
 	rc = vm_snapshot_req(meta);
 	if (rc != 0 ) {
 		fprintf(stderr,
@@ -663,7 +698,6 @@ migrate_kern_data(struct vmctx *ctx, int socket, enum migration_transfer_req req
 
 	for (i = 0; i < ndevs; i++) {
 		if (req == MIGRATION_RECV_REQ) {
-			// wait for msg message
 			rc = migrate_recv_kern_struct(ctx, socket, buffer);
 			if (rc < 0) {
 				fprintf(stderr,
@@ -764,7 +798,6 @@ migrate_send_dev(struct vmctx *ctx, int socket, const char *dev,
 
 	data_size = vm_get_snapshot_size(meta);
 
-	// send struct size to destination
 	memset(&msg, 0, sizeof(msg));
 	msg.type = MESSAGE_TYPE_DEV;
 	msg.len = data_size;
@@ -785,7 +818,6 @@ migrate_send_dev(struct vmctx *ctx, int socket, const char *dev,
 		return (0);
 	}
 
-	// send dev
 	rc = migration_send_data_remote(socket, buffer, data_size);
 	if (rc < 0) {
 		fprintf(stderr,
@@ -807,7 +839,6 @@ migrate_recv_dev(struct vmctx *ctx, int socket, char *buffer, size_t len)
 	struct vm_snapshot_meta *meta;
 	const struct vm_snapshot_dev_info *dev_info;
 
-	// recv struct size to destination
 	memset(&msg, 0, sizeof(msg));
 
 	rc = migration_recv_data_from_remote(socket, &msg, sizeof(msg));
@@ -817,7 +848,6 @@ migrate_recv_dev(struct vmctx *ctx, int socket, char *buffer, size_t len)
 	}
 
 	data_size = msg.len;
-	// recv dev
 
 	if(data_size == 0) {
 		fprintf(stderr, "%s: Did not restore %s dev. Assuming unused. "
@@ -888,8 +918,10 @@ migrate_devs(struct vmctx *ctx, int socket, enum migration_transfer_req req)
 	}
 
 	if (req == MIGRATION_SEND_REQ) {
-		// send to the destination the number of devices that will
-		// be migrated
+		/*
+		 * Send to the destination the number of devices that will
+		 * be migrated.
+		 */
 		snapshot_devs = get_snapshot_devs(&num_items);
 		rc = migration_send_data_remote(socket, &num_items, sizeof(num_items));
 
@@ -911,7 +943,7 @@ migrate_devs(struct vmctx *ctx, int socket, enum migration_transfer_req req)
 			}
 	    }
 	} else if (req == MIGRATION_RECV_REQ) {
-		// receive the number of devices that will be migrated
+		/* receive the number of devices that will be migrated */
 		rc = migration_recv_data_from_remote(socket, &num_items, sizeof(num_items));
 
 		if (rc < 0) {
@@ -1021,7 +1053,7 @@ migrate_connections(struct migrate_req req, int *socket_fd,
 			sa.sin_port = htons(req.port);
 			sa.sin_addr.s_addr = htonl(INADDR_ANY);
 
-			rc = bind(s , (struct sockaddr *)&sa, sizeof(sa));
+			rc = bind(s, (struct sockaddr *)&sa, sizeof(sa));
 
 			if (rc < 0) {
 				perror("Could not bind");
@@ -1072,7 +1104,7 @@ vm_send_migrate_req(struct vmctx *ctx, struct migrate_req req)
 		return (-1);
 	}
 
-	// send system requirements
+	/* Send thw system requirements */
 	rc = migration_send_specs(s);
 
 	if (rc < 0) {
@@ -1100,7 +1132,7 @@ vm_send_migrate_req(struct vmctx *ctx, struct migrate_req req)
 		goto unlock_vm_and_exit;
 	}
 
-	// Send kern data
+	/* Send the state of kernel related devices */
 	rc =  migrate_kern_data(ctx, s, MIGRATION_SEND_REQ);
 	if (rc != 0) {
 		fprintf(stderr,
@@ -1110,7 +1142,7 @@ vm_send_migrate_req(struct vmctx *ctx, struct migrate_req req)
 		goto unlock_vm_and_exit;
 	}
 
-	// Send PCI data
+	/* Send the state of the userspace/emulated devices */
 	rc =  migrate_devs(ctx, s, MIGRATION_SEND_REQ);
 	if (rc < 0) {
 		fprintf(stderr,
@@ -1120,7 +1152,7 @@ vm_send_migrate_req(struct vmctx *ctx, struct migrate_req req)
 		goto unlock_vm_and_exit;
 	}
 
-	// Wait for migration completed
+	/* Wait for migration completed */
 	rc = migration_recv_data_from_remote(s, &migration_completed,
 					sizeof(migration_completed));
 	if ((rc < 0) || (migration_completed != MIGRATION_SPECS_OK)) {
@@ -1132,7 +1164,7 @@ vm_send_migrate_req(struct vmctx *ctx, struct migrate_req req)
 		goto unlock_vm_and_exit;
 	}
 
-	// Poweroff the vm
+	/* Poweroff the vm */
 	vm_destroy(ctx);
 	exit(0);
 
