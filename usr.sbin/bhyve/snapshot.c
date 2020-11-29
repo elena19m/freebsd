@@ -184,7 +184,8 @@ static bool checkpoint_active;
 
 void
 add_device_info(struct vm_snapshot_device_info *field_info, char *field_name,
-				const char *arr_name, volatile void *data, size_t data_size)
+				const char *arr_name, int index, volatile void *data,
+				size_t data_size)
 {
 	size_t field_len, arr_name_len;
 
@@ -200,6 +201,8 @@ add_device_info(struct vm_snapshot_device_info *field_info, char *field_name,
 	field_info->field_name = calloc(field_len + 1, sizeof(char));
 	assert(field_info->field_name != NULL);
 	memcpy(field_info->field_name, field_name, field_len);
+
+	field_info->index = index;
 
 	if (data_size != 0 && data != NULL) {
 		field_info->field_data = calloc(data_size + 1, sizeof(char));
@@ -221,7 +224,7 @@ alloc_device_info_elem(struct list_device_info *list, char *field_name,
 	aux->ident = list->ident;
 	if (aux->ident > 0)
 		arr_name = list->intern_arr_names[aux->ident - 1];
-	add_device_info(aux, field_name, arr_name, data, data_size);
+	add_device_info(aux, field_name, arr_name, list->index, data, data_size);
 
 	if (list->first == NULL) {
 		list->first = aux;
@@ -1465,44 +1468,184 @@ err:
 }
 
 #ifdef JSON_SNAPSHOT_V2
+#define INT_DIGITS 9
+
+int
+convert_int_to_string(int number, char **int_str)
+{
+	char last_digit;
+	int poz = INT_DIGITS - 1;
+
+	*int_str = calloc(INT_DIGITS + 1, sizeof(char));
+	assert(*int_str != NULL);
+	memset(*int_str, ' ', INT_DIGITS);
+	
+	if (number == 0)
+		(*int_str)[poz] = '0';
+	else
+		while (number != 0) {
+			last_digit = number % 10;
+			(*int_str)[poz--] = last_digit + '0';
+			number /= 10;
+		}
+
+	return 0;
+}
+
 static void
-vm_snapshot_dev_intern_arr(xo_handle_t *xop, int ident,
+vm_snapshot_dev_intern_arr(xo_handle_t *xop, int ident, int index,
+				struct vm_snapshot_device_info **curr_el);
+
+static int
+vm_snapshot_dev_intern_arr_index(xo_handle_t *xop, int ident, int index,
 				struct vm_snapshot_device_info **curr_el)
 {
 	char *intern_arr;
 	unsigned char closed;
+	char *int_str;
 
 	intern_arr = (*curr_el)->intern_arr_name;
-	xo_open_list_h(xop, intern_arr);
+
+	if (index != -1) {
+		convert_int_to_string(index, &int_str);
+		// xo_open_list_h(xop, int_str);
+		xo_open_list_h(xop, int_str);
+	}
+	
 	closed = 0;
 	while (*curr_el != NULL) {
 		if ((*curr_el)->ident < ident) {
 			break;
 		}
 
-		if (strcmp((*curr_el)->intern_arr_name, intern_arr) &&
-			(*curr_el)->ident == ident) {
-			xo_close_list_h(xop, intern_arr);
+		if ((*curr_el)->index != -1 && index != -1 &&
+			index != (*curr_el)->index) {
+			xo_close_list_h(xop, int_str);
 			closed = 1;
-			vm_snapshot_dev_intern_arr(xop, (*curr_el)->ident, curr_el);
+			vm_snapshot_dev_intern_arr_index(xop, ident, (*curr_el)->index, curr_el);
+		} else if (strcmp((*curr_el)->intern_arr_name, intern_arr) &&
+			(*curr_el)->ident == ident) {
+			// xo_close_list_h(xop, intern_arr);
+			// closed = 1;
+			return 1;
+			// vm_snapshot_dev_intern_arr(xop, (*curr_el)->ident, (*curr_el)->index, curr_el);
 		} else if ((*curr_el)->ident > ident) {
-			xo_open_instance_h(xop, intern_arr);
-			vm_snapshot_dev_intern_arr(xop, (*curr_el)->ident, curr_el);
+			// xo_open_instance_h(xop, intern_arr);
+			if (index != -1)
+				xo_open_instance_h(xop, int_str);
+			else
+				xo_open_instance_h(xop, intern_arr);
+			vm_snapshot_dev_intern_arr(xop, (*curr_el)->ident, (*curr_el)->index, curr_el);
 		} else {
-			xo_open_instance_h(xop, intern_arr);
+			// xo_open_instance_h(xop, intern_arr);
+			if (index != -1)
+				xo_open_instance_h(xop, int_str);
+			else
+				xo_open_instance_h(xop, intern_arr);
 			xo_emit_h(xop, "{:" JSON_PARAM_KEY "/%s}\n", (*curr_el)->field_name);
 			xo_emit_h(xop, "{:" JSON_PARAM_DATA_KEY "/%s}\n", "TODO - Add encoded data");
 			xo_emit_h(xop, "{:" JSON_PARAM_DATA_SIZE_KEY "/%lu}\n", (*curr_el)->data_size);
 		}
 
-		if (!closed)
-			xo_close_instance_h(xop, intern_arr);
+		if (!closed) {
+			if (index != -1)
+				xo_close_instance_h(xop, int_str);
+			else
+				xo_close_instance_h(xop, intern_arr);
+		}
+
 		if (*curr_el == NULL)
 			break;
 
 		*curr_el = (*curr_el)->next_field;
 	}
-	xo_close_list_h(xop, intern_arr);
+
+	if (index != -1) {
+		xo_close_list_h(xop, int_str);
+		free(int_str);
+	}
+
+	return 0;
+}
+
+
+static void
+vm_snapshot_dev_intern_arr(xo_handle_t *xop, int ident, int index,
+				struct vm_snapshot_device_info **curr_el)
+{
+	char *intern_arr;
+	int ret;
+	unsigned char closed;
+	// char *int_str;
+
+
+	closed = 0;
+	intern_arr = (*curr_el)->intern_arr_name;
+	xo_open_list_h(xop, intern_arr);
+	xo_open_instance_h(xop, intern_arr);
+	
+	ret = vm_snapshot_dev_intern_arr_index(xop, ident, index, curr_el);
+	if (ret != 0) {
+		xo_close_instance_h(xop, intern_arr);
+		xo_close_list_h(xop, intern_arr);
+		closed = 1;
+		vm_snapshot_dev_intern_arr(xop, (*curr_el)->ident, (*curr_el)->index, curr_el);
+	}
+
+	if (!closed) {
+		xo_close_instance_h(xop, intern_arr);
+		xo_close_list_h(xop, intern_arr);
+	}
+	//closed = 0;
+	//while (*curr_el != NULL) {
+	//	if ((*curr_el)->ident < ident) {
+	//		break;
+	//	}
+//
+//		if (index != -1) {
+//			xo_open_instance_h(xop, intern_arr);
+//			if (index != 0) {
+//				if (index != (*curr_el)->index) {
+//					xo_close_list_h(xop, int_str);
+//					free(int_str);
+//				}
+//			}
+//			index = (*curr_el)->index;
+//			convert_int_to_string(index, &int_str);
+//			xo_open_list_h(xop, int_str);
+//			xo_close_instance_h(xop, intern_arr);
+//		}
+//
+//		if (strcmp((*curr_el)->intern_arr_name, intern_arr) &&
+//			(*curr_el)->ident == ident) {
+//			xo_close_list_h(xop, intern_arr);
+//			closed = 1;
+//			vm_snapshot_dev_intern_arr(xop, (*curr_el)->ident, (*curr_el)->index, curr_el);
+//		} else if ((*curr_el)->ident > ident) {
+//			xo_open_instance_h(xop, intern_arr);
+//			xo_open_instance_h(xop, int_str);
+//			vm_snapshot_dev_intern_arr(xop, (*curr_el)->ident, (*curr_el)->index, curr_el);
+//		} else {
+//			xo_open_instance_h(xop, intern_arr);
+//			xo_open_instance_h(xop, int_str);
+//			xo_emit_h(xop, "{:" JSON_PARAM_KEY "/%s}\n", (*curr_el)->field_name);
+//			xo_emit_h(xop, "{:" JSON_PARAM_DATA_KEY "/%s}\n", "TODO - Add encoded data");
+//			xo_emit_h(xop, "{:" JSON_PARAM_DATA_SIZE_KEY "/%lu}\n", (*curr_el)->data_size);
+//		}
+//
+//		if (!closed) {
+//			xo_close_instance_h(xop, int_str);
+//			xo_close_instance_h(xop, intern_arr);
+//		}
+//
+//		if (*curr_el == NULL)
+//			break;
+//
+//		*curr_el = (*curr_el)->next_field;
+//	}
+//
+//	xo_close_list_h(xop, intern_arr);
+//	
 }
 #endif
 
@@ -1543,7 +1686,7 @@ vm_snapshot_dev_write_data(int data_fd, xo_handle_t *xop, const char *array_key,
 			xo_open_instance_h(xop, JSON_PARAMS_KEY);
 
 			if (curr_el->ident > meta->dev_info_list.ident)
-				vm_snapshot_dev_intern_arr(xop, curr_el->ident, &curr_el);
+				vm_snapshot_dev_intern_arr(xop, curr_el->ident, curr_el->index, &curr_el);
 
 			if (curr_el == NULL) {
 				xo_close_instance_h(xop, JSON_PARAMS_KEY);
@@ -1630,6 +1773,7 @@ vm_snapshot_user_devs(struct vmctx *ctx, int data_fd, xo_handle_t *xop)
 #else
 		.version = JSON_V2,
 		.dev_info_list.ident = 0,
+		.dev_info_list.index = -1,
 		.dev_info_list.first = NULL,
 		.dev_info_list.last = NULL,
 #endif
@@ -2121,7 +2265,7 @@ vm_snapshot_set_intern_arr_index(struct vm_snapshot_meta *meta, int index)
 }
 
 void
-vm_snapshot_reset_intern_arr_index(struct vm_snapshot_meta *meta)
+vm_snapshot_clear_intern_arr_index(struct vm_snapshot_meta *meta)
 {
 	meta->dev_info_list.index = -1;
 }

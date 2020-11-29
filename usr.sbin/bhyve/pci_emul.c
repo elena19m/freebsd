@@ -2004,10 +2004,12 @@ pci_snapshot_pci_dev(struct vm_snapshot_meta *meta)
 		//SNAPSHOT_VAR_OR_LEAVE(pi->pi_bar[i].type, meta, ret, done);
 		//SNAPSHOT_VAR_OR_LEAVE(pi->pi_bar[i].size, meta, ret, done);
 		//SNAPSHOT_VAR_OR_LEAVE(pi->pi_bar[i].addr, meta, ret, done);
+		SNAPSHOT_SET_INTERN_ARR_INDEX(meta, i);
 		SNAPSHOT_VAR_OR_LEAVE(pb->type, meta, ret, done);
 		SNAPSHOT_VAR_OR_LEAVE(pb->size, meta, ret, done);
 		SNAPSHOT_VAR_OR_LEAVE(pb->addr, meta, ret, done);
 	}
+	SNAPSHOT_CLEAR_INTERN_ARR_INDEX(meta);
 	SNAPSHOT_REMOVE_INTERN_ARR(pi_bars, meta);
 
 	/* Restore MSI-X table. */

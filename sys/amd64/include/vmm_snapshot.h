@@ -137,6 +137,8 @@ int vm_snapshot_save_fieldname(const char *fullname, volatile void *data,
 void vm_snapshot_add_intern_list(const char *arr_name,
 				struct vm_snapshot_meta *meta);
 void vm_snapshot_remove_intern_list(struct vm_snapshot_meta *meta);
+void vm_snapshot_set_intern_arr_index(struct vm_snapshot_meta *meta, int index);
+void vm_snapshot_clear_intern_arr_index(struct vm_snapshot_meta *meta);
 int vm_snapshot_save_fieldname_cmp(const char *fullname, volatile void *data,
 				size_t data_size, struct vm_snapshot_meta *meta);
 
