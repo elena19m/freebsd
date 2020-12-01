@@ -885,6 +885,9 @@ vi_pci_snapshot_queues(struct virtio_softc *vs, struct vm_snapshot_meta *meta)
 	for (i = 0; i < vc->vc_nvq; i++) {
 		vq = &vs->vs_queues[i];
 
+		/* Set index */
+		SNAPSHOT_SET_INTERN_ARR_INDEX(meta, i);
+
 		SNAPSHOT_VAR_CMP_OR_LEAVE(vq->vq_qsize, meta, ret, done);
 		SNAPSHOT_VAR_CMP_OR_LEAVE(vq->vq_num, meta, ret, done);
 
@@ -911,6 +914,9 @@ vi_pci_snapshot_queues(struct virtio_softc *vs, struct vm_snapshot_meta *meta)
 		SNAPSHOT_BUF_OR_LEAVE(vq->vq_desc, vring_size(vq->vq_qsize),
 			meta, ret, done);
 	}
+
+	/* Reset index */
+	SNAPSHOT_CLEAR_INTERN_ARR_INDEX(meta);
 
 done:
 	return (ret);
