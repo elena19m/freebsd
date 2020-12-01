@@ -1615,7 +1615,7 @@ vm_snapshot_dev_write_data(int data_fd, xo_handle_t *xop, const char *array_key,
 			return (-1);
 		}
 	//}
-	
+
 	/* Write metadata. */
 	xo_open_instance_h(xop, array_key);
 	xo_emit_h(xop, "{:" JSON_SNAPSHOT_REQ_KEY "/%s}\n", meta->dev_name);
