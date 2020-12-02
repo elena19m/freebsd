@@ -2717,8 +2717,8 @@ pci_ahci_snapshot(struct vm_snapshot_meta *meta)
 		SNAPSHOT_VAR_OR_LEAVE(port->fbs, meta, ret, done);
 		SNAPSHOT_VAR_OR_LEAVE(port->ioqsz, meta, ret, done);
 
-		SNAPSHOT_ADD_INTERN_ARR(iorequests, meta);
 		SNAPSHOT_CLEAR_INTERN_ARR_INDEX(meta);
+		SNAPSHOT_ADD_INTERN_ARR(iorequests, meta);
 		for (j = 0; j < port->ioqsz; j++) {
 			ioreq = &port->ioreq[j];
 			SNAPSHOT_SET_INTERN_ARR_INDEX(meta, j);

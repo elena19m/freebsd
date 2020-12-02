@@ -1492,7 +1492,7 @@ convert_int_to_string(int number, char **int_str)
 	return 0;
 }
 
-static void
+static int
 vm_snapshot_dev_intern_arr(xo_handle_t *xop, int ident, int index,
 				struct vm_snapshot_device_info **curr_el);
 
@@ -1502,29 +1502,38 @@ vm_snapshot_dev_intern_arr_index(xo_handle_t *xop, int ident, int index,
 {
 	char *intern_arr;
 	char *int_str;
+	int ret;
 
 	intern_arr = (*curr_el)->intern_arr_name;
 
 	convert_int_to_string(index, &int_str);
 	xo_open_list_h(xop, int_str);
 	
+	ret = 0;
 	while (*curr_el != NULL) {
-		if (index != (*curr_el)->index)
+		/* Check if index changed and if there is no array at the same 
+		 * indentation level as the current one for this index */
+		if ((index != (*curr_el)->index) &&
+			ret == 0)
 			break;
 
-		if (strcmp((*curr_el)->intern_arr_name, intern_arr) &&
-			(*curr_el)->ident == ident)
-			break;
-		
+		/* Check if there is an internal array */
+		if ((*curr_el)->ident > ident) {
+			xo_open_instance_h(xop, int_str);
+			ret = vm_snapshot_dev_intern_arr(xop, (*curr_el)->ident, (*curr_el)->index, curr_el);
+			xo_close_instance_h(xop, int_str);
+			continue;
+		}
+
+		/* Reset the return value for the first branch inside the loop */
+		ret = 0;
+
+		/* Write data */
 		xo_open_instance_h(xop, int_str);
 
-		if ((*curr_el)->ident > ident)
-			vm_snapshot_dev_intern_arr(xop, (*curr_el)->ident, (*curr_el)->index, curr_el);
-		else {
-			xo_emit_h(xop, "{:" JSON_PARAM_KEY "/%s}\n", (*curr_el)->field_name);
-			xo_emit_h(xop, "{:" JSON_PARAM_DATA_KEY "/%s}\n", "TODO - Add encoded data");
-			xo_emit_h(xop, "{:" JSON_PARAM_DATA_SIZE_KEY "/%lu}\n", (*curr_el)->data_size);
-		}
+		xo_emit_h(xop, "{:" JSON_PARAM_KEY "/%s}\n", (*curr_el)->field_name);
+		xo_emit_h(xop, "{:" JSON_PARAM_DATA_KEY "/%s}\n", "TODO - Add encoded data");
+		xo_emit_h(xop, "{:" JSON_PARAM_DATA_SIZE_KEY "/%lu}\n", (*curr_el)->data_size);
 
 		xo_close_instance_h(xop, int_str);
 
@@ -1534,33 +1543,43 @@ vm_snapshot_dev_intern_arr_index(xo_handle_t *xop, int ident, int index,
 	xo_close_list_h(xop, int_str);
 	free(int_str);
 
-	return 0;
+	return ret;
 }
 
 
-static void
+static int
 vm_snapshot_dev_intern_arr(xo_handle_t *xop, int ident, int index,
 				struct vm_snapshot_device_info **curr_el)
 {
 	char *intern_arr;
-	unsigned char closed;
+	int ret;
 
 	intern_arr = (*curr_el)->intern_arr_name;
 	xo_open_list_h(xop, intern_arr);
 
-	closed = 0;
+	ret = 0;
 	while (*curr_el != NULL) {
-		if ((*curr_el)->ident < ident) {
+		/* Check if the current array has no more elements */
+		if ((*curr_el)->ident < ident)
+			break;
+
+		/* Check if there is an array on the same indentation level */
+		if (strcmp((*curr_el)->intern_arr_name, intern_arr) &&
+			(*curr_el)->ident == ident &&
+			ret == 0) {
+			ret = 1;
 			break;
 		}
 
-		if (strcmp((*curr_el)->intern_arr_name, intern_arr) &&
-			(*curr_el)->ident == ident) {
-			xo_close_list_h(xop, intern_arr);
-			closed = 1;
-			vm_snapshot_dev_intern_arr(xop, (*curr_el)->ident, (*curr_el)->index, curr_el);
+		/* Check if there is an internal array */
+		if ((*curr_el)->ident > ident) {
+			xo_open_instance_h(xop, intern_arr);
+			ret = vm_snapshot_dev_intern_arr(xop, (*curr_el)->ident, (*curr_el)->index, curr_el);
+			xo_close_instance_h(xop, intern_arr);
 			continue;
 		}
+
+		/* Check if for the current array indexing is present */
 		if ((*curr_el)->index != -1) {
 			xo_open_instance_h(xop, intern_arr);
 			vm_snapshot_dev_intern_arr_index(xop, (*curr_el)->ident, (*curr_el)->index, curr_el);
@@ -1568,31 +1587,22 @@ vm_snapshot_dev_intern_arr(xo_handle_t *xop, int ident, int index,
 			continue;
 		}
 
-		if ((*curr_el)->ident > ident) {
-			if (!closed) {
-				xo_open_instance_h(xop, intern_arr);
-				vm_snapshot_dev_intern_arr(xop, (*curr_el)->ident, (*curr_el)->index, curr_el);
-			}
-		} else {
-			if (!closed) {
-				xo_open_instance_h(xop, intern_arr);
-				xo_emit_h(xop, "{:" JSON_PARAM_KEY "/%s}\n", (*curr_el)->field_name);
-				xo_emit_h(xop, "{:" JSON_PARAM_DATA_KEY "/%s}\n", "TODO - Add encoded data");
-				xo_emit_h(xop, "{:" JSON_PARAM_DATA_SIZE_KEY "/%lu}\n", (*curr_el)->data_size);
-			}
-		}
+		ret = 0;
+		/* Write data inside the array */
+		xo_open_instance_h(xop, intern_arr);
 
-		if (!closed)
-			xo_close_instance_h(xop, intern_arr);
+		xo_emit_h(xop, "{:" JSON_PARAM_KEY "/%s}\n", (*curr_el)->field_name);
+		xo_emit_h(xop, "{:" JSON_PARAM_DATA_KEY "/%s}\n", "TODO - Add encoded data");
+		xo_emit_h(xop, "{:" JSON_PARAM_DATA_SIZE_KEY "/%lu}\n", (*curr_el)->data_size);
 
-		if (*curr_el == NULL)
-			break;
+		xo_close_instance_h(xop, intern_arr);
 
 		*curr_el = (*curr_el)->next_field;
 	}
 
 	xo_close_list_h(xop, intern_arr);
-	
+
+	return ret;
 }
 #endif
 
@@ -1629,15 +1639,15 @@ vm_snapshot_dev_write_data(int data_fd, xo_handle_t *xop, const char *array_key,
 
 		curr_el = meta->dev_info_list.first;
 		meta->dev_info_list.ident = 0;
+
 		while (curr_el != NULL) {
 			if (curr_el->ident > meta->dev_info_list.ident) {
 				xo_open_instance_h(xop, JSON_PARAMS_KEY);
 				vm_snapshot_dev_intern_arr(xop, curr_el->ident, curr_el->index, &curr_el);
 				xo_close_instance_h(xop, JSON_PARAMS_KEY);
+				// meta->dev_info_list.ident = curr_el->ident;
+				continue;
 			}
-
-			if (curr_el == NULL)
-				break;
 
 			xo_open_instance_h(xop, JSON_PARAMS_KEY);
 
@@ -1647,7 +1657,7 @@ vm_snapshot_dev_write_data(int data_fd, xo_handle_t *xop, const char *array_key,
 
 			xo_close_instance_h(xop, JSON_PARAMS_KEY);
 
-			meta->dev_info_list.ident = curr_el->ident;
+			// meta->dev_info_list.ident = curr_el->ident;
 			curr_el = curr_el->next_field;
 		}
 
