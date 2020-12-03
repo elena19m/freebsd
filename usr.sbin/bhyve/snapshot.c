@@ -565,37 +565,94 @@ lookup_struct(enum snapshot_req struct_id, struct restore_state *rstate,
 
 int
 intern_arr_restore(const char *intern_arr_name, struct list_device_info *list,
-		const ucl_object_t *obj)
+		const ucl_object_t *obj);
+
+int
+intern_arr_restore_index(const char *intern_arr_name,
+		struct list_device_info *list, const ucl_object_t *obj)
 {
-	const ucl_object_t *iobj = NULL, *iobj1 = NULL;
+	const ucl_object_t *param = NULL, *iobj = NULL;
 	ucl_object_iter_t it = NULL, iit = NULL;
 	const char *param_name;
 	int64_t data_size;
-	char is_list;
+	int is_list;
 
-	while ((iobj = ucl_object_iterate(obj, &it, true)) != NULL) {
-		is_list = 0;
-		while ((iobj1 = ucl_object_iterate(iobj, &iit, true)) != NULL)
-			if (ucl_object_type(iobj1) == UCL_ARRAY) {
-				list->intern_arr_names[list->ident++] = iobj1->key;
-				intern_arr_restore(iobj1->key, list, iobj1);
-				list->ident--;
-				is_list = 1;
+	while ((param = ucl_object_iterate(obj, &it, true)) != NULL) {
+		/* Check if it is an indexed array */
+		if (((ucl_object_type(param) == UCL_ARRAY) &&
+			(strstr(param->key, "@") == NULL)) ||
+			(ucl_object_type(param) != UCL_ARRAY))
+			return (0);
+
+		/* Iterate through index array elems */
+		while ((iobj = ucl_object_iterate(param, &iit, true)) != NULL) {
+			/* Check if the element is an array */
+			is_list = intern_arr_restore(iobj->key, list, iobj);
+
+			/* If the element is not an array just add to the list */
+			if (!is_list) {
+				param_name = NULL;
+				JSON_GET_STRING_OR_RETURN(JSON_PARAM_KEY, iobj, &param_name, -1);
+				assert(param_name != NULL);
+
+				data_size = -1;
+				JSON_GET_INT_OR_RETURN(JSON_PARAM_DATA_SIZE_KEY, iobj, &data_size, -1);
+				assert(data_size > 0);
+
+				alloc_device_info_elem(list, (char *)param_name, NULL, (size_t)data_size);
 			}
-		if (!is_list) {
-			param_name = NULL;
-			JSON_GET_STRING_OR_RETURN(JSON_PARAM_KEY, iobj, &param_name, -1);
-			assert(param_name != NULL);
-
-			data_size = -1;
-			JSON_GET_INT_OR_RETURN(JSON_PARAM_DATA_SIZE_KEY, iobj, &data_size, -1);
-			assert(data_size > 0);
-
-			alloc_device_info_elem(list, (char *)param_name, NULL, (size_t)data_size);
 		}
 	}
 
-	return (0);
+	return (1);
+}
+
+int
+intern_arr_restore(const char *intern_arr_name, struct list_device_info *list,
+		const ucl_object_t *obj)
+{
+	const ucl_object_t *param = NULL, *iobj = NULL;
+	ucl_object_iter_t it = NULL, iit = NULL;
+	const char *param_name;
+	int64_t data_size;
+	int is_list, is_indexed;
+
+	/* Check if the received instance contains an array */
+	while ((param = ucl_object_iterate(obj, &it, true)) != NULL) {
+		/* If the first param is not an array just return because this 
+		 * is how the instance was created.
+		 */
+		if (ucl_object_type(param) != UCL_ARRAY)
+			return (0);
+
+		/* The received instance contains an array that can be 
+		 * iterated aswell
+		 */
+		while ((iobj = ucl_object_iterate(param, &iit, true)) != NULL) {
+			/* Check if the array contains indexes */
+			is_indexed = intern_arr_restore_index(iobj->key, list, iobj);
+
+			/* If there is no index check if the current element is an array */
+			is_list = intern_arr_restore(iobj->key, list, iobj);
+
+			/* If there is no index and the element is not an array just add 
+			 * the element in the list
+			 */
+			if (!is_list && !is_indexed) {
+				param_name = NULL;
+				JSON_GET_STRING_OR_RETURN(JSON_PARAM_KEY, iobj, &param_name, -1);
+				assert(param_name != NULL);
+
+				data_size = -1;
+				JSON_GET_INT_OR_RETURN(JSON_PARAM_DATA_SIZE_KEY, iobj, &data_size, -1);
+				assert(data_size > 0);
+
+				alloc_device_info_elem(list, (char *)param_name, NULL, (size_t)data_size);
+			}
+		}
+	}
+
+	return (1);
 }
 
 int
@@ -603,13 +660,12 @@ lookup_check_dev(const char *dev_name, struct restore_state *rstate,
 		 const ucl_object_t *obj,
 		 struct list_device_info *list)
 {
-	const ucl_object_t *dev_params = NULL, *obj1 = NULL;
-	const ucl_object_t *iobj = NULL;
-	ucl_object_iter_t it = NULL, iit = NULL;
+	const ucl_object_t *dev_params = NULL, *dev_param = NULL;
+	ucl_object_iter_t it = NULL;
 	const char *snapshot_req;
 	const char *param_name;
 	int64_t data_size;
-	char is_list;
+	int is_list;
 
 	snapshot_req = NULL;
 	JSON_GET_STRING_OR_RETURN(JSON_SNAPSHOT_REQ_KEY, obj,
@@ -630,23 +686,17 @@ lookup_check_dev(const char *dev_name, struct restore_state *rstate,
 			return (-EINVAL);
 		}
 
-		while ((obj1 = ucl_object_iterate(dev_params, &it, true)) != NULL) {
-			is_list = 0;
-			while ((iobj = ucl_object_iterate(obj1, &iit, true)) != NULL) {
-				if (ucl_object_type(iobj) == UCL_ARRAY) {
-					list->intern_arr_names[list->ident++] = iobj->key;
-					intern_arr_restore(iobj->key, list, iobj);
-					list->intern_arr_names[list->ident--] = NULL;
-					is_list = 1;
-				}
-			}
+		/* Iterate through device parameters */
+		while ((dev_param = ucl_object_iterate(dev_params, &it, true)) != NULL) {
+			is_list = intern_arr_restore(dev_param->key, list, dev_param);
+
 			if (!is_list) {
 				param_name = NULL;
-				JSON_GET_STRING_OR_RETURN(JSON_PARAM_KEY, obj1, &param_name, -1);
+				JSON_GET_STRING_OR_RETURN(JSON_PARAM_KEY, dev_param, &param_name, -1);
 				assert(param_name != NULL);
 
 				data_size = -1;
-				JSON_GET_INT_OR_RETURN(JSON_PARAM_DATA_SIZE_KEY, obj1, &data_size, -1);
+				JSON_GET_INT_OR_RETURN(JSON_PARAM_DATA_SIZE_KEY, dev_param, &data_size, -1);
 				assert(data_size > 0);
 
 				alloc_device_info_elem(list, (char *)param_name, NULL, (size_t)data_size);
@@ -687,12 +737,6 @@ lookup_dev(const char *dev_name, struct restore_state *rstate,
 	}
 
 	return (-1);
-}
-
-void look_test_func(struct vmctx *ctx, struct restore_state *rstate,
-			const struct vm_snapshot_dev_info *info,
-			struct list_device_info *list) {
-	lookup_dev(info->dev_name, rstate, list);
 }
 
 #else
@@ -1471,9 +1515,9 @@ err:
 #define INT_DIGITS 10
 
 int
-convert_int_to_string(int number, char **int_str)
+convert_int_to_string(char *intern_arr, int number, char **int_str)
 {
-	char last_digit;
+	/*char last_digit;
 	int poz = INT_DIGITS - 1;
 
 	*int_str = calloc(INT_DIGITS + 1, sizeof(char));
@@ -1488,6 +1532,11 @@ convert_int_to_string(int number, char **int_str)
 			(*int_str)[poz--] = last_digit + '0';
 			number /= 10;
 		}
+	*/
+
+	*int_str = calloc(strlen(intern_arr) + INT_DIGITS + 2, sizeof(char));
+	assert(*int_str != NULL);
+	sprintf(*int_str, "%s@%d", intern_arr, number);
 
 	return 0;
 }
@@ -1506,7 +1555,7 @@ vm_snapshot_dev_intern_arr_index(xo_handle_t *xop, int ident, int index,
 
 	intern_arr = (*curr_el)->intern_arr_name;
 
-	convert_int_to_string(index, &int_str);
+	convert_int_to_string(intern_arr, index, &int_str);
 	xo_open_list_h(xop, int_str);
 	
 	ret = 0;
@@ -1542,6 +1591,7 @@ vm_snapshot_dev_intern_arr_index(xo_handle_t *xop, int ident, int index,
 
 	xo_close_list_h(xop, int_str);
 	free(int_str);
+	int_str = NULL;
 
 	return ret;
 }
