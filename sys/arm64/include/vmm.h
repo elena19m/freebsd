@@ -411,6 +411,7 @@ struct vm_exit {
 		struct {
 			int		vcpu;
 			uint64_t	rip;
+			uint64_t	ctx_id;
 		} spinup_ap;
 		struct {
 			uint64_t	rflags;

@@ -184,11 +184,11 @@ fbsdrun_start_thread(void *param)
 }
 
 void
-fbsdrun_addcpu(struct vmctx *ctx, int vcpu, uint64_t pc)
+fbsdrun_addcpu(struct vmctx *ctx, int fromcpu, int vcpu, uint64_t pc)
 {
 	int error;
 
-	assert(vcpu == BSP);
+	assert(fromcpu == BSP);
 
 	error = vm_activate_cpu(ctx, vcpu);
 	if (error != 0)
@@ -294,26 +294,27 @@ vmexit_suspend(struct vmctx *ctx, struct vm_exit *vmexit, int *pvcpu)
 static int
 vmexit_spinup_ap(struct vmctx *ctx, struct vm_exit *vmexit, int *pvcpu)
 {
-	/*
-	 * AMD64
-	 * (void)spinup_ap(ctx, *pvcpu,
-         *     vmexit->u.spinup_ap.vcpu, vmexit->u.spinup_ap.rip);
-	 * Variables mapping
-	 * vcpu -> *pvcpu
-	 * newcpu -> vmexit->u.spinup_ap.vcpu
-	 */
 	int error;
 	int newcpu = vmexit->u.spinup_ap.vcpu;
+	uint64_t pc = vmexit->u.spinup_ap.rip;
+	uint64_t ctx_id = vmexit->u.spinup_ap.ctx_id;
 
 	assert(newcpu != 0);
 	assert(newcpu < guest_ncpus);
 
-	error = vm_set_capability(ctx, newcpu, VM_CAP_UNRESTRICTED_GUEST, 1);
+	error = vm_set_register(ctx, newcpu, VM_REG_GUEST_X0, ctx_id);
 	assert(error == 0);
 
-	fbsdrun_addcpu(ctx, newcpu, vmexit->u.spinup_ap.rip);
+	error = vm_set_register(ctx, newcpu, VM_REG_ELR_EL2, pc);
+	assert(error == 0);
 
-	return (newcpu);
+	fbsdrun_addcpu(ctx, BSP, newcpu, pc);
+
+	/*  0 - PSCI_RETVAL_SUCCESS  */
+	error = vm_set_register(ctx, *pvcpu, VM_REG_GUEST_X0, 0);
+	assert(error == 0);
+
+	return (VMEXIT_CONTINUE);
 }
 
 static vmexit_handler_t handler[VM_EXITCODE_MAX] = {
@@ -482,7 +483,7 @@ main(int argc, char *argv[])
 	/*
 	 * Add CPU 0
 	 */
-	fbsdrun_addcpu(ctx, BSP, pc);
+	fbsdrun_addcpu(ctx, BSP, BSP, pc);
 
 	/*
 	 * Head off to the main event dispatch loop

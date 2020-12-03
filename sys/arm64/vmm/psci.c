@@ -86,6 +86,14 @@ psci_handle_call(struct vm *vm, int vcpuid, struct vm_exit *vme, bool *retu)
 	case PSCI_FNID_SYSTEM_OFF:
 		error = psci_system_off(vme, retu);
 		break;
+	case PSCI_FNID_CPU_ON:
+		vme->exitcode = VM_EXITCODE_SPINUP_AP;
+		vme->u.spinup_ap.vcpu = hypctx->regs.x[1];
+		vme->u.spinup_ap.rip = hypctx->regs.x[2];
+		vme->u.spinup_ap.ctx_id = hypctx->regs.x[3];
+		*retu = true;
+		error = 0;
+		break;
 	default:
 		eprintf("Unimplemented PSCI function: 0x%016lx\n", func_id);
 		hypctx->regs.x[0] = PSCI_RETVAL_NOT_SUPPORTED;
