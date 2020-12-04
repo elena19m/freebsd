@@ -737,6 +737,12 @@ vm_get_cookie(struct vm *vm)
 	return vm->cookie;
 }
 
+uint16_t
+vm_get_maxcpus(struct vm *vm)
+{
+	return (vm->maxcpus);
+}
+
 static void
 vm_free_mem_seg(struct vm *vm, struct vm_memory_segment *seg)
 {

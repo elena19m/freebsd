@@ -164,6 +164,7 @@ int vm_get_register(struct vm *vm, int vcpu, int reg, uint64_t *retval);
 int vm_set_register(struct vm *vm, int vcpu, int reg, uint64_t val);
 int vm_run(struct vm *vm, struct vm_run *vmrun);
 void* vm_get_cookie(struct vm *vm);
+uint16_t vm_get_maxcpus(struct vm *vm);
 int vm_get_capability(struct vm *vm, int vcpu, int type, int *val);
 int vm_set_capability(struct vm *vm, int vcpu, int type, int val);
 int vm_activate_cpu(struct vm *vm, int vcpu);
