@@ -71,7 +71,7 @@ extern char hyp_code_start[];
 extern char hyp_code_end[];
 extern char hyp_stub_vectors[];
 
-char *stack;
+char *stack[MAXCPU];
 pmap_t hyp_pmap;
 
 static uint64_t vmid_generation = 0;
@@ -111,29 +111,21 @@ out:
 			vtophys(hyp->stage2_map->pm_l0));
 }
 
-static int
-arm_init(int ipinum)
+static void
+arm_init_vectors(void *arg)
 {
 	char *stack_top;
-	size_t hyp_code_len;
-	uint64_t ich_vtr_el2;
-	uint64_t cnthctl_el2;
 	uint64_t tcr_el1, tcr_el2;
-	uint64_t id_aa64mmfr0_el1;
-	uint64_t pa_range_bits;
 	uint32_t sctlr_el2;
 	uint32_t vtcr_el2;
+	uint64_t id_aa64mmfr0_el1;
+	uint64_t pa_range_bits;
 	register_t daif;
 
-	if (!virt_enabled()) {
-		printf("arm_init: Processor doesn't have support for virtualization.\n");
-		return (ENXIO);
-	}
-
-	mtx_init(&vmid_generation_mtx, "vmid_generation_mtx", NULL, MTX_DEF);
-
 	daif = intr_disable();
+
 	arm64_set_active_vcpu(NULL);
+
 	/*
 	 * Install the temporary vectors which will be responsible for
 	 * initializing the VMM when we next trap into EL2.
@@ -143,20 +135,8 @@ arm_init(int ipinum)
 	 */
 	vmm_call_hyp((void *)vtophys(hyp_init_vectors));
 
-	/* Create the mappings for the hypervisor translation table. */
-	hyp_pmap = malloc(sizeof(*hyp_pmap), M_HYP, M_WAITOK | M_ZERO);
-	hypmap_init(hyp_pmap, PM_STAGE1);
-	hyp_code_len = (size_t)hyp_code_end - (size_t)hyp_code_start;
-	hypmap_map(hyp_pmap, (vm_offset_t)hyp_code_start, hyp_code_len, VM_PROT_EXECUTE);
-
-	/* We need an identity mapping for when we activate the MMU */
-	hypmap_map_identity(hyp_pmap, (vm_offset_t)hyp_code_start, hyp_code_len,
-	    VM_PROT_EXECUTE);
-
 	/* Create and map the hypervisor stack */
-	stack = malloc(PAGE_SIZE, M_HYP, M_WAITOK | M_ZERO);
-	stack_top = stack + PAGE_SIZE;
-	hypmap_map(hyp_pmap, (vm_offset_t)stack, PAGE_SIZE, VM_PROT_READ | VM_PROT_WRITE);
+	stack_top = stack[PCPU_GET(cpuid)] + PAGE_SIZE;
 
 	/* Configure address translation at EL2 */
 	tcr_el1 = READ_SPECIALREG(tcr_el1);
@@ -218,19 +198,11 @@ arm_init(int ipinum)
 	vmm_call_hyp((void *)vtophys(hyp_vectors), vtophys(hyp_pmap->pm_l0),
 	    ktohyp(stack_top), tcr_el2, sctlr_el2, vtcr_el2);
 
-	ich_vtr_el2 = vmm_call_hyp((void *)ktohyp(vmm_read_ich_vtr_el2));
-	vgic_v3_init(ich_vtr_el2);
-
-	cnthctl_el2 = vmm_call_hyp((void *)ktohyp(vmm_read_cnthctl_el2));
-	vtimer_init(cnthctl_el2);
-
 	intr_restore(daif);
-
-	return 0;
 }
 
-static int
-arm_cleanup(void)
+static void
+arm_cleanup_vectors(void *arg)
 {
 	register_t daif;
 
@@ -253,12 +225,70 @@ arm_cleanup(void)
 	intr_restore(daif);
 
 	arm64_set_active_vcpu(NULL);
+}
+
+static int
+arm_init(int ipinum)
+{
+	size_t hyp_code_len;
+	uint64_t ich_vtr_el2;
+	uint64_t cnthctl_el2;
+	int cpu;
+	register_t daif;
+
+	if (!virt_enabled()) {
+		printf("arm_init: Processor doesn't have support for virtualization.\n");
+		return (ENXIO);
+	}
+
+	mtx_init(&vmid_generation_mtx, "vmid_generation_mtx", NULL, MTX_DEF);
+
+	/* Create the mappings for the hypervisor translation table. */
+	hyp_pmap = malloc(sizeof(*hyp_pmap), M_HYP, M_WAITOK | M_ZERO);
+	hypmap_init(hyp_pmap, PM_STAGE1);
+	hyp_code_len = (size_t)hyp_code_end - (size_t)hyp_code_start;
+	hypmap_map(hyp_pmap, (vm_offset_t)hyp_code_start, hyp_code_len, VM_PROT_EXECUTE);
+
+	/* We need an identity mapping for when we activate the MMU */
+	hypmap_map_identity(hyp_pmap, (vm_offset_t)hyp_code_start, hyp_code_len,
+	    VM_PROT_EXECUTE);
+
+	/* Create a per-CPU hypervisor stack */
+	CPU_FOREACH(cpu) {
+		stack[cpu] = malloc(PAGE_SIZE, M_HYP, M_WAITOK | M_ZERO);
+		hypmap_map(hyp_pmap, (vm_offset_t)stack[cpu], PAGE_SIZE,
+		    VM_PROT_READ | VM_PROT_WRITE);
+	}
+
+
+	smp_rendezvous(NULL, arm_init_vectors, NULL, NULL);
+
+	daif = intr_disable();
+
+	ich_vtr_el2 = vmm_call_hyp((void *)ktohyp(vmm_read_ich_vtr_el2));
+	vgic_v3_init(ich_vtr_el2);
+
+	cnthctl_el2 = vmm_call_hyp((void *)ktohyp(vmm_read_cnthctl_el2));
+	vtimer_init(cnthctl_el2);
+
+	intr_restore(daif);
+
+	return 0;
+}
+
+static int
+arm_cleanup(void)
+{
+	int cpu;
+
+	smp_rendezvous(NULL, arm_cleanup_vectors, NULL, NULL);
 
 	vtimer_cleanup();
 
 	hypmap_cleanup(hyp_pmap);
 	free(hyp_pmap, M_HYP);
-	free(stack, M_HYP);
+	for (cpu = 0; cpu < nitems(stack); cpu++)
+		free(stack[cpu], M_HYP);
 
 	mtx_destroy(&vmid_generation_mtx);
 
@@ -594,14 +624,24 @@ arm_vmrun(void *arg, int vcpu, register_t pc, pmap_t pmap,
 }
 
 static void
+arm_deactivate_pcpu(void *arg)
+{
+	struct hyp *hyp = arg;
+	int maxcpu;
+	int i;
+
+	maxcpu = vm_get_maxcpus(hyp->vm);
+	for (i = 0; i < maxcpu; i++)
+		if (arm64_get_active_vcpu() == &hyp->ctx[i])
+			arm64_set_active_vcpu(NULL);
+}
+
+static void
 arm_vmcleanup(void *arg)
 {
 	struct hyp *hyp = arg;
-	struct hypctx *hypctx;
 
-	hypctx = &hyp->ctx[0];
-	if (arm64_get_active_vcpu() == hypctx)
-		arm64_set_active_vcpu(NULL);
+	smp_rendezvous(NULL, arm_deactivate_pcpu, NULL, hyp);
 
 	vtimer_vmcleanup(arg);
 	vgic_v3_detach_from_vm(arg);
