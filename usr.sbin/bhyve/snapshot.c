@@ -1515,28 +1515,11 @@ err:
 #define INT_DIGITS 10
 
 int
-convert_int_to_string(char *intern_arr, int number, char **int_str)
+create_indexed_arr_name(char *intern_arr, int number, char **indexed_name)
 {
-	/*char last_digit;
-	int poz = INT_DIGITS - 1;
-
-	*int_str = calloc(INT_DIGITS + 1, sizeof(char));
-	assert(*int_str != NULL);
-	memset(*int_str, ' ', INT_DIGITS);
-	
-	if (number == 0)
-		(*int_str)[poz] = '0';
-	else
-		while (number != 0) {
-			last_digit = number % 10;
-			(*int_str)[poz--] = last_digit + '0';
-			number /= 10;
-		}
-	*/
-
-	*int_str = calloc(strlen(intern_arr) + INT_DIGITS + 2, sizeof(char));
-	assert(*int_str != NULL);
-	sprintf(*int_str, "%s@%d", intern_arr, number);
+	*indexed_name = calloc(strlen(intern_arr) + INT_DIGITS + 2, sizeof(char));
+	assert(*indexed_name != NULL);
+	sprintf(*indexed_name, "%s@%d", intern_arr, number);
 
 	return 0;
 }
@@ -1550,13 +1533,13 @@ vm_snapshot_dev_intern_arr_index(xo_handle_t *xop, int ident, int index,
 				struct vm_snapshot_device_info **curr_el)
 {
 	char *intern_arr;
-	char *int_str;
+	char *indexed_name;
 	int ret;
 
 	intern_arr = (*curr_el)->intern_arr_name;
 
-	convert_int_to_string(intern_arr, index, &int_str);
-	xo_open_list_h(xop, int_str);
+	create_indexed_arr_name(intern_arr, index, &indexed_name);
+	xo_open_list_h(xop, indexed_name);
 	
 	ret = 0;
 	while (*curr_el != NULL) {
@@ -1568,9 +1551,9 @@ vm_snapshot_dev_intern_arr_index(xo_handle_t *xop, int ident, int index,
 
 		/* Check if there is an internal array */
 		if ((*curr_el)->ident > ident) {
-			xo_open_instance_h(xop, int_str);
+			xo_open_instance_h(xop, indexed_name);
 			ret = vm_snapshot_dev_intern_arr(xop, (*curr_el)->ident, (*curr_el)->index, curr_el);
-			xo_close_instance_h(xop, int_str);
+			xo_close_instance_h(xop, indexed_name);
 			continue;
 		}
 
@@ -1578,20 +1561,20 @@ vm_snapshot_dev_intern_arr_index(xo_handle_t *xop, int ident, int index,
 		ret = 0;
 
 		/* Write data */
-		xo_open_instance_h(xop, int_str);
+		xo_open_instance_h(xop, indexed_name);
 
 		xo_emit_h(xop, "{:" JSON_PARAM_KEY "/%s}\n", (*curr_el)->field_name);
 		xo_emit_h(xop, "{:" JSON_PARAM_DATA_KEY "/%s}\n", "TODO - Add encoded data");
 		xo_emit_h(xop, "{:" JSON_PARAM_DATA_SIZE_KEY "/%lu}\n", (*curr_el)->data_size);
 
-		xo_close_instance_h(xop, int_str);
+		xo_close_instance_h(xop, indexed_name);
 
 		*curr_el = (*curr_el)->next_field;
 	}
 
-	xo_close_list_h(xop, int_str);
-	free(int_str);
-	int_str = NULL;
+	xo_close_list_h(xop, indexed_name);
+	free(indexed_name);
+	indexed_name = NULL;
 
 	return ret;
 }
