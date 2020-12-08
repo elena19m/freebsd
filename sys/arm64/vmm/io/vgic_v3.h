@@ -49,6 +49,25 @@
 #define	VGIC_ICH_AP0R_NUM_MAX	4
 #define	VGIC_ICH_AP1R_NUM_MAX	VGIC_ICH_AP0R_NUM_MAX
 
+#define ICC_SGI1R_EL1_OP0	0x3
+#define ICC_SGI1R_EL1_OP0_MASK	(ICC_SGI1R_EL1_OP0 << ISS_MSR_OP0_SHIFT)
+#define ICC_SGI1R_EL1_OP1	0x0
+#define ICC_SGI1R_EL1_OP1_MASK	(ICC_SGI1R_EL1_OP1 << ISS_MSR_OP1_SHIFT)
+#define ICC_SGI1R_EL1_CRn	0xc
+#define ICC_SGI1R_EL1_CRn_MASK	(ICC_SGI1R_EL1_CRn << ISS_MSR_CRn_SHIFT)
+#define ICC_SGI1R_EL1_CRm	0xb
+#define ICC_SGI1R_EL1_CRm_MASK	(ICC_SGI1R_EL1_CRm << ISS_MSR_CRm_SHIFT)
+#define ICC_SGI1R_EL1_OP2	0x5
+#define ICC_SGI1R_EL1_OP2_MASK	(ICC_SGI1R_EL1_OP2 << ISS_MSR_OP2_SHIFT)
+
+#define ICC_SGI1R_EL1 \
+	(ICC_SGI1R_EL1_OP0_MASK | ICC_SGI1R_EL1_OP1_MASK |	\
+	ICC_SGI1R_EL1_CRn_MASK | ICC_SGI1R_EL1_CRm_MASK |	\
+	ICC_SGI1R_EL1_OP2_MASK)
+
+int vgic_v3_icc_sgi1r_el1_read(void *vm, int vcpuid, uint64_t *rval, void *arg);
+int vgic_v3_icc_sgi1r_el1_write(void *vm, int vcpuid, uint64_t rval, void *arg);
+
 /* Order matters, a lower value means a higher precedence */
 enum vgic_v3_irqtype {
 	VGIC_IRQ_MAXPRIO,

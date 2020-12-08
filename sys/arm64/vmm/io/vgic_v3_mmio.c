@@ -1,5 +1,6 @@
 #include <sys/malloc.h>
 #include <sys/mutex.h>
+#include <sys/cpuset.h>
 
 #include <machine/vmm.h>
 #include <machine/vmm_instruction_emul.h>
@@ -992,6 +993,7 @@ vgic_v3_mmio_init(struct hyp *hyp)
 	struct vgic_v3_dist *dist = &hyp->vgic_dist;
 	int redist_region_num, dist_region_num, region_num;
 	int ncpus = 1;
+	int i;
 
 	dist_region_num = FIRST_REDIST_MMIO_REGION;
 	redist_region_num = \
@@ -1006,7 +1008,8 @@ vgic_v3_mmio_init(struct hyp *hyp)
 	dist_mmio_init_regions(dist, hyp);
 
 	/* TODO: Do it for all VCPUs */
-	redist_mmio_init_regions(hyp, 0);
+	for (i = 0; i < VM_MAXCPU; i++)
+		redist_mmio_init_regions(hyp, i);
 }
 
 void
@@ -1022,4 +1025,49 @@ vgic_v3_mmio_destroy(struct hyp *hyp)
 	free(dist->gicd_ipriorityr, M_VGIC_V3_MMIO);
 	free(dist->gicd_icfgr, M_VGIC_V3_MMIO);
 	free(dist->gicd_irouter, M_VGIC_V3_MMIO);
+}
+
+int
+vgic_v3_icc_sgi1r_el1_read(void *vm, int vcpuid, uint64_t *rval, void *arg)
+{
+	bool *retu = arg;
+
+	printf("\t%s  %lx\n", __func__, *rval);
+	retu = false;
+
+	return (0);
+}
+
+int
+vgic_v3_icc_sgi1r_el1_write(void *vm, int vcpuid, uint64_t wval, void *arg)
+{
+	struct hyp *hyp;
+	bool *retu = arg;
+	int intid, vcpu;
+	cpuset_t active_cpus;
+
+	hyp = vm_get_cookie(vm);
+	active_cpus = vm_active_cpus(vm);
+
+	if ((wval & ICC_SGI1R_EL1_IRM) == 0) {
+		intid = (wval >> ICC_SGI1R_EL1_SGIID_SHIFT) &
+		    ICC_SGI1R_EL1_SGIID_MASK;
+
+		vcpu = 0;
+		while (vcpu < 16) {
+			if (CPU_ISSET(vcpu, &active_cpus) && vcpu != vcpuid) {
+				vgic_v3_inject_irq(&hyp->ctx[vcpu], intid,
+				    VGIC_IRQ_MISC);
+			}
+			vcpu += 1;
+		}
+
+
+	} else {
+		/* TODO Interrupts routed to all PEs, excluding "self" */
+	}
+
+	retu = false;
+
+	return (0);
 }

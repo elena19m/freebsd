@@ -370,6 +370,10 @@ vm_handle_reg_emul(struct vm *vm, int vcpuid, bool *retu)
 		rread = vtimer_phys_tval_read;
 		rwrite = vtimer_phys_tval_write;
 		break;
+	case ICC_SGI1R_EL1:
+		rread = vgic_v3_icc_sgi1r_el1_read;
+		rwrite = vgic_v3_icc_sgi1r_el1_write;
+		break;
 	default:
 		goto out_user;
 	}

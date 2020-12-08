@@ -475,8 +475,6 @@ vgic_v3_inject_irq(void *arg, uint32_t irq, enum vgic_v3_irqtype irqtype)
 	uint8_t priority;
 	bool enabled;
 
-	KASSERT(irq > GIC_LAST_SGI, ("SGI interrupts not implemented"));
-
 	if (irq >= dist->nirqs || irqtype >= VGIC_IRQ_INVALID) {
 		eprintf("Malformed IRQ %u.\n", irq);
 		return (1);
@@ -599,7 +597,7 @@ vgic_v3_irq_toggle_enabled(uint32_t irq, bool enabled,
 		return (vgic_v3_irq_toggle_enabled_vcpu(irq, enabled, cpu_if));
 	} else {
 		/* TODO: Update irqbuf for all VCPUs, not just VCPU 0 */
-		for (i = 0; i < 1; i++) {
+		for (i = 0; i < VM_MAXCPU; i++) {
 			cpu_if = &hyp->ctx[i].vgic_cpu_if;
 			error = vgic_v3_irq_toggle_enabled_vcpu(irq, enabled, cpu_if);
 			if (error)
