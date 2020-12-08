@@ -293,7 +293,7 @@ struct vm_copyinfo {
 int vcpu_trace_exceptions(struct vm *vm, int vcpuid);
 #endif	/* _KERNEL */
 
-#define	VM_MAXCPU	2
+#define	VM_MAXCPU	16
 
 #define	VM_DIR_READ	0
 #define	VM_DIR_WRITE	1
