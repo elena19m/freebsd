@@ -300,7 +300,12 @@ vmexit_spinup_ap(struct vmctx *ctx, struct vm_exit *vmexit, int *pvcpu)
 	uint64_t ctx_id = vmexit->u.spinup_ap.ctx_id;
 
 	assert(newcpu != 0);
-	assert(newcpu < guest_ncpus);
+	if (newcpu >= guest_ncpus) {
+	/*  -3 - PSCI_RETVAL_DENIED  */
+		error = vm_set_register(ctx, *pvcpu, VM_REG_GUEST_X0, -3);
+		assert(error == 0);
+		goto out;
+	}
 
 	error = vm_set_register(ctx, newcpu, VM_REG_GUEST_X0, ctx_id);
 	assert(error == 0);
@@ -314,6 +319,7 @@ vmexit_spinup_ap(struct vmctx *ctx, struct vm_exit *vmexit, int *pvcpu)
 	error = vm_set_register(ctx, *pvcpu, VM_REG_GUEST_X0, 0);
 	assert(error == 0);
 
+out:
 	return (VMEXIT_CONTINUE);
 }
 
