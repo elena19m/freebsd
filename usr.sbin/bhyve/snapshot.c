@@ -462,13 +462,13 @@ load_restore_file(const char *filename, struct restore_state *rstate)
 	}
 
 	/* TODO - Do not forget to redo the kernel part after testing the userspace part */
-	/*
+	
 	err = load_kdata_file(kdata_filename, rstate);
 	if (err != 0) {
 		fprintf(stderr, "Failed to load guest kernel data file.\n");
 		goto err_restore;
 	}
-	*/
+	
 
 	meta_filename = strcat_extension(filename, ".meta");
 	if (meta_filename == NULL) {
@@ -655,11 +655,15 @@ intern_arr_restore(const char *intern_arr_name, struct list_device_info *list,
 		 * iterated aswell
 		 */
 		while ((iobj = ucl_object_iterate(param, &iit, true)) != NULL) {
+			is_indexed = 0;
+			is_list = 0;
+
 			/* Check if the array contains indexes */
 			is_indexed = intern_arr_restore_index(iobj->key, list, iobj);
 
 			/* If there is no index check if the current element is an array */
-			is_list = intern_arr_restore(iobj->key, list, iobj);
+			if (!is_indexed)
+				is_list = intern_arr_restore(iobj->key, list, iobj);
 
 			/* If there is no index and the element is not an array just add 
 			 * the element in the list
@@ -933,9 +937,7 @@ int
 lookup_guest_ncpus(struct restore_state *rstate)
 {
 	int64_t ncpus;
-	const ucl_object_t *obj;
-
-	obj = lookup_basic_metadata_object(rstate);
+	const ucl_object_t *obj;	obj = lookup_basic_metadata_object(rstate);
 	if (obj == NULL)
 		return (0);
 
@@ -1227,7 +1229,7 @@ vm_restore_kern_struct(struct vmctx *ctx, struct restore_state *rstate,
 		goto done;
 	}
 
-	meta = &(struct vm_snapshot_meta) {
+	/*meta = &(struct vm_snapshot_meta) {
 		.ctx = ctx,
 		.dev_name = info->struct_name,
 		.dev_req  = info->req,
@@ -1247,6 +1249,20 @@ vm_restore_kern_struct(struct vmctx *ctx, struct restore_state *rstate,
 		.dev_info_list.first = NULL,
 		.dev_info_list.last = NULL,
 #endif
+	};*/
+	meta = &(struct vm_snapshot_meta) {
+		.ctx = ctx,
+		.dev_name = info->struct_name,
+		.dev_req  = info->req,
+
+		.buffer.buf_start = struct_ptr,
+		.buffer.buf_size = struct_size,
+
+		.buffer.buf = struct_ptr,
+		.buffer.buf_rem = struct_size,
+
+		.op = VM_SNAPSHOT_RESTORE,
+		.version = JSON_V1,
 	};
 
 	ret = vm_snapshot_req(meta);
@@ -1392,8 +1408,6 @@ vm_restore_user_devs(struct vmctx *ctx, struct restore_state *rstate)
 			return (ret);
 	}
 
-	while (1) {}
-
 	return 0;
 }
 
@@ -1455,6 +1469,8 @@ vm_snapshot_kern_struct(int data_fd, xo_handle_t *xop, const char *array_key,
 
 	data_size = vm_get_snapshot_size(meta);
 
+	fprintf(stderr, "data_size for %s is %lu\r\n", meta->dev_name, data_size);
+
 	write_cnt = write(data_fd, meta->buffer.buf_start, data_size);
 	if (write_cnt != data_size) {
 		perror("Failed to write all snapshotted data.");
@@ -1465,11 +1481,11 @@ vm_snapshot_kern_struct(int data_fd, xo_handle_t *xop, const char *array_key,
 	/* Write metadata. */
 	xo_open_instance_h(xop, array_key);
 	xo_emit_h(xop, "{:debug_name/%s}\n", meta->dev_name);
-	xo_emit_h(xop, "{:" JSON_SNAPSHOT_REQ_KEY "/%d}\n",
-		  meta->dev_req);
+	xo_emit_h(xop, "{:" JSON_SNAPSHOT_REQ_KEY "/%d}\n", meta->dev_req);
 	xo_emit_h(xop, "{:" JSON_SIZE_KEY "/%lu}\n", data_size);
 	xo_emit_h(xop, "{:" JSON_FILE_OFFSET_KEY "/%lu}\n", *offset);
-	xo_close_instance_h(xop, JSON_STRUCT_ARR_KEY);
+	//xo_close_instance_h(xop, JSON_STRUCT_ARR_KEY);
+	xo_close_instance_h(xop, array_key);
 
 	*offset += data_size;
 
@@ -1496,7 +1512,7 @@ vm_snapshot_kern_structs(struct vmctx *ctx, int data_fd, xo_handle_t *xop)
 		goto err_vm_snapshot_kern_data;
 	}
 
-	meta = &(struct vm_snapshot_meta) {
+	/* meta = &(struct vm_snapshot_meta) {
 		.ctx = ctx,
 
 		.buffer.buf_start = buffer,
@@ -1512,6 +1528,16 @@ vm_snapshot_kern_structs(struct vmctx *ctx, int data_fd, xo_handle_t *xop)
 		.dev_info_list.last = NULL,
 #endif
 	};
+	*/
+	meta = &(struct vm_snapshot_meta) {
+		.ctx = ctx,
+
+		.buffer.buf_start = buffer,
+		.buffer.buf_size = buf_size,
+
+		.op = VM_SNAPSHOT_SAVE,
+		.version = JSON_V1,
+	};
 
 	xo_open_list_h(xop, JSON_STRUCT_ARR_KEY);
 	for (i = 0; i < nitems(snapshot_kern_structs); i++) {
@@ -1522,8 +1548,9 @@ vm_snapshot_kern_structs(struct vmctx *ctx, int data_fd, xo_handle_t *xop)
 		meta->buffer.buf = meta->buffer.buf_start;
 		meta->buffer.buf_rem = meta->buffer.buf_size;
 
-		ret = vm_snapshot_kern_struct(data_fd, xop, JSON_DEV_ARR_KEY,
-					      meta, &offset);
+		//ret = vm_snapshot_kern_struct(data_fd, xop, JSON_DEV_ARR_KEY,
+		//			      meta, &offset);
+		ret = vm_snapshot_kern_struct(data_fd, xop, JSON_STRUCT_ARR_KEY, meta, &offset);
 		if (ret != 0) {
 			error = -1;
 			goto err_vm_snapshot_kern_data;
@@ -1733,13 +1760,14 @@ vm_snapshot_dev_write_data(int data_fd, xo_handle_t *xop, const char *array_key,
 
 	data_size = vm_get_snapshot_size(meta);
 
-	//if (meta->version == JSON_V1) {
+	if (meta->version == JSON_V1) {
 		ret = write(data_fd, meta->buffer.buf_start, data_size);
 		if (ret != data_size) {
 			perror("Failed to write all snapshotted data.");
 			return (-1);
 		}
-	//}
+		*offset += data_size;
+	}
 
 	/* Write metadata. */
 	xo_open_instance_h(xop, array_key);
@@ -1788,8 +1816,6 @@ vm_snapshot_dev_write_data(int data_fd, xo_handle_t *xop, const char *array_key,
 	}
 	xo_close_instance_h(xop, array_key);
 
-	*offset += data_size;
-	
 	/* Free device_info list */
 	free_device_info_list(&meta->dev_info_list);
 
@@ -2266,20 +2292,20 @@ vm_snapshot_save_fieldname(const char *fullname, volatile void *data,
 		field_name = aux;
 
 	list = &meta->dev_info_list;
-	if (meta->op == VM_SNAPSHOT_SAVE) {
+	if (op == VM_SNAPSHOT_SAVE) {
 		alloc_device_info_elem(list, field_name, data, data_size);
-	} else if (meta->op == VM_SNAPSHOT_RESTORE) {
+	} else if (op == VM_SNAPSHOT_RESTORE) {
 		/* TODO */
 		aux_elem = list->first;
 		if (aux_elem != NULL) {
-			fprintf(stderr, "\tRemoving field_name: '%s'\r\n", aux_elem->field_name);
-			remove_first_elem(list);
+			memcpy((uint8_t *)data, (uint8_t *)aux_elem->field_data, data_size);
+			// fprintf(stderr, "%s: the expected name is %s and the actual name is %s\r\n", __func__, field_name, aux_elem->field_name);
 		}
+		remove_first_elem(list);
 	} else
 		return (EINVAL);
 
 	free(ffield_name);
-	
 	return (0);
 }
 
@@ -2292,6 +2318,7 @@ vm_snapshot_save_fieldname_cmp(const char *fullname, volatile void *data,
 	char *aux;
     char *field_name;
 	int op;
+	int ret;
 	struct list_device_info *list;
 	struct vm_snapshot_device_info *aux_elem;
     const char delim[5] = "&(>)";
@@ -2310,21 +2337,25 @@ vm_snapshot_save_fieldname_cmp(const char *fullname, volatile void *data,
 		field_name = aux;
 
 	list = &meta->dev_info_list;
-	if (meta->op == VM_SNAPSHOT_SAVE) {
+	if (op == VM_SNAPSHOT_SAVE) {
+		ret = 0;
 		alloc_device_info_elem(list, field_name, data, data_size);
-	} else if (meta->op == VM_SNAPSHOT_RESTORE) {
+	} else if (op == VM_SNAPSHOT_RESTORE) {
 		/* TODO */
 		aux_elem = list->first;
 		if (aux_elem != NULL) {
-			fprintf(stderr, "\tComparing field_name: '%s'\r\n", aux_elem->field_name);
-			remove_first_elem(list);
+			ret = memcmp((uint8_t *)data, (uint8_t *)aux_elem->field_data, data_size);
+			// fprintf(stderr, "%s: the expected name is %s and the actual name is %s\r\n", __func__, field_name, aux_elem->field_name);
 		}
-	} else
-		return (EINVAL);
-
+		remove_first_elem(list);
+	} else {
+		ret = EINVAL;
+		goto done;
+	}
 	free(ffield_name);
-	
-	return (0);
+
+done:
+	return (ret);
 }
 
 void
