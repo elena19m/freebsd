@@ -43,14 +43,14 @@ __FBSDID("$FreeBSD$");
 
 int
 vm_snapshot_save_fieldname(const char *fullname, volatile void *data,
-			size_t data_size, struct vm_snapshot_meta *meta)
+			char *type, size_t data_size, struct vm_snapshot_meta *meta)
 {
 	return vm_snapshot_buf(data, data_size, meta);
 }
 
 int
 vm_snapshot_save_fieldname_cmp(const char *fullname, volatile void *data,
-			size_t data_size, struct vm_snapshot_meta *meta)
+			char *type, size_t data_size, struct vm_snapshot_meta *meta)
 {
 	return vm_snapshot_buf_cmp(data, data_size, meta);
 }

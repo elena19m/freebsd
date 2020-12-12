@@ -92,6 +92,7 @@ struct vm_snapshot_buffer {
 struct vm_snapshot_device_info {
 	unsigned char ident;
 	char *field_name;
+	char *type;
 	int index;
 	char *intern_arr_name;
 	void *field_data;
@@ -133,14 +134,14 @@ struct vm_snapshot_meta {
 };
 
 int vm_snapshot_save_fieldname(const char *fullname, volatile void *data,
-				size_t data_size, struct vm_snapshot_meta *meta);
+				char *type, size_t data_size, struct vm_snapshot_meta *meta);
 void vm_snapshot_add_intern_list(const char *arr_name,
 				struct vm_snapshot_meta *meta);
 void vm_snapshot_remove_intern_list(struct vm_snapshot_meta *meta);
 void vm_snapshot_set_intern_arr_index(struct vm_snapshot_meta *meta, int index);
 void vm_snapshot_clear_intern_arr_index(struct vm_snapshot_meta *meta);
 int vm_snapshot_save_fieldname_cmp(const char *fullname, volatile void *data,
-				size_t data_size, struct vm_snapshot_meta *meta);
+				char *type, size_t data_size, struct vm_snapshot_meta *meta);
 
 
 void vm_snapshot_buf_err(const char *bufname, const enum vm_snapshot_op op);
@@ -174,24 +175,52 @@ do {													\
 	vm_snapshot_clear_intern_arr_index((META));			\
 } while (0)
 
+#define FMT_ENC(X) _Generic((X), \
+	int *:	 #X ": %d\n",		 \
+	float *: #X ": %f\n",		 \
+	long *:  #X ": %ld\n",		 \
+	default: NULL				 \
+)
+
+#define GET_TYPE(X) _Generic((X), \
+	int *:   "int",			  	  \
+	float *: "float",		 	  \
+	long *:  "long",		 	  \
+	default: "b64"				  \
+)
+
+
+#define PRINT_ENC(X) ({										\
+	char *fmt;												\
+															\
+	fmt = FMT_ENC(X);										\
+	if (fmt != NULL) {										\
+		printf(fmt, *X);									\
+	} else {												\
+		printf("Need to encode %s\n", #X);					\
+	}														\
+})
+
 #endif
 
-#define	SNAPSHOT_BUF_OR_LEAVE(DATA, LEN, META, RES, LABEL)			\
-do {										\
-	if ((META)->version == 2) {														\
-		(RES) = vm_snapshot_save_fieldname(#DATA, (DATA), (LEN), (META));			\
-		if ((RES) != 0) {															\
-			vm_snapshot_buf_err(#DATA, (META)->op);									\
-			goto LABEL;																\
-		}																			\
-	} else {																		\
-		/* TODO - Add else case */													\
-		(RES) = vm_snapshot_buf((DATA), (LEN), (META));								\
-		if ((RES) != 0) {															\
-			vm_snapshot_buf_err(#DATA, (META)->op);									\
-			goto LABEL;																\
-		}																			\
-	}																				\
+#define	SNAPSHOT_BUF_OR_LEAVE(DATA, LEN, META, RES, LABEL)						\
+do {																			\
+	char *type;																	\
+	type = GET_TYPE(DATA);														\
+	if ((META)->version == 2) {													\
+		(RES) = vm_snapshot_save_fieldname(#DATA, (DATA), type, (LEN), (META));	\
+		if ((RES) != 0) {														\
+			vm_snapshot_buf_err(#DATA, (META)->op);								\
+			goto LABEL;															\
+		}																		\
+	} else {																	\
+		/* TODO - Add else case */												\
+		(RES) = vm_snapshot_buf((DATA), (LEN), (META));							\
+		if ((RES) != 0) {														\
+			vm_snapshot_buf_err(#DATA, (META)->op);								\
+			goto LABEL;															\
+		}																		\
+	}																			\
 } while (0)
 
 #define	SNAPSHOT_VAR_OR_LEAVE(DATA, META, RES, LABEL)								\
@@ -216,21 +245,23 @@ do {										\
 } while (0)
 
 /* compare the value in the meta buffer with the data */
-#define	SNAPSHOT_BUF_CMP_OR_LEAVE(DATA, LEN, META, RES, LABEL)					\
-do {																			\
-	if ((META)->version == 2) {													\
-		(RES) = vm_snapshot_save_fieldname_cmp(#DATA, (DATA), (LEN), (META));	\
-		if ((RES) != 0) {														\
-			vm_snapshot_buf_err(#DATA, (META)->op);								\
-			goto LABEL;															\
-		}																		\
-	} else {																	\
-		(RES) = vm_snapshot_buf_cmp((DATA), (LEN), (META));						\
-		if ((RES) != 0) {														\
-			vm_snapshot_buf_err(#DATA, (META)->op);								\
-			goto LABEL;															\
-		}																		\
-	}																			\
+#define	SNAPSHOT_BUF_CMP_OR_LEAVE(DATA, LEN, META, RES, LABEL)						\
+do {																				\
+	char *type;																		\
+	type = GET_TYPE(DATA);															\
+	if ((META)->version == 2) {														\
+		(RES) = vm_snapshot_save_fieldname_cmp(#DATA, (DATA), type, (LEN), (META));	\
+		if ((RES) != 0) {															\
+			vm_snapshot_buf_err(#DATA, (META)->op);									\
+			goto LABEL;																\
+		}																			\
+	} else {																		\
+		(RES) = vm_snapshot_buf_cmp((DATA), (LEN), (META));							\
+		if ((RES) != 0) {															\
+			vm_snapshot_buf_err(#DATA, (META)->op);									\
+			goto LABEL;																\
+		}																			\
+	}																				\
 } while (0)
 
 #define	SNAPSHOT_VAR_CMP_OR_LEAVE(DATA, META, RES, LABEL)			\
