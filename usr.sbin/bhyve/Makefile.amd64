@@ -55,6 +55,7 @@ SRCS=	\
 	pci_virtio_scsi.c	\
 	pci_uart.c		\
 	pci_xhci.c		\
+	pctestdev.c		\
 	pm.c			\
 	post.c			\
 	ps2kbd.c		\
@@ -67,7 +68,7 @@ SRCS=	\
 	uart_emul.c		\
 	usb_emul.c		\
 	usb_mouse.c		\
-	pci_virtio.c		\
+	virtio.c		\
 	vga.c			\
 	vmgenc.c		\
 	xmsr.c			\

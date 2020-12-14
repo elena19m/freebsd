@@ -57,7 +57,7 @@ __FBSDID("$FreeBSD$");
 #include "debug.h"
 #include "pci_emul.h"
 #include "mevent.h"
-#include "pci_virtio.h"
+#include "virtio.h"
 #include "net_utils.h"
 #include "net_backends.h"
 #include "iov.h"

@@ -60,7 +60,7 @@ __FBSDID("$FreeBSD$");
 #include "bhyverun.h"
 #include "debug.h"
 #include "pci_emul.h"
-#include "pci_virtio.h"
+#include "virtio.h"
 
 #define VTRND_RINGSZ	64
 
@@ -210,4 +210,4 @@ struct pci_devemu pci_de_vrnd = {
 	.pe_snapshot =	vi_pci_snapshot,
 #endif
 };
-DEVEMU_SET(pci_de_vrnd);
+PCI_EMUL_SET(pci_de_vrnd);
