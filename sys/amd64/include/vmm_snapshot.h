@@ -105,6 +105,7 @@ struct list_device_info {
 	unsigned char ident;
 	const char *intern_arr_names[IDENT_LEVEL];
 	int index;
+	int auto_index;
 
 	struct vm_snapshot_device_info *first;
 	struct vm_snapshot_device_info *last;
@@ -135,19 +136,31 @@ struct vm_snapshot_meta {
 
 int vm_snapshot_save_fieldname(const char *fullname, volatile void *data,
 				char *type, size_t data_size, struct vm_snapshot_meta *meta);
+
 void vm_snapshot_add_intern_list(const char *arr_name,
 				struct vm_snapshot_meta *meta);
 void vm_snapshot_remove_intern_list(struct vm_snapshot_meta *meta);
+
 void vm_snapshot_set_intern_arr_index(struct vm_snapshot_meta *meta, int index);
 void vm_snapshot_clear_intern_arr_index(struct vm_snapshot_meta *meta);
+
+void vm_snapshot_activate_auto_index(struct vm_snapshot_meta *meta);
+void vm_snapshot_deactivate_auto_index(struct vm_snapshot_meta *meta);
+
 int vm_snapshot_save_fieldname_cmp(const char *fullname, volatile void *data,
 				char *type, size_t data_size, struct vm_snapshot_meta *meta);
+
+int vm_snapshot_guest2host_addr_v2(void **addrp, size_t len, vm_paddr_t *gaddr,
+				bool restore_null, struct vm_snapshot_meta *meta);
+int vm_snapshot_host2guest_addr_v2(void **addrp, size_t len, vm_paddr_t *gaddr,
+				bool restore_null, struct vm_snapshot_meta *meta);
 
 
 void vm_snapshot_buf_err(const char *bufname, const enum vm_snapshot_op op);
 int vm_snapshot_buf(volatile void *data, size_t data_size,
 		    struct vm_snapshot_meta *meta);
 size_t vm_get_snapshot_size(struct vm_snapshot_meta *meta);
+
 int vm_snapshot_guest2host_addr(void **addrp, size_t len, bool restore_null,
 				struct vm_snapshot_meta *meta);
 int vm_snapshot_buf_cmp(volatile void *data, size_t data_size,
@@ -165,6 +178,7 @@ do {													\
 	vm_snapshot_remove_intern_list((META));				\
 } while (0)
 
+
 #define SNAPSHOT_SET_INTERN_ARR_INDEX(META, IDX)		\
 do {													\
 	vm_snapshot_set_intern_arr_index((META), (IDX));	\
@@ -173,6 +187,17 @@ do {													\
 #define SNAPSHOT_CLEAR_INTERN_ARR_INDEX(META)			\
 do {													\
 	vm_snapshot_clear_intern_arr_index((META));			\
+} while (0)
+
+
+#define SNAPSHOT_ACTIVATE_AUTO_INDEXING(META)			\
+do {													\
+	vm_snapshot_activate_auto_index((META));			\
+} while (0)
+
+#define SNAPSHOT_DEACTIVATE_AUTO_INDEXING(META)			\
+do {													\
+	vm_snapshot_deactivate_auto_index((META));			\
 } while (0)
 
 #define FMT_ENC(X) _Generic((X), \
@@ -233,15 +258,15 @@ do {																			\
  * pointer NULL at restore time.
  */
 #define	SNAPSHOT_GUEST2HOST_ADDR_OR_LEAVE(ADDR, LEN, RNULL, META, RES, LABEL)	\
-do {										\
-	(RES) = vm_snapshot_guest2host_addr((void **)&(ADDR), (LEN), (RNULL),	\
-			(META));					\
-	if ((RES) != 0) {							\
-		if ((RES) == EFAULT)						\
-			fprintf(stderr, "%s: invalid address: %s\r\n",		\
-				__func__, #ADDR);				\
-		goto LABEL;							\
-	}									\
+do {																			\
+	(RES) = vm_snapshot_guest2host_addr((void **)&(ADDR), (LEN),				\
+					(RNULL), (META));											\
+	if ((RES) != 0) {															\
+		if ((RES) == EFAULT)													\
+			fprintf(stderr, "%s: invalid address: %s\r\n",						\
+				__func__, #ADDR);												\
+		goto LABEL;																\
+	}																			\
 } while (0)
 
 /* compare the value in the meta buffer with the data */

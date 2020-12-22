@@ -229,13 +229,18 @@ alloc_device_info_elem(struct list_device_info *list, char *field_name,
 {
 	const char *arr_name = NULL;
 	struct vm_snapshot_device_info *aux;
+	int index;
 
 	aux = calloc(1, sizeof(struct vm_snapshot_device_info));
 	assert(aux != NULL);
 	aux->ident = list->ident;
 	if (aux->ident > 0)
 		arr_name = list->intern_arr_names[aux->ident - 1];
-	add_device_info(aux, field_name, arr_name, list->index, data, type, data_size);
+	if (list->auto_index >= 0 && list->index == -1)
+		index = list->auto_index;
+	else
+		index = list->index;
+	add_device_info(aux, field_name, arr_name, index, data, type, data_size);
 
 	if (list->first == NULL) {
 		list->first = aux;
@@ -596,8 +601,8 @@ int
 intern_arr_restore_index(const char *intern_arr_name,
 		struct list_device_info *list, const ucl_object_t *obj)
 {
-	const ucl_object_t *param = NULL, *iobj = NULL, *o = NULL;
-	ucl_object_iter_t it = NULL, iit = NULL, oit = NULL;
+	const ucl_object_t *param = NULL, *intern_obj = NULL;
+	ucl_object_iter_t it = NULL, iit = NULL;
 	const char *enc_data;
 	char *dec_data;
 	int enc_bytes;
@@ -605,37 +610,32 @@ intern_arr_restore_index(const char *intern_arr_name,
 	int64_t data_size;
 	int is_list;
 
+	if (((ucl_object_type(obj) == UCL_ARRAY) &&
+		(strstr(obj->key, "@") == NULL)) ||
+		(ucl_object_type(obj) != UCL_ARRAY))
+		return (0);
+
 	while ((param = ucl_object_iterate(obj, &it, true)) != NULL) {
-		/* Check if it is an indexed array */
-		if (((ucl_object_type(param) == UCL_ARRAY) &&
-			(strstr(param->key, "@") == NULL)) ||
-			(ucl_object_type(param) != UCL_ARRAY))
-			return (0);
+		while ((intern_obj = ucl_object_iterate(param, &iit, true)) != NULL) {
+			is_list = (ucl_object_type(intern_obj) == UCL_ARRAY);
 
-		/* Iterate through index array elems */
-		while ((iobj = ucl_object_iterate(param, &iit, true)) != NULL) {
-			/* Check if the element is an array */
-			is_list = intern_arr_restore(iobj->key, list, iobj);
-
-			/* If the element is not an array just add to the list */
 			if (!is_list) {
-				while ((o = ucl_object_iterate(iobj, &oit, true)) != NULL) {
-					enc_data = NULL;
-					JSON_GET_STRING_VALUE_OR_RETURN(o->key, iobj, &enc_data, -1);
-					assert(enc_data != NULL);
+				enc_data = NULL;
+				JSON_GET_STRING_VALUE_OR_RETURN(intern_obj->key, param, &enc_data, -1);
+				assert(enc_data != NULL);
 
-					data_size = strlen(enc_data);
-					enc_bytes = (data_size / 4) * 3;
-					dec_data = NULL;
-					dec_data = malloc((enc_bytes + 2) * sizeof(char));
-					assert(dec_data != NULL);
+				data_size = strlen(enc_data);
+				enc_bytes = (data_size >> 2) * 3;
+				dec_data = NULL;
+				dec_data = malloc((enc_bytes + 2) * sizeof(char));
+				assert(dec_data != NULL);
 
-					dec_bytes = EVP_DecodeBlock(dec_data, enc_data, data_size);
-					assert(dec_bytes > 0);
+				dec_bytes = EVP_DecodeBlock(dec_data, enc_data, data_size);
+				assert(dec_bytes > 0);
 
-					alloc_device_info_elem(list, (char *)o->key, dec_data, NULL, (size_t)data_size);
-				}
-			}
+				alloc_device_info_elem(list, (char *)intern_obj->key, dec_data, NULL, (size_t)data_size);
+			} else
+				intern_arr_restore(intern_obj->key, list, intern_obj);
 		}
 	}
 
@@ -646,85 +646,48 @@ int
 intern_arr_restore(const char *intern_arr_name, struct list_device_info *list,
 		const ucl_object_t *obj)
 {
-	const ucl_object_t *param = NULL, *iobj = NULL, *o = NULL;
-	ucl_object_iter_t it = NULL, iit = NULL, oit = NULL;
+	const ucl_object_t *param = NULL, *intern_obj = NULL;
+	ucl_object_iter_t it = NULL, iit = NULL;
 	const char *enc_data;
 	char *dec_data;
 	int enc_bytes;
 	int dec_bytes;
 	int64_t data_size;
-	int is_list, is_indexed;
+	int is_list;
 
 	/* Check if the received instance contains an array */
 	while ((param = ucl_object_iterate(obj, &it, true)) != NULL) {
-		/* If the first param is not an array just return because this 
-		 * is how the instance was created.
-		 */
-		if (ucl_object_type(param) != UCL_ARRAY)
-			return (0);
+		while ((intern_obj = ucl_object_iterate(param, &iit, true)) != NULL) {
+			is_list = (ucl_object_type(intern_obj) == UCL_ARRAY);
 
-		/* The received instance contains an array that can be 
-		 * iterated aswell
-		 */
-		while ((iobj = ucl_object_iterate(param, &iit, true)) != NULL) {
-			is_indexed = 0;
-			is_list = 0;
-
-			/* Check if the array contains indexes */
-			is_indexed = intern_arr_restore_index(iobj->key, list, iobj);
-
-			/* If there is no index check if the current element is an array */
-			if (!is_indexed)
-				is_list = intern_arr_restore(iobj->key, list, iobj);
-
-			/* If there is no index and the element is not an array just add 
-			 * the element in the list
-			 */
-			if (!is_list && !is_indexed) {
-				/*param_name = NULL;
-				JSON_GET_STRING_OR_RETURN(JSON_PARAM_KEY, iobj, &param_name, -1);
-				assert(param_name != NULL);
-				
+			if (!is_list) {
 				enc_data = NULL;
-				JSON_GET_STRING_OR_RETURN(JSON_PARAM_DATA_KEY, iobj, &enc_data, -1);
-				assert(enc_data != NULL);
-				
-				data_size = -1;
-				JSON_GET_INT_OR_RETURN(JSON_PARAM_DATA_SIZE_KEY, iobj, &data_size, -1);
-				assert(data_size > 0);
+				// JSON_GET_STRING_VALUE_OR_RETURN(intern_obj->key, param, &enc_data, -1);
+				// assert(enc_data != NULL);
+				if (!ucl_object_tostring_safe(intern_obj, &enc_data)) {
+					fprintf(stderr, "Cannot convert '%s' value to string.", intern_obj->key);
+					return (-1);
+				}
+				fprintf(stderr, "%s: restoring elem %s with value %s\r\n", __func__, intern_obj->key, enc_data);
 
-				enc_bytes = ((data_size / 3) + ((data_size % 3) != 0)) << 2;
-
+				data_size = strlen(enc_data);
+				enc_bytes = (data_size >> 2) * 3;
 				dec_data = NULL;
-				dec_data = malloc((enc_bytes + 3) * sizeof(char));
+				dec_data = malloc((enc_bytes + 2) * sizeof(char));
 				assert(dec_data != NULL);
 
-				dec_bytes = EVP_DecodeBlock(dec_data, enc_data, enc_bytes);
+				dec_bytes = EVP_DecodeBlock(dec_data, enc_data, data_size);
 				assert(dec_bytes > 0);
 
-				alloc_device_info_elem(list, (char *)param_name, dec_data, (size_t)data_size);
-				free(dec_data);*/
-				while ((o = ucl_object_iterate(iobj, &oit, true)) != NULL) {
-					enc_data = NULL;
-					JSON_GET_STRING_VALUE_OR_RETURN(o->key, iobj, &enc_data, -1);
-					assert(enc_data != NULL);
-
-					data_size = strlen(enc_data);
-					enc_bytes = (data_size / 4) * 3;
-					dec_data = NULL;
-					dec_data = malloc((enc_bytes + 2) * sizeof(char));
-					assert(dec_data != NULL);
-
-					dec_bytes = EVP_DecodeBlock(dec_data, enc_data, data_size);
-					assert(dec_bytes > 0);
-
-					alloc_device_info_elem(list, (char *)o->key, dec_data, NULL, (size_t)data_size);
-				}
+				alloc_device_info_elem(list, (char *)intern_obj->key, dec_data, NULL, (size_t)data_size);
+			} else {
+				fprintf(stderr, "%s: restoring list %s\r\n", __func__, intern_obj->key);
+				intern_arr_restore(intern_obj->key, list, intern_obj);
 			}
 		}
 	}
 
-	return (1);
+	return (0);
 }
 
 int
@@ -732,15 +695,8 @@ lookup_check_dev(const char *dev_name, struct restore_state *rstate,
 		 const ucl_object_t *obj,
 		 struct list_device_info *list)
 {
-	const ucl_object_t *dev_params = NULL, *dev_param = NULL, *o = NULL;
-	ucl_object_iter_t it = NULL, oit = NULL;
+	const ucl_object_t *dev_params = NULL;
 	const char *snapshot_req;
-	const char *enc_data;
-	char *dec_data;
-	int enc_bytes;
-	int dec_bytes;
-	int64_t data_size;
-	int is_list;
 
 	snapshot_req = NULL;
 	JSON_GET_STRING_OR_RETURN(JSON_SNAPSHOT_REQ_KEY, obj,
@@ -762,28 +718,7 @@ lookup_check_dev(const char *dev_name, struct restore_state *rstate,
 		}
 
 		/* Iterate through device parameters */
-		while ((dev_param = ucl_object_iterate(dev_params, &it, true)) != NULL) {
-			is_list = intern_arr_restore(dev_param->key, list, dev_param);
-
-			if (!is_list) {
-				while ((o = ucl_object_iterate(dev_param, &oit, true)) != NULL) {
-					enc_data = NULL;
-					JSON_GET_STRING_VALUE_OR_RETURN(o->key, dev_param, &enc_data, -1);
-					assert(enc_data != NULL);
-
-					data_size = strlen(enc_data);
-					enc_bytes = (data_size / 4) * 3;
-					dec_data = NULL;
-					dec_data = malloc((enc_bytes + 2) * sizeof(char));
-					assert(dec_data != NULL);
-
-					dec_bytes = EVP_DecodeBlock(dec_data, enc_data, data_size);
-					assert(dec_bytes > 0);
-
-					alloc_device_info_elem(list, (char *)o->key, dec_data, NULL, (size_t)data_size);
-				}
-			}
-		}
+		intern_arr_restore(JSON_PARAMS_KEY, list, dev_params);
 
 		return (0);
 	}
@@ -2327,6 +2262,8 @@ vm_snapshot_save_fieldname(const char *fullname, volatile void *data,
 	list = &meta->dev_info_list;
 	if (op == VM_SNAPSHOT_SAVE) {
 		alloc_device_info_elem(list, field_name, data, type, data_size);
+		if ((list->auto_index >= 0) && (list->index == -1))
+			list->auto_index++;
 	} else if (op == VM_SNAPSHOT_RESTORE) {
 		/* TODO */
 		aux_elem = list->first;
@@ -2373,6 +2310,8 @@ vm_snapshot_save_fieldname_cmp(const char *fullname, volatile void *data,
 	if (op == VM_SNAPSHOT_SAVE) {
 		ret = 0;
 		alloc_device_info_elem(list, field_name, data, type, data_size);
+		if ((list->auto_index >= 0) && (list->index == -1))
+			list->auto_index++;
 	} else if (op == VM_SNAPSHOT_RESTORE) {
 		/* TODO */
 		aux_elem = list->first;
@@ -2413,6 +2352,16 @@ void
 vm_snapshot_clear_intern_arr_index(struct vm_snapshot_meta *meta)
 {
 	meta->dev_info_list.index = -1;
+}
+
+void vm_snapshot_activate_auto_index(struct vm_snapshot_meta *meta)
+{
+	meta->dev_info_list.auto_index = 0;
+}
+
+void vm_snapshot_deactivate_auto_index(struct vm_snapshot_meta *meta)
+{
+	meta->dev_info_list.auto_index = -1;
 }
 
 void
@@ -2476,6 +2425,48 @@ vm_get_snapshot_size(struct vm_snapshot_meta *meta)
 	}
 
 	return (length);
+}
+
+int
+vm_snapshot_guest2host_addr_v2(void **addrp, size_t len, vm_paddr_t *gadr,
+				bool restore_null, struct vm_snapshot_meta *meta)
+{
+	int ret = 0;
+	vm_paddr_t gaddr;
+
+	gaddr = paddr_host2guest(meta->ctx, *addrp);
+	if (gaddr == (vm_paddr_t) -1) {
+		if (!restore_null ||
+			(restore_null && (*addrp != NULL))) {
+			ret = EFAULT;
+			goto done;
+		}
+	}
+	memcpy(*addrp, &gaddr, sizeof(gaddr));
+
+done:
+	return (ret);
+}
+
+int
+vm_snapshot_host2guest_addr_v2(void **addrp, size_t len, vm_paddr_t *gadr,
+				bool restore_null, struct vm_snapshot_meta *meta)
+{
+	int ret = 0;
+	vm_paddr_t gaddr;
+
+	SNAPSHOT_VAR_OR_LEAVE(gaddr, meta, ret, done);
+	if (gaddr == (vm_paddr_t) -1) {
+		if (!restore_null) {
+			ret = EFAULT;
+			goto done;
+		}
+	}
+
+	*addrp = paddr_guest2host(meta->ctx, gaddr, len);
+
+done:
+	return (ret);
 }
 
 int

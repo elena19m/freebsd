@@ -2531,14 +2531,17 @@ pci_ahci_snapshot_save_queues(struct ahci_port *port,
 	int idx;
 	struct ahci_ioreq *ioreq;
 
+	SNAPSHOT_ADD_INTERN_ARR(iofhd_indexes, meta);
 	STAILQ_FOREACH(ioreq, &port->iofhd, io_flist) {
 		idx = ((void *) ioreq - (void *) port->ioreq) / sizeof(*ioreq);
 		SNAPSHOT_VAR_OR_LEAVE(idx, meta, ret, done);
 	}
+	SNAPSHOT_REMOVE_INTERN_ARR(iofhd_indexex, meta);
 
 	idx = -1;
 	SNAPSHOT_VAR_OR_LEAVE(idx, meta, ret, done);
 
+	SNAPSHOT_ADD_INTERN_ARR(iobhd_indexes, meta);
 	TAILQ_FOREACH(ioreq, &port->iobhd, io_blist) {
 		idx = ((void *) ioreq - (void *) port->ioreq) / sizeof(*ioreq);
 		SNAPSHOT_VAR_OR_LEAVE(idx, meta, ret, done);
@@ -2554,6 +2557,7 @@ pci_ahci_snapshot_save_queues(struct ahci_port *port,
 			goto done;
 		}
 	}
+	SNAPSHOT_REMOVE_INTERN_ARR(iobhd_indexes, meta);
 
 	idx = -1;
 	SNAPSHOT_VAR_OR_LEAVE(idx, meta, ret, done);

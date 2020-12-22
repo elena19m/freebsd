@@ -55,6 +55,20 @@ vm_snapshot_save_fieldname_cmp(const char *fullname, volatile void *data,
 	return vm_snapshot_buf_cmp(data, data_size, meta);
 }
 
+int
+vm_snapshot_guest2host_addr_v2(void **addrp, size_t len, vm_paddr_t *gaddr,
+				bool restore_null, struct vm_snapshot_meta *meta)
+{
+	return 0;
+}
+
+int
+vm_snapshot_host2guest_addr_v2(void **addrp, size_t len, vm_paddr_t *gaddr,
+				bool restore_null, struct vm_snapshot_meta *meta)
+{
+	return 0;
+}
+
 void
 vm_snapshot_add_intern_list(const char *arr_name, struct vm_snapshot_meta *meta)
 {
