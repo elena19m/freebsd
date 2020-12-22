@@ -79,7 +79,7 @@ receive_vm_migration(struct vmctx *ctx, char *migration_data)
 	memset(req.host, 0, MAX_HOSTNAME_LEN);
 	hostname = strdup(migration_data);
 
-	if ((pos = strchr(hostname, ',')) != NULL ) {
+	if ((pos = strchr(hostname, ',')) != NULL) {
 		*pos = '\0';
 		strncpy(req.host, hostname, MAX_HOSTNAME_LEN);
 		pos = pos + 1;
@@ -380,7 +380,9 @@ static int
 migrate_check_memsize(size_t local_lowmem_size, size_t local_highmem_size,
 		      size_t remote_lowmem_size, size_t remote_highmem_size)
 {
-	int ret = MIGRATION_SPECS_OK;
+	int ret;
+
+	ret = MIGRATION_SPECS_OK;
 
 	if (local_lowmem_size != remote_lowmem_size){
 		ret = MIGRATION_SPECS_NOT_OK;
@@ -402,11 +404,15 @@ migrate_check_memsize(size_t local_lowmem_size, size_t local_highmem_size,
 static int
 migrate_recv_memory(struct vmctx *ctx, int socket)
 {
-	size_t local_lowmem_size = 0, local_highmem_size = 0;
-	size_t remote_lowmem_size = 0, remote_highmem_size = 0;
+	size_t local_lowmem_size, local_highmem_size;
+	size_t remote_lowmem_size, remote_highmem_size;
 	char *baseaddr;
 	int memsize_ok;
-	int rc = 0;
+	int rc;
+
+	local_lowmem_size = local_highmem_size = 0;
+	remote_lowmem_size = remote_highmem_size = 0;
+	rc = 0;
 
 	rc = vm_get_guestmem_from_ctx(ctx,
 			&baseaddr, &local_lowmem_size,
@@ -442,7 +448,7 @@ migrate_recv_memory(struct vmctx *ctx, int socket)
 
 	/* Check if local {low,high}mem is equal with remote {low,high}mem */
 	memsize_ok = migrate_check_memsize(local_lowmem_size, local_highmem_size,
-					   remote_lowmem_size, remote_highmem_size);
+					remote_lowmem_size, remote_highmem_size);
 
 	rc = migration_send_data_remote(socket,
 			&memsize_ok, sizeof(memsize_ok));
@@ -470,7 +476,7 @@ migrate_recv_memory(struct vmctx *ctx, int socket)
 	}
 
 	/* Receive the highmem segment */
-	if (local_highmem_size > 0 ){
+	if (local_highmem_size > 0){
 		rc = migration_recv_data_from_remote(socket,
 				baseaddr + 4 * GB,
 				local_highmem_size);
@@ -489,11 +495,14 @@ static int
 migrate_send_memory(struct vmctx *ctx, int socket)
 {
 	size_t lowmem_size, highmem_size;
-	char *mmap_vm_lowmem = MAP_FAILED;
-	char *mmap_vm_highmem = MAP_FAILED;
+	char *mmap_vm_lowmem, *mmap_vm_highmem;
 	char *baseaddr;
 	int memsize_ok;
-	int rc = 0;
+	int rc;
+
+	rc = 0;
+	mmap_vm_lowmem = MAP_FAILED;
+	mmap_vm_highmem = MAP_FAILED;
 
 	rc = vm_get_guestmem_from_ctx(ctx, &baseaddr,
 			&lowmem_size, &highmem_size);
@@ -551,7 +560,7 @@ migrate_send_memory(struct vmctx *ctx, int socket)
 	}
 
 	/* Send the highmem segment */
-	if (highmem_size > 0 ){
+	if (highmem_size > 0){
 		rc = migration_send_data_remote(socket, mmap_vm_highmem, highmem_size);
 		if (rc < 0) {
 			fprintf(stderr,
@@ -566,8 +575,8 @@ migrate_send_memory(struct vmctx *ctx, int socket)
 
 static inline int
 migrate_send_kern_struct(struct vmctx *ctx, int socket,
-			 char *buffer,
-			 enum snapshot_req struct_req)
+			char *buffer,
+			enum snapshot_req struct_req)
 {
 	int rc;
 	size_t data_size;
@@ -667,7 +676,7 @@ migrate_recv_kern_struct(struct vmctx *ctx, int socket, char *buffer)
 	meta->buffer.buf_rem = meta->buffer.buf_size;
 
 	rc = vm_snapshot_req(meta);
-	if (rc != 0 ) {
+	if (rc != 0) {
 		fprintf(stderr,
 			"%s: Failed to restore struct %d\r\n",
 			__func__,
@@ -681,11 +690,12 @@ migrate_recv_kern_struct(struct vmctx *ctx, int socket, char *buffer)
 static int
 migrate_kern_data(struct vmctx *ctx, int socket, enum migration_transfer_req req)
 {
-	int i, rc, error = 0;
+	int i, rc, error;
 	int ndevs;
 	char *buffer;
 	const struct vm_snapshot_kern_info *snapshot_kern_structs;
 
+	error = 0;
 	snapshot_kern_structs = get_snapshot_kern_structs(&ndevs);
 
 	buffer = malloc(SNAPSHOT_BUFFER_SIZE * sizeof(char));
@@ -710,7 +720,7 @@ migrate_kern_data(struct vmctx *ctx, int socket, enum migration_transfer_req req
 		} else if (req == MIGRATION_SEND_REQ) {
 			rc = migrate_send_kern_struct(ctx, socket, buffer,
 					snapshot_kern_structs[i].req);
-			if (rc < 0 ) {
+			if (rc < 0) {
 				fprintf(stderr,
 					"%s: Could not send %s\r\n",
 					__func__,
@@ -904,10 +914,11 @@ static int
 migrate_devs(struct vmctx *ctx, int socket, enum migration_transfer_req req)
 {
 	int i, num_items;
-	int rc, error = 0;
+	int rc, error;
 	char *buffer;
 	const struct vm_snapshot_dev_info *snapshot_devs;
 
+	error = 0;
 	buffer = malloc(SNAPSHOT_BUFFER_SIZE * sizeof(char));
 	if (buffer == NULL) {
 		fprintf(stderr,
@@ -962,8 +973,6 @@ migrate_devs(struct vmctx *ctx, int socket, enum migration_transfer_req req)
 			}
 		}
 	}
-
-	error = 0;
 
 end:
 	if (buffer != NULL)
@@ -1234,7 +1243,7 @@ vm_recv_migrate_req(struct vmctx *ctx, struct migrate_req req)
 	migration_completed = MIGRATION_SPECS_OK;
 	rc = migration_send_data_remote(con_socket, &migration_completed,
 					sizeof(migration_completed));
-	if (rc < 0 ) {
+	if (rc < 0) {
 		fprintf(stderr,
 			"%s: Could not send migration completed remote\r\n",
 			__func__);
