@@ -120,8 +120,8 @@ static struct vmm_ops *ops = NULL;
 	(ops != NULL ? (*ops->vmrun)(vmi, vcpu, pc, pmap, rvc, sc) : ENXIO)
 #define	VMCLEANUP(vmi)	(ops != NULL ? (*ops->vmcleanup)(vmi) : NULL)
 #define	VMMMAP_SET(vmi, ipa, pa, len, prot)				\
-    	(ops != NULL ? 							\
-    	(*ops->vmmapset)(vmi, ipa, pa, len, prot) : ENXIO)
+	(ops != NULL ? 							\
+	(*ops->vmmapset)(vmi, ipa, pa, len, prot) : ENXIO)
 #define	VMMMAP_GET(vmi, gpa) \
 	(ops != NULL ? (*ops->vmmapget)(vmi, gpa) : ENXIO)
 #define	VMGETREG(vmi, vcpu, num, retval)		\

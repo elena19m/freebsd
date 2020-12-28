@@ -439,7 +439,7 @@ out:
 
 /* Computes _dstbitstr as the bitwise and of the two _srcbitstr */
 static inline void
-bitstr_and(bitstr_t *_dstbitstr, bitstr_t *_src1bitstr, 
+bitstr_and(bitstr_t *_dstbitstr, bitstr_t *_src1bitstr,
 	       bitstr_t *_src2bitstr, int _nbits)
 {
 	bitstr_t mask;
@@ -455,7 +455,7 @@ bitstr_and(bitstr_t *_dstbitstr, bitstr_t *_src1bitstr,
 
 /* Computes _dstbitstr as the bitwise or of the two _srcbitstr */
 static inline void
-bitstr_or(bitstr_t *_dstbitstr, bitstr_t *_src1bitstr, 
+bitstr_or(bitstr_t *_dstbitstr, bitstr_t *_src1bitstr,
 	      bitstr_t *_src2bitstr, int _nbits)
 {
 	bitstr_t mask;
