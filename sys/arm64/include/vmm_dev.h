@@ -129,7 +129,7 @@ enum {
 	IOCNUM_GET_REGISTER = 21,
 
 	/* statistics */
-	IOCNUM_VM_STATS = 50, 
+	IOCNUM_VM_STATS = 50,
 	IOCNUM_VM_STAT_DESC = 51,
 
 	/* interrupt injection */

@@ -319,9 +319,9 @@ ENTRY(vmm_enter_guest)
 	SAVE_HOST_VFP_REGS()
 	/*
 	 * Loading the guest VFP registers needs to come before loading the
- 	 * rest of the registers because this process dirties the regular
+	 * rest of the registers because this process dirties the regular
 	 * registers.
- 	 */
+	 */
 	LOAD_GUEST_VFP_REGS()
 #endif
 	LOAD_GUEST_REGS()
