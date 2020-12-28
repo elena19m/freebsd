@@ -1171,8 +1171,11 @@ main(int argc, char *argv[])
 			break;
 #endif
 		case 's':
-			if (pci_parse_slot(optarg) != 0)
-				exit(1);
+			if (strncmp(optarg, "help", strlen(optarg)) == 0) {
+				pci_print_supported_devices();
+				exit(0);
+			} else if (pci_parse_slot(optarg) != 0)
+				exit(4);
 			else
 				break;
 		case 'S':
@@ -1308,8 +1311,10 @@ main(int argc, char *argv[])
 	/*
 	 * Exit if a device emulation finds an error in its initilization
 	 */
-	if (init_pci(ctx) != 0)
-		exit(1);
+	if (init_pci(ctx) != 0) {
+		perror("device emulation initialization error");
+		exit(4);
+	}
 
 	/*
 	 * Initialize after PCI, to allow a bootrom file to reserve the high

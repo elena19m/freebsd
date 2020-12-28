@@ -125,7 +125,7 @@ pci_fbuf_usage(char *opt)
 }
 
 static void
-pci_fbuf_write(struct vmctx *ctx, int vcpu, struct pci_devinst *dpi,
+pci_fbuf_write(struct vmctx *ctx, int vcpu, struct pci_devinst *pi,
 	       int baridx, uint64_t offset, int size, uint64_t value)
 {
 	struct pci_fbuf_softc *sc;
