@@ -34,27 +34,27 @@ __FBSDID("$FreeBSD$");
 #include "pci_emul.h"
 
 static int
-pci_hostbridge_init(struct vmctx *ctx, struct pci_devinst *di, char *opts)
+pci_hostbridge_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 {
 
 	/* config space */
-	pci_set_cfgdata16(di, PCIR_VENDOR, 0x1275);	/* NetApp */
-	pci_set_cfgdata16(di, PCIR_DEVICE, 0x1275);	/* NetApp */
-	pci_set_cfgdata8(di, PCIR_HDRTYPE, PCIM_HDRTYPE_NORMAL);
-	pci_set_cfgdata8(di, PCIR_CLASS, PCIC_BRIDGE);
-	pci_set_cfgdata8(di, PCIR_SUBCLASS, PCIS_BRIDGE_HOST);
+	pci_set_cfgdata16(pi, PCIR_VENDOR, 0x1275);	/* NetApp */
+	pci_set_cfgdata16(pi, PCIR_DEVICE, 0x1275);	/* NetApp */
+	pci_set_cfgdata8(pi, PCIR_HDRTYPE, PCIM_HDRTYPE_NORMAL);
+	pci_set_cfgdata8(pi, PCIR_CLASS, PCIC_BRIDGE);
+	pci_set_cfgdata8(pi, PCIR_SUBCLASS, PCIS_BRIDGE_HOST);
 
-	pci_emul_add_pciecap(di, PCIEM_TYPE_ROOT_PORT);
+	pci_emul_add_pciecap(pi, PCIEM_TYPE_ROOT_PORT);
 
 	return (0);
 }
 
 static int
-pci_amd_hostbridge_init(struct vmctx *ctx, struct pci_devinst *di, char *opts)
+pci_amd_hostbridge_init(struct vmctx *ctx, struct pci_devinst *pi, char *opts)
 {
-	(void) pci_hostbridge_init(ctx, di, opts);
-	pci_set_cfgdata16(di, PCIR_VENDOR, 0x1022);	/* AMD */
-	pci_set_cfgdata16(di, PCIR_DEVICE, 0x7432);	/* made up */
+	(void) pci_hostbridge_init(ctx, pi, opts);
+	pci_set_cfgdata16(pi, PCIR_VENDOR, 0x1022);	/* AMD */
+	pci_set_cfgdata16(pi, PCIR_DEVICE, 0x7432);	/* made up */
 
 	return (0);
 }

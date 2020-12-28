@@ -642,7 +642,7 @@ e82545_icr_deassert(struct e82545_softc *sc, uint32_t bits)
 	 * was an asserted interrupt, clear it
 	 */
 	if (sc->esc_irq_asserted && !(sc->esc_ICR & sc->esc_IMS)) {
-		DPRINTF("icr deassert: lintr deassert %x\r\n", bits);
+		DPRINTF("icr deassert: lintr deassert %x", bits);
 		pci_lintr_deassert(sc->esc_pi);
 		sc->esc_irq_asserted = 0;
 	}
@@ -2139,7 +2139,7 @@ e82545_read(struct vmctx *ctx, int vcpu, struct pci_devinst *pi, int baridx,
 	struct e82545_softc *sc;
 	uint64_t retval;
 	
-	//DPRINTF("Read  bar:%d offset:0x%lx size:%d\r\n", baridx, offset, size);
+	//DPRINTF("Read  bar:%d offset:0x%lx size:%d", baridx, offset, size);
 	sc = pi->pi_arg;
 	retval = 0;
 

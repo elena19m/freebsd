@@ -40,9 +40,9 @@ __FBSDID("$FreeBSD$");
 #include <vmmapi.h>
 
 #include "acpi.h"
-#include "pci_irq.h"
 #include "inout.h"
 #include "mevent.h"
+#include "pci_irq.h"
 #include "pci_lpc.h"
 
 static pthread_mutex_t pm_lock = PTHREAD_MUTEX_INITIALIZER;
