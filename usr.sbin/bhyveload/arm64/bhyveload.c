@@ -59,7 +59,7 @@
 				kernel_load_address - memory_base_address)
 #define	overlap(x_start, x_end, y_start, y_end)					\
 			((x_start) >= (y_start) && (x_start) < (y_end) || 	\
-		 	(x_end) >= (y_start) && (x_end) < (y_end))
+			(x_end) >= (y_start) && (x_end) < (y_end))
 
 #define	MB			(1024 * 1024UL)
 #define	BSP			0

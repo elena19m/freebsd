@@ -385,7 +385,7 @@ int init_mmio(struct vmctx *ctx)
 		/*
 		 * as specified in the amd64 implementation, add some
 		 * slop to the memory resources decoded, in order to
-		 * give the guest some flexibility to reprogram the addresses 
+		 * give the guest some flexibility to reprogram the addresses
 		 */
 		mmio_membase += MEM_ROUNDUP;
 		mmio_membase = roundup2(mmio_membase, MEM_ROUNDUP);

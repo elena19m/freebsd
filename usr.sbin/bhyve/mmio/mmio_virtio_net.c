@@ -111,7 +111,7 @@ struct pci_vtnet_softc {
 	int		resetting;	/* protected by tx_mtx */
 
 	uint64_t	vsc_features;	/* negotiated features */
-	
+
 	pthread_mutex_t	rx_mtx;
 	int		rx_merge;	/* merged rx bufs in use */
 
@@ -555,7 +555,7 @@ pci_vtnet_init(struct vmctx *ctx, struct mmio_devinst *pi, char *opts)
 	sc->vsc_queues[VTNET_CTLQ].vq_qsize = VTNET_RINGSZ;
         sc->vsc_queues[VTNET_CTLQ].vq_notify = pci_vtnet_ping_ctlq;
 #endif
- 
+
 	/*
 	 * Attempt to open the backend device and read the MAC address
 	 * if specified.
@@ -598,7 +598,7 @@ pci_vtnet_init(struct vmctx *ctx, struct mmio_devinst *pi, char *opts)
 
 	/* Link is up if we managed to open backend device. */
 	sc->vsc_config.status = (opts == NULL || sc->vsc_be);
-	
+
 	vi_softc_linkup(&sc->vsc_vs, &sc->vsc_consts, sc, pi, sc->vsc_queues);
 	sc->vsc_vs.vs_mtx = &sc->vsc_mtx;
 
@@ -614,12 +614,12 @@ pci_vtnet_init(struct vmctx *ctx, struct mmio_devinst *pi, char *opts)
 	sc->resetting = 0;
 
 	sc->rx_merge = 0;
-	pthread_mutex_init(&sc->rx_mtx, NULL); 
+	pthread_mutex_init(&sc->rx_mtx, NULL);
 
-	/* 
+	/*
 	 * Initialize tx semaphore & spawn TX processing thread.
 	 * As of now, only one thread for TX desc processing is
-	 * spawned. 
+	 * spawned.
 	 */
 	sc->tx_in_progress = 0;
 	pthread_mutex_init(&sc->tx_mtx, NULL);
