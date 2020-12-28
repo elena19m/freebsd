@@ -122,4 +122,3 @@ CFLAGS+=-DGDB_LOG
 .endif
 
 WARNS?=	2
-
