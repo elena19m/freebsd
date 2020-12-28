@@ -290,7 +290,6 @@ gic_v3_ofw_bus_attach(device_t dev)
 		OF_getencprop(parent, "#size-cells", &size_cells,
 		    sizeof(size_cells));
 
-
 		/* Iterate through all GIC subordinates */
 		for (node = OF_child(parent); node > 0; node = OF_peer(node)) {
 			/* Allocate and populate devinfo. */

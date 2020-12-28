@@ -608,9 +608,9 @@ basl_fwrite_mcfg(FILE *fp)
 	EFPRINTF(fp, "\n");
 
 	EFPRINTF(fp, "[0008]\t\tBase Address : %016lX\n", pci_ecfg_base());
-	EFPRINTF(fp, "[0002]\t\tSegment Group: 0000\n");
-	EFPRINTF(fp, "[0001]\t\tStart Bus: 00\n");
-	EFPRINTF(fp, "[0001]\t\tEnd Bus: FF\n");
+	EFPRINTF(fp, "[0002]\t\tSegment Group Number : 0000\n");
+	EFPRINTF(fp, "[0001]\t\tStart Bus Number : 00\n");
+	EFPRINTF(fp, "[0001]\t\tEnd Bus Number : FF\n");
 	EFPRINTF(fp, "[0004]\t\tReserved : 0\n");
 	EFFLUSH(fp);
 	return (0);
