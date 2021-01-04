@@ -1316,21 +1316,30 @@ pci_xhci_cmd_enable_slot(struct pci_xhci_softc *sc, uint32_t *slot)
 	cmderr = XHCI_TRB_ERROR_NO_SLOTS;
 	if (sc->portregs != NULL)
 		for (i = 1; i <= XHCI_MAX_SLOTS; i++) {
+
+			/* dev != NULL only for tablet (because tablet is
+			 * addressed); for USB, dev == NULL, because the pointer
+			 * to the USB device will be set at the next operation,
+			 * which is address device
+			 */
 			dev = XHCI_SLOTDEV_PTR(sc, i);
-			if (dev && dev->dev_slotstate == XHCI_ST_DISABLED) {
-				*slot = i;
-				dev->dev_slotstate = XHCI_ST_ENABLED;
-				cmderr = XHCI_TRB_ERROR_SUCCESS;
-				dev->hci.hci_address = i;
-				break;
+
+			if (dev) {
+				if (dev->dev_slotstate == XHCI_ST_DISABLED) {
+					*slot = i;
+					dev->dev_slotstate = XHCI_ST_ENABLED;
+					cmderr = XHCI_TRB_ERROR_SUCCESS;
+					dev->hci.hci_address = i;
+					break;
+				}
+			} else {
+				if (sc->slot_allocated[i] == false) {
+					break;
+				}
 			}
 		}
 
-	for (i = 1; i <= XHCI_MAX_SLOTS; i++)
-		if (sc->slot_allocated[i] == false)
-			break;
-
-	if (i < XHCI_MAX_SLOTS) {
+	if (!dev && i < XHCI_MAX_SLOTS) {
 		sc->slot_allocated[i] = true;
 		*slot = i;
 		cmderr = XHCI_TRB_ERROR_SUCCESS;
