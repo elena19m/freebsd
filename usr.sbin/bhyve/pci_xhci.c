@@ -318,6 +318,8 @@ struct pci_xhci_softc {
 	int		vbdp_dev_num;
 	struct pci_xhci_vbdp_dev_state vbdp_devs[XHCI_MAX_DEVICES];
 	struct pci_xhci_native_port native_ports[XHCI_MAX_DEVICES];
+
+	int		tablet; /* flag enabled when emulating usb tablet */
 };
 
 
@@ -893,7 +895,8 @@ pci_xhci_portregs_write(struct pci_xhci_softc *sc, uint64_t offset,
 		p->portsc &= XHCI_PS_PED | XHCI_PS_PLS_MASK |
 		             XHCI_PS_SPEED_MASK | XHCI_PS_PIC_MASK;
 
-		if (XHCI_DEVINST_PTR(sc, port) || (pci_xhci_is_vport_free(sc, port) == true)) {
+		if ((sc->tablet && XHCI_DEVINST_PTR(sc, port)) ||
+				(!sc->tablet && (pci_xhci_is_vport_free(sc, port) == true))) {
 			p->portsc |= XHCI_PS_CCS;
 		}
 
@@ -977,7 +980,7 @@ pci_xhci_get_dev_ctx(struct pci_xhci_softc *sc, uint32_t slot)
 	assert(slot > 0 && slot <= sc->ndevices);
 	assert(sc->opregs.dcbaa_p != NULL);
 
-	if (!sc->slot_allocated[slot]) {
+	if (!sc->tablet && !sc->slot_allocated[slot]) {
 		DPRINTF(("invalid ctx: slot %d, alloc %d dcbaa %p",
 			slot, sc->slot_allocated[slot],
 			sc->opregs.dcbaa_p));
@@ -1456,43 +1459,46 @@ pci_xhci_cmd_address_device(struct pci_xhci_softc *sc, uint32_t slot,
 		goto done;
 	}
 
-	if (slot <= 0 || slot > XHCI_MAX_SLOTS ||
-			sc->slot_allocated[slot] == false) {
-		DPRINTF(("address device, invalid slot %d", slot));
-		cmderr = XHCI_TRB_ERROR_SLOT_NOT_ON;
-		goto done;
-	}
-
-	dev = sc->slots[slot];
-	if (!dev) {
-		int index;
-
-		rh_port = XHCI_SCTX_1_RH_PORT_GET(islot_ctx->dwSctx1);
-		index = pci_xhci_get_native_port_index_by_vport(sc, rh_port);
-		if (index < 0) {
-			cmderr = XHCI_TRB_ERROR_TRB;
-			DPRINTF(("invalid root hub port %d", rh_port));
+	if (!sc->tablet) {
+		/* If not emulating tablet, address the USB device */
+		if (slot <= 0 || slot > XHCI_MAX_SLOTS ||
+				sc->slot_allocated[slot] == false) {
+			DPRINTF(("address device, invalid slot %d", slot));
+			cmderr = XHCI_TRB_ERROR_SLOT_NOT_ON;
 			goto done;
 		}
 
-		di = &sc->native_ports[index].info;
-		DPRINTF(("create virtual device for %d-%s on virtual "
-				"port %d", di->path.bus,
-				usb_dev_path(&di->path), rh_port));
-
-		dev = pci_xhci_dev_create(sc, di);
+		dev = sc->slots[slot];
 		if (!dev) {
-			DPRINTF(( "fail to create device for %d-%s",
-					di->path.bus,
-					usb_dev_path(&di->path)));
-			goto done;
-		}
+			int index;
 
-		sc->native_ports[index].state = VPORT_EMULATED;
-		sc->devices[rh_port] = dev;
-		sc->ndevices++;
-		sc->slots[slot] = dev;
-		dev->hci.hci_address = slot;
+			rh_port = XHCI_SCTX_1_RH_PORT_GET(islot_ctx->dwSctx1);
+			index = pci_xhci_get_native_port_index_by_vport(sc, rh_port);
+			if (index < 0) {
+				cmderr = XHCI_TRB_ERROR_TRB;
+				DPRINTF(("invalid root hub port %d", rh_port));
+				goto done;
+			}
+
+			di = &sc->native_ports[index].info;
+			DPRINTF(("create virtual device for %d-%s on virtual "
+					"port %d", di->path.bus,
+					usb_dev_path(&di->path), rh_port));
+
+			dev = pci_xhci_dev_create(sc, di);
+			if (!dev) {
+				DPRINTF(( "fail to create device for %d-%s",
+						di->path.bus,
+						usb_dev_path(&di->path)));
+				goto done;
+			}
+
+			sc->native_ports[index].state = VPORT_EMULATED;
+			sc->devices[rh_port] = dev;
+			sc->ndevices++;
+			sc->slots[slot] = dev;
+			dev->hci.hci_address = slot;
+		}
 	}
 
 	/* assign address to slot */
@@ -2545,7 +2551,9 @@ pci_xhci_device_doorbell(struct pci_xhci_softc *sc, uint32_t slot,
 	DPRINTF(("pci_xhci doorbell slot %u epid %u stream %u",
 	    slot, epid, streamid));
 
-	if (slot == 0 || slot > sc->ndevices || !sc->slot_allocated[slot]) {
+	if ((sc->tablet && (slot == 0 || slot > sc->ndevices)) ||
+		(!sc->tablet && (slot == 0 || slot > sc->ndevices ||
+			!sc->slot_allocated[slot]))) {
 		DPRINTF(("pci_xhci: invalid doorbell slot %u", slot));
 		return;
 	}
@@ -3754,6 +3762,7 @@ pci_xhci_parse_opts(struct pci_xhci_softc *sc, char *opts)
 	sc->slots = calloc(XHCI_MAX_SLOTS + 1, sizeof(struct pci_xhci_dev_emu *));
 	sc->devices = devices;
 	sc->ndevices = 0;
+	sc->tablet = 0;
 
 	uopt = strdup(opts);
 	for (xopts = strtok(uopt, ",");
@@ -3820,6 +3829,7 @@ pci_xhci_parse_opts(struct pci_xhci_softc *sc, char *opts)
 
 			/* assign slot number to device */
 			sc->slots[sc->ndevices] = dev;
+			sc->tablet = 1;
 
 			sc->ndevices++;
 		}
