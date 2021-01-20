@@ -1,3 +1,7 @@
+# **The current FreeBSD-UPB sources are here: https://github.com/freebsd-upb/freebsd-src.**
+	
+# This is the old/legacy FreeBSD-UPB fork from the official FreeBSD GitHub repository (https://github.com/freebsd/freebsd).
+
 FreeBSD Source:
 ---------------
 This is the top level of the FreeBSD source directory.  This file
@@ -39,7 +43,6 @@ etc		Template files for /etc.
 
 gnu		Various commands and libraries under the GNU Public License.
 		Please see gnu/COPYING* for more information.
-
 include		System include files.
 
 kerberos5	Kerberos5 (Heimdal) package.
